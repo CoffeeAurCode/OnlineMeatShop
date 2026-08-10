@@ -10,21 +10,63 @@
  * is written.
  */
 
-// ── Money ────────────────────────────────────────────────────────────────
-// Integer cents, CAD. Never a float, anywhere, ever. A float here loses
-// fractions of a cent per line and the loss compounds silently.
+// ── Money and weight ─────────────────────────────────────────────────────
+//
+// The formal model defines MONEY and GRAMS as ℕ — natural numbers. So these
+// constructors reject negatives, not merely non-integers.
+//
+// `Number.isSafeInteger` rather than `Number.isInteger`, because beyond 2^53
+// integers stop being distinguishable: 2**53 === 2**53 + 1 is true. A price
+// that large is nonsense in a butcher's shop, but a corrupt import or a bad
+// migration can produce one, and it would then compare equal to its own
+// neighbour and silently pass arithmetic checks. Reject it at the boundary
+// rather than reasoning about it later.
+//
+// NaN and Infinity fail both predicates, so they are covered too.
+
+const assertNatural = (n: number, unit: string): void => {
+  if (!Number.isSafeInteger(n)) {
+    throw new Error(`${unit} must be a safe integer, got ${n}`);
+  }
+  if (n < 0) {
+    throw new Error(`${unit} must not be negative, got ${n}. For signed differences use Delta.`);
+  }
+};
+
+/** Integer cents, CAD, non-negative. Never a float — floats lose money. */
 export type Cents = number & { readonly __brand: 'Cents' };
 export const cents = (n: number): Cents => {
-  if (!Number.isInteger(n)) throw new Error(`Money must be integer cents, got ${n}`);
+  assertNatural(n, 'Money (cents)');
   return n as Cents;
 };
 
-// Weight is always grams. Never kilograms as a decimal — same reason.
+/** Integer grams, non-negative. Never kilograms as a decimal — same reason. */
 export type Grams = number & { readonly __brand: 'Grams' };
 export const grams = (n: number): Grams => {
-  if (!Number.isInteger(n)) throw new Error(`Weight must be integer grams, got ${n}`);
+  assertNatural(n, 'Weight (grams)');
   return n as Grams;
 };
+
+/**
+ * A signed money difference — spec §5.5 defines `delta! : ℤ`.
+ *
+ * Deliberately a separate type rather than relaxing `Cents` to allow
+ * negatives. Settlement is the one place a negative amount is meaningful
+ * (we owe the customer money); everywhere else — a price, a line amount, a
+ * total, a delivery fee — a negative value is a defect, and keeping `Cents`
+ * non-negative is what makes that defect impossible to express.
+ */
+export type Delta = number & { readonly __brand: 'Delta' };
+export const delta = (n: number): Delta => {
+  if (!Number.isSafeInteger(n)) {
+    throw new Error(`Delta must be a safe integer, got ${n}`);
+  }
+  return n as Delta;
+};
+
+/** final − estimate. Negative means we owe the customer. */
+export const differenceCents = (final: Cents, estimate: Cents): Delta =>
+  delta(final - estimate);
 
 // ── Enumerations (spec §4) ───────────────────────────────────────────────
 

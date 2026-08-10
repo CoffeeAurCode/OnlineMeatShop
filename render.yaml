@@ -22,7 +22,16 @@ services:
     buildCommand: npm ci && npm run build
     startCommand: npm run start
     healthCheckPath: /healthz
-    autoDeploy: true
+
+    # PRODUCTION DEPLOYS ARE MANUAL. A butcher's Saturday morning is not the
+    # moment to discover that `main` was red.
+    #
+    # `autoDeployTrigger: commit` (the deprecated `autoDeploy: true`) would
+    # deploy every push immediately, racing the CI run and the migration job
+    # rather than waiting for them. `checksPass` is the right setting for a
+    # staging service; production stays off and is promoted deliberately.
+    autoDeployTrigger: off
+
     envVars:
       - key: NODE_VERSION
         value: '24'
@@ -30,9 +39,12 @@ services:
         value: production
       # Every secret below is set in the Render dashboard, never in this file.
       # This repository is public.
+      #
+      # DIRECT_DATABASE_URL is deliberately ABSENT. It bypasses the connection
+      # pooler and is needed only by the migration job and the backup dump —
+      # both of which run elsewhere. Giving it to the web runtime would widen
+      # credential exposure and let application code sidestep the pool.
       - key: DATABASE_URL
-        sync: false
-      - key: DIRECT_DATABASE_URL
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false

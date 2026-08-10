@@ -32,18 +32,27 @@ jobs:
       - name: Unit and property tests
         run: npm test
 
-      - name: Build
+      # Built with CANARY secret values, not real ones and not blanks.
+      #
+      # Next.js inlines every NEXT_PUBLIC_* reference as its VALUE at build
+      # time, so the variable NAME never appears in the output — grepping for
+      # names cannot detect a leak. Building with distinctive values and then
+      # hunting for those values can. See scripts/scan-secrets.mjs.
+      - name: Build (with canary secrets)
         run: npm run build
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: cnry_service_role_MUST_NOT_SHIP
+          STRIPE_SECRET_KEY: cnry_stripe_secret_MUST_NOT_SHIP
+          STRIPE_WEBHOOK_SECRET: cnry_stripe_webhook_MUST_NOT_SHIP
+          DATABASE_URL: cnry_database_url_MUST_NOT_SHIP
+          DIRECT_DATABASE_URL: cnry_direct_db_MUST_NOT_SHIP
+          TWILIO_AUTH_TOKEN: cnry_twilio_auth_MUST_NOT_SHIP
+          RESEND_API_KEY: cnry_resend_MUST_NOT_SHIP
+          NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY: cnry_public_service_role_MUST_NOT_SHIP
+          NEXT_PUBLIC_STRIPE_SECRET_KEY: cnry_public_stripe_secret_MUST_NOT_SHIP
 
-      # The service-role key must never reach the browser. This catches the
-      # mistake that a code review would not: a NEXT_PUBLIC_ prefix on a secret.
-      - name: Client bundle must not contain server secrets
-        run: |
-          if grep -rEl 'SUPABASE_SERVICE_ROLE|STRIPE_SECRET_KEY|service_role' .next/static/ 2>/dev/null; then
-            echo "::error::A server secret was found in the client bundle."
-            exit 1
-          fi
-          echo "Client bundle clean."
+      - name: No server secret may reach the browser
+        run: npm run scan:secrets
 
   # Integration and concurrency suites arrive with increments 2 and 4.
   # They need a real Postgres service container, and they are kept in a

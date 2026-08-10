@@ -39,8 +39,41 @@ const domainPurity = {
               'src/domain must not depend on adapters. Dependencies point inward, not outward.',
           },
           {
-            group: ['resend', 'twilio', 'node-fetch', 'axios', 'undici'],
+            group: ['resend', 'twilio', 'node-fetch', 'axios', 'undici', 'got'],
             message: 'src/domain must not perform I/O of any kind.',
+          },
+          {
+            // Node built-ins, both prefixed and bare. Without these the rule
+            // catches libraries but waves through `import fs from "node:fs"`,
+            // which is the most direct I/O available.
+            group: [
+              'node:*',
+              'fs',
+              'fs/*',
+              'path',
+              'os',
+              'http',
+              'https',
+              'net',
+              'dgram',
+              'child_process',
+              'worker_threads',
+              'cluster',
+              'crypto',
+              'timers',
+              'timers/*',
+              'process',
+              'stream',
+              'zlib',
+              'readline',
+              'v8',
+              'vm',
+              'perf_hooks',
+              'inspector',
+              'diagnostics_channel',
+            ],
+            message:
+              'src/domain must not use Node built-ins — that is I/O, the environment, or a clock. Pass the data in.',
           },
         ],
       },
@@ -74,11 +107,38 @@ const domainPurity = {
         message:
           'Rounding money? Use the explicit ceil rule in src/domain/pricing.ts. See CLAUDE.md.',
       },
+      {
+        // `no-restricted-globals` only matches BARE identifiers, so it misses
+        // `globalThis.fetch(...)` and `global.process.env` entirely. Without
+        // these selectors the boundary is trivially bypassed — accidentally or
+        // otherwise. Found by review, after the narrower rule was mistakenly
+        // described as enforcing "no I/O of any kind".
+        selector:
+          "MemberExpression[object.name=/^(globalThis|global|window|self)$/][property.name=/^(fetch|process|setTimeout|setInterval|XMLHttpRequest|WebSocket|localStorage|sessionStorage|indexedDB|crypto|performance|Date)$/]",
+        message:
+          'src/domain must not reach the host environment, even via globalThis. Pass it in.',
+      },
+      {
+        selector: "MemberExpression[object.name='Date'][property.name='parse']",
+        message: 'Parse dates at the boundary, not in the domain. Pass the value in.',
+      },
+      {
+        selector: "AwaitExpression",
+        message:
+          'src/domain is synchronous and pure. If you need to await something, it belongs in src/adapters or src/db.',
+      },
     ],
     'no-restricted-globals': [
       'error',
       { name: 'fetch', message: 'src/domain must not perform I/O.' },
       { name: 'process', message: 'src/domain must not read the environment.' },
+      { name: 'XMLHttpRequest', message: 'src/domain must not perform I/O.' },
+      { name: 'WebSocket', message: 'src/domain must not perform I/O.' },
+      { name: 'localStorage', message: 'src/domain must not touch browser storage.' },
+      { name: 'sessionStorage', message: 'src/domain must not touch browser storage.' },
+      { name: 'setTimeout', message: 'src/domain must not schedule. Time is an input.' },
+      { name: 'setInterval', message: 'src/domain must not schedule. Time is an input.' },
+      { name: 'performance', message: 'src/domain must not read a clock.' },
     ],
   },
 };

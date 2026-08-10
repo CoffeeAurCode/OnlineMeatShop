@@ -7,8 +7,10 @@ One Next.js application containing the customer storefront, the shop owner's
 console, and the order rules — deployed as a single service against one
 Postgres database.
 
-> **Status: foundation.** The scaffold, lint boundaries and CI are in place.
-> Domain logic lands increment by increment; see *Roadmap* below.
+> **Status: foundation in progress.** The scaffold and the enforced lint
+> boundaries are in place and green locally. CI is written but has not yet run
+> remotely, and no hosting, database or CDN is provisioned. Domain logic lands
+> increment by increment; see *Roadmap*.
 
 ---
 
@@ -114,7 +116,7 @@ invented.
 
 | # | Increment | Status |
 |---|---|---|
-| 0 | Foundation — scaffold, lint boundaries, CI | ✅ |
+| 0 | Foundation — scaffold and lint boundaries done; hosting, database and CDN not yet provisioned | 🟡 |
 | 1 | Catalog & pricing — both pricing modes, handling classes, prep options | ⬜ |
 | 2 | Availability — daily stock, reserve/release, sold-out state | ⬜ |
 | 3 | Serviceability & slots — zones, fees, capacity, cutoffs, hot-eligibility | ⬜ |
