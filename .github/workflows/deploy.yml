@@ -1,0 +1,83 @@
+name: Migrate and deploy
+
+# Migrations run HERE, in CI — never at application startup.
+#
+# Two reasons, both learned the expensive way by other people:
+#   - With health-check-gated deploys, two application versions are briefly
+#     live at once. Both would race the same migration.
+#   - A migration failure at startup becomes a crash-loop, which looks like an
+#     outage. A migration failure in CI becomes a red pipeline that deployed
+#     nothing, which is what it actually is.
+#
+# Render's pre-deploy command would be the other option, but it is documented
+# as available on paid instances only, and staging runs on a free one. Using
+# one mechanism in production and a different one in staging is how a
+# migration bug reaches production untested.
+
+on:
+  # Merging to main deploys to staging. Production is never automatic — a
+  # butcher's Saturday morning is not the moment to discover main was red.
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        default: staging
+        required: true
+
+# Environment locking: two pipelines must never migrate the same database at
+# the same time. `cancel-in-progress: false` is the important half — cancelling
+# a job midway through applying migrations is precisely what this prevents.
+concurrency:
+  group: migrate-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Fail with a sentence someone can act on, rather than letting
+      # drizzle-kit report a confusing connection error.
+      - name: Check the database secret is present
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+        run: |
+          if [ -z "$DIRECT_DATABASE_URL" ]; then
+            echo "::error::DIRECT_DATABASE_URL is not set for this environment."
+            echo "Set it to the SESSION pooler string:"
+            echo "  postgresql://postgres.<ref>:<pw>@aws-0-ca-central-1.pooler.supabase.com:5432/postgres"
+            echo "NOT db.<ref>.supabase.co — that host is IPv6-only and unreachable from this runner."
+            exit 1
+          fi
+
+      - name: Apply migrations
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+        run: npx drizzle-kit migrate
+
+      # Only after migrations succeed. Deploying first would put an app version
+      # in front of a schema it does not have.
+      - name: Trigger Render deploy
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::warning::RENDER_DEPLOY_HOOK is not set — migrations applied, nothing deployed."
+            echo "Expected while the Render service does not exist yet."
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK"
+          echo "Deploy triggered."

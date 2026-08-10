@@ -17,6 +17,17 @@ const nextConfig: NextConfig = {
   // 0.5 vCPU instance, where shipping node_modules to the runtime is waste.
   output: 'standalone',
 
+  // Supabase's Postgres root CA, read at runtime by src/db/ssl.ts.
+  //
+  // Standalone output only includes files Next can trace, and it cannot trace
+  // a path built at runtime from `process.cwd()`. Without this line the
+  // deployed server starts fine and then fails its very first database call
+  // with ENOENT — that is, the health check fails on the deploy and nowhere
+  // earlier, which is a slow way to learn about a missing file.
+  outputFileTracingIncludes: {
+    '/**': ['./certs/**'],
+  },
+
   // Product images are served from Supabase Storage behind a CDN, deliberately
   // NOT optimised by Next at request time: image processing on a 0.5 vCPU
   // instance is the wrong place to spend the CPU, and routing the bytes around

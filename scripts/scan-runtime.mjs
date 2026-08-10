@@ -61,12 +61,22 @@ let serverLog = '';
 server.stdout.on('data', (d) => (serverLog += d.toString()));
 server.stderr.on('data', (d) => (serverLog += d.toString()));
 
+/**
+ * Any HTTP response means the server is listening, which is all this needs to
+ * know before it starts reading bodies.
+ *
+ * It deliberately does NOT require a 2xx. `/healthz` now reports database
+ * reachability, and this scan runs with a canary `DATABASE_URL` that is not a
+ * real database — so a healthy server correctly answers 503 here. Waiting for
+ * `res.ok` would block until the timeout and then report "server did not
+ * become ready", which is a confident and completely wrong diagnosis.
+ */
 async function waitForReady(timeoutMs = 60_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${BASE}/healthz`);
-      if (res.ok) return true;
+      await fetch(`${BASE}/healthz`);
+      return true;
     } catch {
       /* not up yet */
     }

@@ -1,6 +1,15 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // Mirrors the `@/*` path in tsconfig.json. Without it a test importing
+  // `@/domain/pricing` fails to resolve, and the workaround — deep relative
+  // paths — makes tests break when a file moves.
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],

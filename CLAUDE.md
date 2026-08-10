@@ -86,6 +86,18 @@ specific, expensive ways.
 - Every failure path leaves reserved stock and slot bookings **byte-identical**.
 - **Never call Stripe, email, SMS or any HTTP inside a database transaction.**
 
+### Connecting to the database
+- Three endpoints exist and they are not interchangeable:
+  - **`DATABASE_URL`** — transaction pooler, port **6543**. The application.
+    Prepared statements and session state do not survive it.
+  - **`DIRECT_DATABASE_URL`** — session pooler, port **5432**. Migrations and
+    `pg_dump` only. Never in the web service's environment.
+  - `db.<ref>.supabase.co:5432` — what the dashboard calls the "direct
+    connection". **Do not use it.** It is IPv6-only, and CI runners have no
+    IPv6, so anything relying on it fails with `ENOTFOUND`.
+- TLS is verified against a pinned root in `certs/`, not disabled. See
+  `src/db/ssl.ts` for why `rejectUnauthorized: false` is not an option here.
+
 ### The database is a backstop, not just a store
 - Anti-overselling and anti-overbooking are **CHECK constraints in Postgres**,
   not only application logic. If the code has a bug, the correct outcome is a
@@ -128,6 +140,8 @@ src/
 ├─ db/         Drizzle schema, migrations, repositories — the only place SQL lives
 ├─ adapters/   payments / email / sms, each behind an interface
 └─ jobs/       scheduler + handlers
+certs/         Supabase's Postgres root CA. Public certificate, not a secret.
+docs/          restore-procedure.md — read it before you need it
 tests/
 ├─ domain/     fast, pure, property-based
 ├─ integration/against a real Postgres
