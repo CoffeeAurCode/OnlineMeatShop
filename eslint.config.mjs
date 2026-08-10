@@ -10,10 +10,98 @@ import nextTs from 'eslint-config-next/typescript';
  * If you find yourself wanting to disable one of these, you are about to
  * make a mistake — see CLAUDE.md.
  */
+/**
+ * Packages src/domain may import. Everything else is refused.
+ *
+ * The bar: no I/O, no ambient state, no clock. A package here must be a pure
+ * computation over values passed to it. Adding to this list is a decision, not
+ * a convenience — say why in the commit message.
+ */
+const DOMAIN_ALLOWED_PACKAGES = ['zod', 'decimal\\.js'];
+
+/** Relative imports (other domain modules), plus the allowlist above. */
+const DOMAIN_ALLOWED_IMPORT = `^(\\.\\.?\\/|${DOMAIN_ALLOWED_PACKAGES.map((p) => `${p}$`).join('|')})`;
+
 const domainPurity = {
   name: 'domain/purity',
   files: ['src/domain/**/*.ts'],
   rules: {
+    /**
+     * ALLOWLIST, not a denylist.
+     *
+     * The previous version enumerated forbidden modules — next, drizzle, pg,
+     * stripe, node builtins — and was therefore incomplete by construction.
+     * Review demonstrated the gap by importing `@/server-env` from a domain
+     * file: a first-party module, on nobody's denylist, that hands out the
+     * database URL and every API credential.
+     *
+     * You cannot enumerate every way to reach I/O. You can enumerate the small
+     * set of things a pure function legitimately needs. So the rule is
+     * inverted: anything that is not a sibling domain module or an explicitly
+     * approved pure package is refused, including first-party code, dynamic
+     * imports and re-exports.
+     */
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: `ImportDeclaration[source.value!=/${DOMAIN_ALLOWED_IMPORT}/]`,
+        message:
+          'src/domain may only import other domain modules or an approved pure package. See DOMAIN_ALLOWED_PACKAGES in eslint.config.mjs.',
+      },
+      {
+        selector: `ImportExpression[source.value!=/${DOMAIN_ALLOWED_IMPORT}/]`,
+        message: 'src/domain may not dynamically import outside the domain.',
+      },
+      {
+        selector: `ExportNamedDeclaration[source.type='Literal'][source.value!=/${DOMAIN_ALLOWED_IMPORT}/]`,
+        message: 'src/domain may not re-export from outside the domain.',
+      },
+      {
+        selector: `ExportAllDeclaration[source.type='Literal'][source.value!=/${DOMAIN_ALLOWED_IMPORT}/]`,
+        message: 'src/domain may not re-export from outside the domain.',
+      },
+      {
+        selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+        message: 'Pass `now` in as a parameter. See CLAUDE.md — time is an input.',
+      },
+      {
+        // Money is integer cents. Floats silently lose money.
+        selector: "MemberExpression[object.name='Math'][property.name='round']",
+        message:
+          'Rounding money? Use the explicit ceil rule in src/domain/pricing.ts. See CLAUDE.md.',
+      },
+      {
+        // `no-restricted-globals` only matches BARE identifiers, so it misses
+        // `globalThis.fetch(...)` entirely.
+        selector:
+          "MemberExpression[computed=false][object.name=/^(globalThis|global|window|self)$/][property.name=/^(fetch|process|setTimeout|setInterval|XMLHttpRequest|WebSocket|localStorage|sessionStorage|indexedDB|crypto|performance|Date)$/]",
+        message:
+          'src/domain must not reach the host environment, even via globalThis. Pass it in.',
+      },
+      {
+        // …and dotted access misses `globalThis['fetch']`. Refuse ALL computed
+        // access on the global object rather than trying to list the spellings.
+        selector:
+          "MemberExpression[computed=true][object.name=/^(globalThis|global|window|self)$/]",
+        message:
+          'src/domain must not reach the host environment by computed property either.',
+      },
+      {
+        selector: "MemberExpression[object.name='Date'][property.name='parse']",
+        message: 'Parse dates at the boundary, not in the domain. Pass the value in.',
+      },
+      {
+        selector: 'AwaitExpression',
+        message:
+          'src/domain is synchronous and pure. If you need to await something, it belongs in src/adapters or src/db.',
+      },
+    ],
+
+    /**
+     * Kept as a second layer beneath the allowlist. If the allowlist is ever
+     * relaxed, these named capabilities still produce a specific, readable
+     * error rather than silently becoming reachable.
+     */
     'no-restricted-imports': [
       'error',
       {
@@ -93,39 +181,6 @@ const domainPurity = {
         object: 'Math',
         property: 'random',
         message: 'Domain functions must be deterministic. Pass randomness in.',
-      },
-    ],
-    'no-restricted-syntax': [
-      'error',
-      {
-        selector: "NewExpression[callee.name='Date'][arguments.length=0]",
-        message: 'Pass `now` in as a parameter. See CLAUDE.md — time is an input.',
-      },
-      {
-        // Money is integer cents. Floats silently lose money.
-        selector: "MemberExpression[object.name='Math'][property.name='round']",
-        message:
-          'Rounding money? Use the explicit ceil rule in src/domain/pricing.ts. See CLAUDE.md.',
-      },
-      {
-        // `no-restricted-globals` only matches BARE identifiers, so it misses
-        // `globalThis.fetch(...)` and `global.process.env` entirely. Without
-        // these selectors the boundary is trivially bypassed — accidentally or
-        // otherwise. Found by review, after the narrower rule was mistakenly
-        // described as enforcing "no I/O of any kind".
-        selector:
-          "MemberExpression[object.name=/^(globalThis|global|window|self)$/][property.name=/^(fetch|process|setTimeout|setInterval|XMLHttpRequest|WebSocket|localStorage|sessionStorage|indexedDB|crypto|performance|Date)$/]",
-        message:
-          'src/domain must not reach the host environment, even via globalThis. Pass it in.',
-      },
-      {
-        selector: "MemberExpression[object.name='Date'][property.name='parse']",
-        message: 'Parse dates at the boundary, not in the domain. Pass the value in.',
-      },
-      {
-        selector: "AwaitExpression",
-        message:
-          'src/domain is synchronous and pure. If you need to await something, it belongs in src/adapters or src/db.',
       },
     ],
     'no-restricted-globals': [

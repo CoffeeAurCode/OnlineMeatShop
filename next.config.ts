@@ -3,6 +3,16 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
+  // Enables React's taint APIs, used in src/server-env.ts so that a secret
+  // passed toward a Client Component throws instead of being serialised into
+  // the RSC payload. This is defence in depth: if the flag were ever removed
+  // the application still works, it simply loses a guard — so the experimental
+  // status is an acceptable trade for catching a credential leak at runtime,
+  // on dynamic routes that build-output scanning cannot reach.
+  experimental: {
+    taint: true,
+  },
+
   // Produces a minimal self-contained server bundle. Matters on a 512 MB /
   // 0.5 vCPU instance, where shipping node_modules to the runtime is waste.
   output: 'standalone',

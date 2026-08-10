@@ -51,8 +51,19 @@ jobs:
           NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY: cnry_public_service_role_MUST_NOT_SHIP
           NEXT_PUBLIC_STRIPE_SECRET_KEY: cnry_public_stripe_secret_MUST_NOT_SHIP
 
-      - name: No server secret may reach the browser
+      # Build-artifact scan: catches leaks on prerendered routes.
+      - name: No server secret in build output
         run: npm run scan:secrets
+
+      # Request-time scan: starts the real production server and reads what
+      # actually comes back over HTTP.
+      #
+      # Needed because dynamic routes — the admin console, every order route —
+      # render per request and produce NO build artifact, so the scan above is
+      # structurally blind to them. Demonstrated: a force-dynamic route leaking
+      # a canary passed the build scan and was caught here.
+      - name: No server secret in request-time responses
+        run: npm run scan:runtime
 
   # Integration and concurrency suites arrive with increments 2 and 4.
   # They need a real Postgres service container, and they are kept in a

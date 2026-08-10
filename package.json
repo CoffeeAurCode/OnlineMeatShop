@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "scan:secrets": "node scripts/scan-secrets.mjs"
+    "scan:secrets": "node scripts/scan-secrets.mjs",
+    "scan:runtime": "node scripts/scan-runtime.mjs"
   },
   "license": "ISC",
   "type": "module",

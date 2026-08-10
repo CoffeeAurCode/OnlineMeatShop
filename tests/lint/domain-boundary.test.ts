@@ -23,10 +23,27 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
+/**
+ * Loading the real config chain (eslint-config-next + the TypeScript parser)
+ * costs roughly a minute on first use, then microseconds per lint. Warming it
+ * here keeps that one-off cost out of the first test's budget, where it looked
+ * like a failure rather than a slow import.
+ *
+ * These probes deliberately run against the PRODUCTION config rather than a
+ * trimmed-down one. A cheaper harness would test rules that are not the rules
+ * actually in force, which is the failure mode this whole file exists to catch.
+ */
+const BOOT_TIMEOUT_MS = 180_000;
+const CASE_TIMEOUT_MS = 30_000;
+
 let eslint: ESLint;
-beforeAll(() => {
+beforeAll(async () => {
   eslint = new ESLint({ cwd: repoRoot });
-});
+  await eslint.lintText('export const warmup = 1;\n', {
+    filePath: path.join(repoRoot, 'src/domain/__warmup__.ts'),
+    warnIgnored: false,
+  });
+}, BOOT_TIMEOUT_MS);
 
 /** Lint a snippet as if it lived in src/domain, and return its error count. */
 async function errorsInDomain(code: string): Promise<number> {
@@ -74,6 +91,26 @@ const forbidden: ReadonlyArray<readonly [string, string]> = [
   ['global.fetch', `export const a = () => (global as any).fetch('https://x.com');`],
   ['window.localStorage', `export const a = () => (window as any).localStorage.getItem('k');`],
 
+  // ── Adversarial probes from the second review ──────────────────────────
+  // The denylist caught named I/O libraries but waved through first-party
+  // modules and computed property access. A denylist cannot enumerate every
+  // route to I/O; these two are why the rule is now an allowlist.
+  [
+    'first-party @/server-env (hands out every credential)',
+    `import { serverEnv } from '@/server-env'; export const a = () => serverEnv.databaseUrl();`,
+  ],
+  ['first-party @/db', `import { db } from '@/db'; export const a = db;`],
+  ['first-party @/adapters', `import { pay } from '@/adapters/payments'; export const a = pay;`],
+  [
+    'computed globalThis["fetch"]',
+    `export const a = () => globalThis['fetch']('https://example.com');`,
+  ],
+  ['computed global["process"]', `export const a = () => (global as any)['process'].env;`],
+  ['dynamic import of a builtin', `export const a = () => import('node:fs');`],
+  ['re-export from outside the domain', `export * from '@/db';`],
+  ['type-only import from outside', `import type { X } from '@/db'; export type Y = X;`],
+  ['an unapproved package', `import lodash from 'lodash'; export const a = lodash;`],
+
   // Non-determinism: unusable in property-based tests, which increments 4 and 5 depend on.
   ['Date.now', `export const a = () => Date.now();`],
   ['new Date()', `export const a = () => new Date();`],
@@ -96,20 +133,36 @@ const permitted: ReadonlyArray<readonly [string, string]> = [
   ['a Date built from an argument', `export const a = (ms: number) => new Date(ms).getUTCFullYear();`],
   ['array work', `export const a = (xs: number[]) => xs.reduce((s, x) => s + x, 0);`],
   ['importing another domain module', `import { cents } from './types'; export const a = cents;`],
+  ['re-exporting a sibling domain module', `export * from './types';`],
+  ['a named re-export from a sibling', `export { cents } from './types';`],
+  ['plain exported function', `export function f(x: number): number { return x + 1; }`],
+  ['exported type and interface', `export type T = number; export interface I { a: T }`],
 ];
 
 describe('src/domain purity boundary is enforced by ESLint', () => {
-  it.each(forbidden)('rejects %s', async (_label, code) => {
-    expect(await errorsInDomain(code)).toBeGreaterThan(0);
-  });
+  it.each(forbidden)(
+    'rejects %s',
+    async (_label, code) => {
+      expect(await errorsInDomain(code)).toBeGreaterThan(0);
+    },
+    CASE_TIMEOUT_MS,
+  );
 
-  it.each(permitted)('allows %s', async (_label, code) => {
-    expect(await errorsInDomain(code)).toBe(0);
-  });
+  it.each(permitted)(
+    'allows %s',
+    async (_label, code) => {
+      expect(await errorsInDomain(code)).toBe(0);
+    },
+    CASE_TIMEOUT_MS,
+  );
 
-  it('applies only to src/domain — the same I/O is fine in an adapter', async () => {
-    const io = `import fs from 'node:fs'; export const a = () => fs.readFileSync('x');`;
-    expect(await errorsInDomain(io)).toBeGreaterThan(0);
-    expect(await errorsInAdapters(io)).toBe(0);
-  });
+  it(
+    'applies only to src/domain — the same I/O is fine in an adapter',
+    async () => {
+      const io = `import fs from 'node:fs'; export const a = () => fs.readFileSync('x');`;
+      expect(await errorsInDomain(io)).toBeGreaterThan(0);
+      expect(await errorsInAdapters(io)).toBe(0);
+    },
+    CASE_TIMEOUT_MS,
+  );
 });
