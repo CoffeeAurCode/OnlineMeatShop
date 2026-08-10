@@ -1,0 +1,15 @@
+# Normalise line endings so Windows and Linux checkouts produce identical
+# diffs. Without this, every file touched on Windows shows as fully rewritten
+# in CI, which buries real changes in noise.
+* text=auto eol=lf
+
+# Binary — never normalise.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

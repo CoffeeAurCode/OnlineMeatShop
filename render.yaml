@@ -1,0 +1,62 @@
+# Render service definition.
+#
+# Render connects to THIS repository directly (root directory `/`), not to the
+# private parent repo — so documentation commits never trigger a rebuild.
+#
+# Region: US-East (Ohio/Virginia). Render has no Canadian region; the database
+# sits in Supabase ca-central-1, so the app runs in the US and the customer
+# data stays in Canada. Measure the round trip before relying on it.
+#
+# Migrations do NOT run here. They run from a CI job, because Render's
+# pre-deploy command is unavailable on free instance types and staging uses
+# one — and running migrations at app startup would race two app versions
+# during a health-check-gated deploy.
+
+services:
+  - type: web
+    name: online-meat-shop
+    runtime: node
+    region: ohio
+    plan: starter # always-on. The free instance spins down; not viable for a shop.
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: '24'
+      - key: NODE_ENV
+        value: production
+      # Every secret below is set in the Render dashboard, never in this file.
+      # This repository is public.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      - key: SHOP_TIMEZONE
+        sync: false
+      - key: SHOP_CURRENCY
+        value: CAD
+      - key: WEIGHT_TOLERANCE
+        value: '0.10'

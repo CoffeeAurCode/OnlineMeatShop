@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────────────
+# THIS REPOSITORY IS PUBLIC.
+#
+# Nothing here may contain the shop's identity, address, licence number,
+# real delivery postal codes, real prices, or any customer data — in code,
+# config, seed files, fixtures, migrations, comments or commit messages.
+#
+# Git history is permanent. Committing client data and deleting it in the
+# next commit leaves it in the history and in every fork. There is no
+# clean-up, only prevention. See CLAUDE.md.
+# ─────────────────────────────────────────────────────────────────────
+
+# Secrets and real business data — never committed.
+.env
+.env.*
+!.env.example
+secrets/
+seed-real/
+*.local.json
+
+# Dependencies / build
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Test / tooling output
+coverage/
+.vitest/
+.eslintcache
+
+# Database dumps — these contain customer data by definition.
+*.dump
+*.sql.gz
+dumps/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*~
