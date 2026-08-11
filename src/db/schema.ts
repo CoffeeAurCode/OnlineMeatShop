@@ -803,3 +803,74 @@ export const auditLog = pgTable('audit_log', {
   before: jsonb('before'),
   after: jsonb('after'),
 });
+
+// ── notification_outbox (DTM §11.2) ──────────────────────────────────────
+
+/**
+ * The outbox. A row is written in the SAME transaction as the state change
+ * that justifies it; a scheduled job drains it.
+ *
+ * Why not just send the email inline: an email send inside a database
+ * transaction couples the transaction's duration to a third party's
+ * availability, and a send that succeeds followed by a rollback tells the
+ * customer about an order that does not exist. The outbox gives retries, an
+ * audit of what was actually sent, and no half-committed states when the
+ * provider has a bad afternoon.
+ *
+ * ⚠ CHANNEL-AGNOSTIC ON PURPOSE. SMS is cut at launch (D18) — Canadian A2P
+ * registration is weeks of carrier paperwork and was the likeliest cause of a
+ * launch delay. Email covers every notification in FR-24. Keeping `channel` as
+ * a column rather than assuming email means adding SMS later is a new adapter,
+ * not a redesign. That is the one piece of forward-compatibility worth paying
+ * for here, and it is nearly free.
+ */
+export const notificationChannelEnum = pgEnum('notification_channel', ['EMAIL', 'SMS']);
+
+export const notificationStatusEnum = pgEnum('notification_status', [
+  'PENDING',
+  'SENT',
+  'FAILED',
+  'ABANDONED',
+]);
+
+export const notificationOutbox = pgTable(
+  'notification_outbox',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    channel: notificationChannelEnum('channel').notNull(),
+    /** `order.accepted`, `order.weighed`, … — the template to render. */
+    kind: text('kind').notNull(),
+
+    /** Who it goes to, resolved at enqueue time. */
+    recipient: text('recipient').notNull(),
+
+    /** Everything the template needs, so draining never re-reads the order. */
+    payload: jsonb('payload').notNull(),
+
+    orderId: uuid('order_id').references(() => order.id, { onDelete: 'cascade' }),
+
+    status: notificationStatusEnum('status').notNull().default('PENDING'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+
+    /**
+     * Exponential backoff lives here rather than in the scheduler, so a job
+     * that crashes does not lose the schedule with it.
+     */
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+
+    /**
+     * De-duplication key. A webhook that is delivered twice must not send the
+     * customer two emails, and the webhook handler is idempotent only if what
+     * it enqueues is too.
+     */
+    dedupeKey: text('dedupe_key').unique(),
+  },
+  (t) => [
+    check('outbox_sent_at_iff_sent', sql`(${t.status} = 'SENT') = (${t.sentAt} IS NOT NULL)`),
+  ],
+);
