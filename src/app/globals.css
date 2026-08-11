@@ -1,0 +1,174 @@
+@import 'tailwindcss';
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * The token layer. Both halves of the app share it; nothing else is shared.
+ *
+ * The palette is cool and low-chroma ON PURPOSE, and the reason is specific to
+ * this shop rather than a matter of taste: raw meat photography is the most
+ * saturated thing that will ever be on the page. A warm cream interface — the
+ * default every butcher template reaches for — competes with the product and
+ * both come out muddy. So the interface stays cool and the product is the only
+ * warm thing on the screen.
+ *
+ * ONE accent. `--hot` and `--danger` carry meaning and are never decorative:
+ * if either appears on a heading it has become a second accent and is a bug.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --surface: #f3f5f6;
+  --surface-raised: #fcfdfd;
+  --ink: #14181a;
+  --ink-muted: #5a6469;
+  --line: #dde2e4;
+  --accent: #0f5138;
+  --accent-hover: #0b3f2b;
+  --accent-ink: #fcfdfd;
+
+  /*
+   * Semantic only.
+   *
+   * `--danger` is a COOL crimson deliberately. A warm error red sits inside the
+   * colour range of the product photography, and an inline error rendered
+   * beside a photo of lamb reads as part of the photo rather than as an error.
+   */
+  --hot: #c2410c;
+  --hot-wash: #fdf1e9;
+  --danger: #a81244;
+  --danger-ink: #fcfdfd;
+  --danger-wash: #fdeef3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #14181a;
+    --surface-raised: #1d2225;
+    --ink: #e8ecee;
+    --ink-muted: #9aa5aa;
+    --line: #2c3336;
+    --accent: #3fa47a;
+    --accent-hover: #55b98e;
+    --accent-ink: #0b2019;
+
+    --hot: #f97316;
+    --hot-wash: #2a1a10;
+    --danger: #ff7a9c;
+    /* Flipped, because --danger flips: dark ink on a light pink fill. White
+       text on #ff7a9c is 2.1:1 and unreadable. */
+    --danger-ink: #2a1119;
+    --danger-wash: #2a1119;
+  }
+}
+
+/*
+ * `inline` matters: it makes Tailwind emit `var(--surface)` at the use site
+ * rather than copying the value into the utility. Without it the media-query
+ * swap above would never reach the generated classes.
+ */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-hot: var(--hot);
+  --color-hot-wash: var(--hot-wash);
+  --color-danger: var(--danger);
+  --color-danger-ink: var(--danger-ink);
+  --color-danger-wash: var(--danger-wash);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* §9.7 — one radius system. 6 interactive, 10 container, full ONLY the badge. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+
+  /* §9.6 — the whole scale. Anything not here is an ad-hoc value and a bug. */
+  --text-meta: 0.875rem;
+  --text-body: 1rem;
+  --text-lead: 1.125rem;
+  --text-section: 1.375rem;
+  --text-display: 1.75rem;
+  /*
+   * The weighing input only. It is read at arm's length at a scale, and it is
+   * the one number in the application that has to be legible from further away
+   * than a phone is normally held.
+   */
+  --text-scale: 2.5rem;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.55;
+    /* iOS rubber-banding shows the ground behind the body; match it. */
+    overscroll-behavior-y: none;
+  }
+
+  /*
+   * Every number in this application is money, weight or a count, and all
+   * three are read in columns and compared against each other. Proportional
+   * digits make that harder for no benefit.
+   */
+  .tnum,
+  input[inputmode='decimal'],
+  input[inputmode='numeric'] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * Visible focus, always. The console is operated with wet hands on a phone
+   * and the storefront by people who may be on a keyboard; neither is served
+   * by the browser default being removed for looking untidy.
+   */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* §9.2 — MOTION_INTENSITY 2. This is the entire motion system. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /*
+   * The one shadow in the system, tinted rather than black, on the sticky bar
+   * and the dialog only. Elevation is not decoration.
+   */
+  .elev {
+    box-shadow: 0 -1px 0 var(--line), 0 -8px 24px -12px rgb(20 24 26 / 0.18);
+  }
+
+  /* §11 — the console's floor for anything a thumb has to hit. */
+  .tap {
+    min-height: 48px;
+  }
+
+  .tap-lg {
+    min-height: 56px;
+  }
+}

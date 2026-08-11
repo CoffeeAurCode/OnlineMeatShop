@@ -183,3 +183,13 @@ the shop is not trading. Nothing invokes the scheduler yet, so nothing is
 currently broken — but **do not wire a job to the request lifecycle and call it
 scheduled until the instance is always-on**, and make every job tolerate having
 been asleep for hours rather than assuming a regular tick.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
