@@ -31,15 +31,53 @@ export const runtime = 'nodejs';
  */
 const DB_TIMEOUT_MS = 5_000;
 
+/**
+ * WHY THIS BORROWS A CLIENT INSTEAD OF CALLING pool.query()
+ * ---------------------------------------------------------
+ * The first version raced `pool.query('select 1')` against a timer and
+ * returned 503 when the timer won. Racing a promise does not cancel the thing
+ * it raced — it only stops waiting for it. The query kept its connection, and
+ * that connection was never handed back.
+ *
+ * The pool holds 5. Render probes this endpoint on a schedule, an uptime cron
+ * probes it too, and a stalled database is exactly when both probe hardest. So
+ * a stall consumed one slot per probe until the pool was empty — at which
+ * point every real request queued behind an exhausted pool and the site was
+ * down for a reason unrelated to the original stall. The health check made the
+ * outage instead of reporting it.
+ *
+ * Taking the client explicitly is what makes the timeout able to DESTROY the
+ * connection rather than abandon it. `client.release(err)` with a truthy
+ * argument tells `pg` to end that connection instead of returning it to the
+ * pool, which both frees the slot and terminates the query server-side.
+ */
 async function checkDatabase(): Promise<'ok' | 'unreachable'> {
   let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`timed out after ${DB_TIMEOUT_MS}ms`)),
+      DB_TIMEOUT_MS,
+    );
+  });
+
+  // Acquire-and-query as one unit, so that every exit path from here — success,
+  // failure, or timeout — returns or destroys the connection. If `connect()`
+  // itself is what stalls, this promise stays pending after we have already
+  // answered 503, and cleans up on its own whenever it eventually settles.
+  // `Promise.race` below subscribes to it, so its rejection is never unhandled.
+  const probe = (async () => {
+    const client = await pool.connect();
+    try {
+      await Promise.race([client.query('select 1'), deadline]);
+      client.release();
+    } catch (err) {
+      client.release(err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
+  })();
+
   try {
-    await Promise.race([
-      pool.query('select 1'),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`timed out after ${DB_TIMEOUT_MS}ms`)), DB_TIMEOUT_MS);
-      }),
-    ]);
+    await Promise.race([probe, deadline]);
     return 'ok';
   } catch (err) {
     console.error(

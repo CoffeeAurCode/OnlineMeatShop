@@ -1,0 +1,56 @@
+name: Keep-alive
+
+# Supabase Free pauses a project after 7 days of inactivity, and a paused
+# database is a down website. This is demonstrated rather than theoretical:
+# listing the org's projects found two strays already sitting INACTIVE, so the
+# pause has already fired twice on this account.
+#
+# The risk is INVERSELY related to traffic. A project awaiting a client
+# decision is idle by definition, which is exactly the demo-and-soft-launch
+# window this exists to cover.
+#
+# Every 2 days leaves 3 missed runs of margin before a pause could occur.
+# GitHub's scheduler is best-effort and runs late under load, so that margin is
+# the point rather than paranoia.
+#
+# DELETE THIS FILE once the project is on Supabase Pro — Pro does not pause,
+# and a cron nobody needs is a cron nobody maintains.
+
+on:
+  schedule:
+    - cron: '17 9 */2 * *'   # every 2 days. Offset from :00 — GitHub's scheduler
+  workflow_dispatch:          # is heavily contended on the hour and runs late
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Touch the database via the app
+        env:
+          URL: ${{ secrets.KEEPALIVE_APP_URL }}   # https://<host>/healthz
+        run: |
+          set -euo pipefail
+          if [ -z "${URL:-}" ]; then
+            echo "::error::KEEPALIVE_APP_URL is not set — nothing is keeping the database awake."
+            exit 1
+          fi
+          # /healthz performs `select 1`, so a 200 proves Postgres answered.
+          # It returns 503 when the database is unreachable, so --fail is the check.
+          curl --fail --silent --show-error --max-time 30 "$URL"
+          echo "app + database OK"
+
+      - name: Touch the REST API directly
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          ANON: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          # Belt and braces: it is unverified whether the pause counts pg
+          # connections or only REST calls. This covers the second case.
+          curl --fail --silent --show-error --max-time 30 \
+            -H "apikey: $ANON" "$SUPABASE_URL/rest/v1/" > /dev/null
+          echo "REST OK"

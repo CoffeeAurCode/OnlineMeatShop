@@ -8,6 +8,13 @@
       "when": 1786376160514,
       "tag": "0000_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786778400000,
+      "tag": "0001_catalog_version_seed",
+      "breakpoints": true
     }
   ]
 }

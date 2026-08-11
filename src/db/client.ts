@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 
 import { serverEnv } from '@/server-env';
-import { supabaseTls } from './ssl';
+import { postgresTls } from './ssl';
 
 /**
  * The application's one connection pool.
@@ -39,9 +39,15 @@ declare global {
 }
 
 function createPool(): Pool {
+  // Read once: the TLS decision is made FROM this string, so the two must not
+  // be able to disagree about which database is being dialled.
+  const connectionString = serverEnv.databaseUrl();
+
   return new Pool({
-    connectionString: serverEnv.databaseUrl(),
-    ssl: supabaseTls(),
+    connectionString,
+    // TLS unless the target is loopback — see ssl.ts. A local test database
+    // serves plaintext and has no certificate to pin.
+    ssl: postgresTls(connectionString),
 
     // Small on purpose. One Render Starter instance (0.5 vCPU / 512 MB) does
     // not benefit from a large pool, and Supabase Free's pooler budget is

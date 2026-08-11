@@ -1,0 +1,23 @@
+-- Seed the single catalog_version row.
+--
+-- 0000 created the table with `id DEFAULT 1` and `version DEFAULT 1` and a
+-- CHECK pinning it to one row — and then inserted nothing. A column default
+-- does not create a row. So a database built purely from migrations had an
+-- EMPTY catalog_version table, which means:
+--
+--   - P8 (quote validity) has nothing to compare a quote against. The
+--     precondition that stops a customer being charged a price they never
+--     agreed to reads from a table with no rows.
+--   - The live database only works because the row was inserted by hand
+--     during provisioning, out of band. That is not reproducible, and every
+--     fresh database — a CI service container, a local dev database, a
+--     restore into a new project — was silently different from production.
+--
+-- Written by hand rather than generated: drizzle-kit diffs SCHEMA, and this is
+-- data. It will not appear in a generated migration no matter how the table is
+-- defined.
+--
+-- ON CONFLICT DO NOTHING because the live database already has the row. This
+-- migration must be a no-op there and a fix everywhere else.
+INSERT INTO "catalog_version" ("id", "version") VALUES (1, 1)
+  ON CONFLICT ("id") DO NOTHING;

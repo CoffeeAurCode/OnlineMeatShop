@@ -97,6 +97,12 @@ specific, expensive ways.
     IPv6, so anything relying on it fails with `ENOTFOUND`.
 - TLS is verified against a pinned root in `certs/`, not disabled. See
   `src/db/ssl.ts` for why `rejectUnauthorized: false` is not an option here.
+  The **only** exception is a loopback host, which is how the integration and
+  concurrency suites reach a local plaintext Postgres — `postgresTls()` decides
+  that from the connection string, and both the application and `drizzle.config.ts`
+  call the same function so they cannot drift apart. Do not add an environment
+  variable to override it: the failure mode of such a variable is that it gets
+  set in the wrong environment.
 
 ### The database is a backstop, not just a store
 - Anti-overselling and anti-overbooking are **CHECK constraints in Postgres**,

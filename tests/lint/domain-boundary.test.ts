@@ -111,6 +111,27 @@ const forbidden: ReadonlyArray<readonly [string, string]> = [
   ['type-only import from outside', `import type { X } from '@/db'; export type Y = X;`],
   ['an unapproved package', `import lodash from 'lodash'; export const a = lodash;`],
 
+  // ── Third review: the allowlist matched by PATH SHAPE ──────────────────
+  // `@/server-env` was refused and `../server-env` was not — the same module,
+  // reachable by spelling the path differently. The allowlist permitted any
+  // relative import on the assumption that relative means local. It does not.
+  // Every one of these passed with exit 0 before the fix.
+  [
+    'parent-relative ../server-env (the same hole, respelled)',
+    `import { serverEnv } from '../server-env'; export const a = () => serverEnv.databaseUrl();`,
+  ],
+  ['parent-relative ../db/client', `import { pool } from '../db/client'; export const a = pool;`],
+  [
+    'traversal behind a legal-looking prefix',
+    `import { serverEnv } from './sub/../../server-env'; export const a = serverEnv;`,
+  ],
+  ['parent-relative dynamic import', `export const a = () => import('../server-env');`],
+  ['parent-relative re-export', `export * from '../server-env';`],
+  [
+    'parent-relative type-only import',
+    `import type { X } from '../server-env'; export type Y = X;`,
+  ],
+
   // Non-determinism: unusable in property-based tests, which increments 4 and 5 depend on.
   ['Date.now', `export const a = () => Date.now();`],
   ['new Date()', `export const a = () => new Date();`],
@@ -135,6 +156,14 @@ const permitted: ReadonlyArray<readonly [string, string]> = [
   ['importing another domain module', `import { cents } from './types'; export const a = cents;`],
   ['re-exporting a sibling domain module', `export * from './types';`],
   ['a named re-export from a sibling', `export { cents } from './types';`],
+  // The replacement for `../types` once the domain has subdirectories. If this
+  // ever fails, the traversal ban has been tightened into an obstruction and
+  // someone will disable it rather than route around it.
+  [
+    'an in-domain absolute import',
+    `import { cents } from '@/domain/types'; export const a = cents;`,
+  ],
+  ['a domain subdirectory', `import { x } from './slots/cutoff'; export const a = x;`],
   ['plain exported function', `export function f(x: number): number { return x + 1; }`],
   ['exported type and interface', `export type T = number; export interface I { a: T }`],
 ];

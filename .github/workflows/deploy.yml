@@ -10,37 +10,66 @@ name: Migrate and deploy
 #     nothing, which is what it actually is.
 #
 # Render's pre-deploy command would be the other option, but it is documented
-# as available on paid instances only, and staging runs on a free one. Using
-# one mechanism in production and a different one in staging is how a
-# migration bug reaches production untested.
+# as available on paid instances only.
 
+# WHY workflow_run AND NOT push
+# -----------------------------
+# This used to fire on `push: [main]`, exactly as CI does, with no dependency
+# between them. Two workflows on the same trigger run CONCURRENTLY: migrations
+# were applied and a deploy fired while the test suite was still running, and
+# would have fired just the same had it gone red. A pipeline that deploys code
+# it has not tested is not a pipeline.
+#
+# `workflow_run` is the only way to order two separate workflow files. The cost
+# is that this workflow is checked out from the DEFAULT branch and does NOT
+# automatically point at the commit that triggered CI — hence the explicit
+# `ref:` below. Forgetting that is how you migrate a schema from one commit and
+# deploy the application from another.
+#
+# ⚠ DECIDE AT GO-LIVE: this now deploys automatically on green CI.
+# Previously main auto-deployed STAGING and production was manual-only; with
+# staging cut there is one environment, so "automatic" now means the live shop.
+# That is right during the build — nobody is trading — and questionable the day
+# the shop is real. Either keep it and rely on the health-check gate, or delete
+# the `workflow_run` trigger and dispatch production by hand. Make the choice
+# deliberately rather than inheriting it.
 on:
-  # Merging to main deploys to staging. Production is never automatic — a
-  # butcher's Saturday morning is not the moment to discover main was red.
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
-    inputs:
-      environment:
-        description: Target environment
-        type: choice
-        options: [staging, production]
-        default: staging
-        required: true
 
-# Environment locking: two pipelines must never migrate the same database at
-# the same time. `cancel-in-progress: false` is the important half — cancelling
-# a job midway through applying migrations is precisely what this prevents.
+# Two pipelines must never migrate the same database at the same time.
+# `cancel-in-progress: false` is the important half — cancelling a job midway
+# through applying migrations is precisely what this prevents.
 concurrency:
-  group: migrate-${{ inputs.environment || 'staging' }}
+  group: migrate-production
   cancel-in-progress: false
 
 jobs:
   migrate:
+    # Manual runs are trusted; automatic ones require CI to have gone green.
+    # Without this guard `workflow_run` fires on failure and cancellation too,
+    # which would reintroduce the defect it was added to fix.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'staging' }}
+
+    # One environment. Staging was cut before launch — running a second
+    # database and a second Render service to rehearse a shop that takes a few
+    # orders a day costs more than it protects. If staging comes back, it comes
+    # back as a second environment here plus its own concurrency group.
+    environment: production
+
     steps:
+      # The commit CI actually verified — NOT the default branch tip, which may
+      # already have moved on.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -63,6 +92,8 @@ jobs:
             exit 1
           fi
 
+      # ⚠ There is no automatic backup on the free tier. Take a manual dump
+      # before any migration that could lose data — docs/restore-procedure.md.
       - name: Apply migrations
         env:
           DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}

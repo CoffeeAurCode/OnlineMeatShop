@@ -10,19 +10,56 @@ not a sketch.
 
 ## What you have
 
-Backups are written by `.github/workflows/backup.yml` every 6 hours to
-S3-compatible object storage, as `postgres/meatshop-<UTC timestamp>.dump.gpg`.
-Fourteen days are retained.
+There are two eras here, and which one you are in decides the first step.
 
-**Recovery point objective: 6 hours.** There is no vendor-side backup — Supabase's
-free tier takes none at all. These files are the only copy.
+### Now — a manual dump, taken by hand
 
-Each dump contains the `public` schema (all application data) and the `auth`
-schema (customer accounts). It deliberately does not contain Supabase's managed
-schemas — `vault`, `storage`, `realtime`, `extensions` — because a new project
-creates those itself and including them makes the dump unrestorable. Files in
-Supabase Storage are not in the dump; product images are reproducible from
-source.
+There is **no automatic backup**. The scheduled dump workflow was deleted rather
+than repaired: it was the project's only HIGH defect, and the subscription that
+replaces it does the job properly. Until that subscription is active, the
+discipline is:
+
+> **Take a dump immediately before every migration, and once a week.**
+
+Because the dominant way this database actually dies is a bad migration, not the
+vendor losing it. What the discipline does not cover is *forgetting* — which is
+the entire reason it is temporary.
+
+**Recovery point objective: whenever the last dump was taken.** Those files are
+the only copy. Keep them somewhere that is not the same laptop.
+
+Take one like this — the scoping is not optional, see below:
+
+```bash
+PGSSLROOTCERT=certs/supabase-prod-ca-2021.crt \
+pg_dump "$DIRECT_DATABASE_URL" \
+  --format=custom --schema=public --schema=auth \
+  --no-owner --no-privileges \
+  --file "meatshop-$(date -u +%Y%m%dT%H%M%SZ).dump"
+```
+
+> ⚠ **A full `pg_dump` of a Supabase database does not restore.** Measured:
+> 274 errors into a clean PostgreSQL 17, starting at
+> `relation "vault.secrets" does not exist`. Supabase's managed schemas —
+> `vault`, `storage`, `realtime`, `extensions` — are created by a new project
+> itself, and including them makes the dump unrestorable. Scoped to `public`
+> (application data) and `auth` (customer accounts) it restores with **exit 0
+> and zero errors**. That scoping *is* the procedure.
+
+Files in Supabase Storage are not in the dump; product images are reproducible
+from source.
+
+### Later — the vendor's daily snapshots
+
+Once the project is on the paid tier, restore is a **dashboard operation**:
+Supabase → Database → Backups → pick a daily snapshot → restore. Dailies are
+retained for 7 days, the RPO becomes 24 hours, and steps 1–2 below stop
+applying. **Point-in-time recovery is deliberately not purchased** — it costs
+roughly an order of magnitude more than the value of the orders at risk in a
+single incident.
+
+> ⚠ **The subscription *is* the backup.** Downgrading silently leaves the shop
+> with none. Treat it as infrastructure, not as billing.
 
 ---
 
@@ -30,23 +67,13 @@ source.
 
 ### 1. Get the dump
 
-```bash
-aws s3 ls s3://$BUCKET/postgres/ --endpoint-url "$ENDPOINT"
-aws s3 cp s3://$BUCKET/postgres/meatshop-<stamp>.dump.gpg . --endpoint-url "$ENDPOINT"
-```
+Find the most recent `meatshop-<UTC timestamp>.dump` you took.
 
 Pick deliberately. If you are recovering from **corruption noticed late** rather
 than from deletion noticed immediately, the newest dump contains the corruption.
-That is why fourteen days are kept.
+Keep more than one.
 
-### 2. Decrypt
-
-```bash
-gpg --batch --passphrase "$BACKUP_ENCRYPTION_PASSPHRASE" \
-    --decrypt meatshop-<stamp>.dump.gpg > meatshop.dump
-```
-
-### 3. Inspect before restoring
+### 2. Inspect before restoring
 
 ```bash
 pg_restore --list meatshop.dump | head -40
@@ -55,7 +82,7 @@ pg_restore --list meatshop.dump | head -40
 Confirm it holds what you expect. A dump that is short, or missing `product`, is
 a dump of a broken database.
 
-### 4. Restore into a scratch target first
+### 3. Restore into a scratch target first
 
 Never restore straight over a live database. Into a local container:
 
@@ -76,7 +103,7 @@ docker exec restore-check pg_restore -U postgres -d r \
 
 Expect **exit 0 and no errors**. Anything else, stop and read them.
 
-### 5. Check coherence, not just presence
+### 4. Check coherence, not just presence
 
 Row counts prove the bytes arrived. They do not prove the data means anything.
 Check that an order and its dependents came back together:
@@ -92,7 +119,7 @@ select o.id from "order" o left join payment p on p.order_id = o.id
   where o.status <> 'CANCELLED' and p.id is null;
 ```
 
-### 6. Only then, restore for real
+### 5. Only then, restore for real
 
 Into a **new** Supabase project in `ca-central-1` — not over the damaged one,
 which you may still need to look at.
@@ -103,8 +130,8 @@ pg_restore "postgresql://postgres.<newref>:<pw>@aws-0-ca-central-1.pooler.supaba
   --no-owner --no-privileges -d postgres meatshop.dump
 ```
 
-Then update `DATABASE_URL` and `DIRECT_DATABASE_URL` in Render and in the
-repository secrets, and redeploy.
+Then update `DATABASE_URL` and `DIRECT_DATABASE_URL` in the host's environment
+and in the repository secrets, and redeploy.
 
 ---
 

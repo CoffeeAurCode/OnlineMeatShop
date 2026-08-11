@@ -19,8 +19,32 @@ import nextTs from 'eslint-config-next/typescript';
  */
 const DOMAIN_ALLOWED_PACKAGES = ['zod', 'decimal\\.js'];
 
-/** Relative imports (other domain modules), plus the allowlist above. */
-const DOMAIN_ALLOWED_IMPORT = `^(\\.\\.?\\/|${DOMAIN_ALLOWED_PACKAGES.map((p) => `${p}$`).join('|')})`;
+/**
+ * Imports src/domain may write, as a regex over the literal import string.
+ *
+ * ⚠ THIS PATTERN USED TO BE `^(\.\.?\/|…)`, AND THAT WAS A HOLE.
+ *
+ * `\.\.?\/` allows a leading `../`, and a leading `../` leaves the domain.
+ * `import { serverEnv } from '../server-env'` — the exact module the allowlist
+ * was introduced to keep out, which hands over the database URL and every
+ * credential — passed with exit 0. The rule was written to think in terms of
+ * "relative means local", but relative does not mean local; it means relative.
+ * The `@/server-env` spelling was refused and the `../server-env` spelling was
+ * not, which is a boundary that depends on how you type the path.
+ *
+ * So: same-directory-or-deeper (`./…`) and explicit in-domain absolute
+ * (`@/domain/…`) only. Parent traversal is refused outright by a separate rule
+ * below, because `./sub/../../server-env` starts with `./` and would otherwise
+ * slip through this pattern too.
+ *
+ * ESLint cannot resolve a path here — it only sees the string — so the rule
+ * has to refuse the *shape* that could escape, not the destinations it might
+ * reach. Reproduced and re-tested in tests/lint/domain-boundary.test.ts.
+ */
+const DOMAIN_ALLOWED_IMPORT = `^(\\.\\/|@\\/domain\\/|${DOMAIN_ALLOWED_PACKAGES.map((p) => `${p}$`).join('|')})`;
+
+/** Any parent traversal at all, wherever it appears in the path. */
+const PARENT_TRAVERSAL = '\\.\\.';
 
 const domainPurity = {
   name: 'domain/purity',
@@ -59,6 +83,25 @@ const domainPurity = {
       {
         selector: `ExportAllDeclaration[source.type='Literal'][source.value!=/${DOMAIN_ALLOWED_IMPORT}/]`,
         message: 'src/domain may not re-export from outside the domain.',
+      },
+
+      /**
+       * No parent traversal, in any of the four forms above.
+       *
+       * The allowlist anchors on the START of the string, so a path that
+       * begins legitimately and then climbs out — `./sub/../../server-env` —
+       * satisfies it. This refuses `..` anywhere in the path instead of trying
+       * to reason about where it lands, which is not something a lint rule can
+       * do without resolving the module.
+       *
+       * Cost: a file in a domain subdirectory cannot say `../types`. It says
+       * `@/domain/types`, which is clearer anyway and does not move when the
+       * file does.
+       */
+      {
+        selector: `:matches(ImportDeclaration, ImportExpression, ExportNamedDeclaration, ExportAllDeclaration)[source.value=/${PARENT_TRAVERSAL}/]`,
+        message:
+          'No `..` in a src/domain import — a parent path leaves the domain. Use `./` or `@/domain/…`.',
       },
       {
         selector: "NewExpression[callee.name='Date'][arguments.length=0]",

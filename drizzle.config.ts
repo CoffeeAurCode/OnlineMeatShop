@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs';
 import { defineConfig } from 'drizzle-kit';
+
+import { postgresTls } from './src/db/ssl';
 
 /**
  * Drizzle Kit configuration — schema generation and migration application.
@@ -51,12 +52,12 @@ export default defineConfig({
   dialect: 'postgresql',
   dbCredentials: {
     url,
-    // Same pinned root as the application — see src/db/ssl.ts for why
-    // `rejectUnauthorized: false` is not used here.
-    ssl: {
-      ca: readFileSync('certs/supabase-prod-ca-2021.crt', 'utf8'),
-      rejectUnauthorized: true,
-    },
+    // The SAME decision the application makes, from the same function, rather
+    // than a second copy of it. This file used to inline the pinned CA, so the
+    // two could drift — and did: both demanded TLS unconditionally, which made
+    // it impossible to run migrations against the local or CI Postgres that
+    // the integration suite needs. See src/db/ssl.ts.
+    ssl: postgresTls(url),
   },
 
   // Forward-only, checked into git. Refuse to generate anything that would

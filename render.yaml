@@ -7,10 +7,9 @@
 # sits in Supabase ca-central-1, so the app runs in the US and the customer
 # data stays in Canada. Measure the round trip before relying on it.
 #
-# Migrations do NOT run here. They run from a CI job, because Render's
-# pre-deploy command is unavailable on free instance types and staging uses
-# one — and running migrations at app startup would race two app versions
-# during a health-check-gated deploy.
+# Migrations do NOT run here. They run from a CI job: Render's pre-deploy
+# command is documented as paid-instances-only, and running migrations at app
+# startup would race two app versions during a health-check-gated deploy.
 
 services:
   - type: web
@@ -23,13 +22,14 @@ services:
     startCommand: npm run start
     healthCheckPath: /healthz
 
-    # PRODUCTION DEPLOYS ARE MANUAL. A butcher's Saturday morning is not the
-    # moment to discover that `main` was red.
+    # RENDER NEVER DEPLOYS ON ITS OWN. Deploys arrive from the deploy hook at
+    # the end of .github/workflows/deploy.yml, which runs only after CI is
+    # green and the migrations have applied.
     #
     # `autoDeployTrigger: commit` (the deprecated `autoDeploy: true`) would
     # deploy every push immediately, racing the CI run and the migration job
-    # rather than waiting for them. `checksPass` is the right setting for a
-    # staging service; production stays off and is promoted deliberately.
+    # rather than waiting for them — which is the same defect the deploy
+    # workflow was just fixed to avoid. Leave this off.
     autoDeployTrigger: off
 
     envVars:
