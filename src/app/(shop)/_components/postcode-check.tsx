@@ -77,7 +77,7 @@ export function PostcodeCheck() {
         <button
           type="submit"
           disabled={busy}
-          className="tap w-full rounded-sm bg-accent px-5 text-body font-semibold text-accent-ink transition-colors hover:bg-accent-hover active:scale-[0.99] disabled:opacity-50 sm:w-auto"
+          className="tap w-full rounded-sm bg-accent px-5 text-body font-semibold text-accent-ink transition-[transform,background-color,opacity] hover:bg-accent-hover active:translate-y-px active:scale-[0.99] disabled:opacity-50 sm:w-28"
         >
           {busy ? 'Checking' : 'Check'}
         </button>

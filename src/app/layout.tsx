@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
-import { GeistMono } from 'geist/font/mono';
 
 import './globals.css';
 
@@ -13,10 +12,9 @@ import './globals.css';
  * Google at build time — one less network dependency in a build that already
  * has enough of them, and no third-party request in the LCP path.
  *
- * GeistMono is declared here so the CSS variable exists, but ONLY the console
- * actually uses it (`--font-mono`). The storefront gets tabular figures out of
- * the sans face instead, because a second font file in the storefront's LCP
- * path buys nothing that `font-variant-numeric` does not already give it.
+ * Geist Mono is loaded inside the admin route only. The storefront gets
+ * tabular figures out of the sans face, because a second font file in the
+ * storefront's LCP path buys nothing that `font-variant-numeric` does not.
  */
 
 export const metadata: Metadata = {
@@ -41,7 +39,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-CA" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html lang="en-CA" className={GeistSans.variable}>
       <body>{children}</body>
     </html>
   );

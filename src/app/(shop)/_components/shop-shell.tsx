@@ -21,7 +21,7 @@ export function ShopHeader() {
         <Link href="/" className="group flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
           <span
             aria-hidden="true"
-            className="grid size-9 shrink-0 place-items-center rounded-sm bg-accent-solid text-meta font-semibold text-accent-solid-ink transition-transform group-hover:-rotate-3"
+            className="brand-mark grid size-9 shrink-0 place-items-center rounded-sm bg-accent-solid text-meta font-semibold text-accent-solid-ink"
           >
             {shopName().trim().charAt(0).toUpperCase()}
           </span>
@@ -33,15 +33,15 @@ export function ShopHeader() {
           </span>
         </Link>
         <div className="flex shrink-0 items-center gap-2 sm:gap-5">
-          <Link href="/shop" className="tap inline-flex items-center text-body font-semibold sm:font-normal">
+          <Link href="/shop" className="nav-link tap inline-flex items-center text-body font-semibold sm:font-normal">
             Shop
           </Link>
-          <Link href="/delivery" className="tap hidden items-center text-body sm:inline-flex">
+          <Link href="/delivery" className="nav-link tap hidden items-center text-body sm:inline-flex">
             Delivery
           </Link>
           <Link
             href="/basket"
-            className="tap inline-flex items-center gap-2 rounded-sm border border-line bg-raised px-3 text-body font-semibold transition-colors hover:border-accent"
+            className="basket-link tap inline-flex items-center gap-2 rounded-sm border border-line bg-raised px-3 text-body font-semibold"
           >
             Basket
             <BasketCount />
@@ -66,8 +66,8 @@ export function ShopFooter() {
             </p>
           </div>
           <nav className="grid content-start gap-4 text-body lg:justify-self-end">
-            <Link className="underline-offset-4 hover:underline" href="/shop">Everything we sell</Link>
-            <Link className="underline-offset-4 hover:underline" href="/delivery">Where we deliver</Link>
+            <Link className="underline-offset-4 hover:underline" href="/shop">Shop</Link>
+            <Link className="underline-offset-4 hover:underline" href="/delivery">Delivery</Link>
             <Link className="underline-offset-4 hover:underline" href="/how-weighing-works">
               How weighing and payment work
             </Link>

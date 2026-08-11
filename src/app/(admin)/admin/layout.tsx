@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { GeistMono } from 'geist/font/mono';
 
 import { checkStaff, type StaffRefusal } from '@/app/admin-guard';
 
@@ -37,7 +38,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   if (!gate.ok) {
     return (
-      <main className="mx-auto max-w-[38rem] px-4 py-16">
+      <main className={`${GeistMono.variable} mx-auto max-w-[38rem] px-4 py-16`}>
         <h1 className="text-display font-semibold tracking-tight">Console unavailable</h1>
         <p className="mt-4 max-w-[65ch] text-lead text-muted">{REFUSAL_COPY[gate.reason]}</p>
         <p className="mt-6 max-w-[65ch] text-body text-muted">
@@ -57,7 +58,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         viewport height as it hides, and `100vh` makes the page jump under a
         thumb that is already moving toward a button.
       */}
-      <div className="min-h-[100dvh] pb-28">{children}</div>
+      <div className={`${GeistMono.variable} min-h-[100dvh] pb-28`}>{children}</div>
     </>
   );
 }
