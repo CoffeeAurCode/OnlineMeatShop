@@ -163,3 +163,63 @@ export async function seedSlot(
   );
   return rows[0].id as string;
 }
+
+/** A customer. Fictional details only — this repository is public. */
+export async function seedCustomer(pool: Pool, email = 'sample@example.test'): Promise<string> {
+  const { rows } = await pool.query(
+    `INSERT INTO customer (email, name) VALUES ($1, $2) RETURNING id`,
+    [email, 'Sample Customer'],
+  );
+  return rows[0].id as string;
+}
+
+/** A zone covering FSA A1A, plus the serviceable_fsa row. */
+export async function seedServedArea(
+  pool: Pool,
+  opts: { feeCents?: number; freeAboveCents?: number | null } = {},
+): Promise<string> {
+  const zoneId = await seedZone(pool, {
+    name: `zone-${Math.random().toString(36).slice(2, 8)}`,
+    feeCents: opts.feeCents ?? 0,
+    freeAboveCents: opts.freeAboveCents ?? null,
+  });
+  await pool.query(`INSERT INTO serviceable_fsa (fsa, zone_id) VALUES ($1, $2)`, [
+    FSA_SERVED,
+    zoneId,
+  ]);
+  return zoneId;
+}
+
+/**
+ * An AUTHORISED checkout attempt — the state placement expects to claim.
+ *
+ * `quotedEstCents` must equal what the placement recomputes or P8 fires, which
+ * is the point of the test that deliberately mismatches it.
+ */
+export async function seedAuthorisedAttempt(
+  pool: Pool,
+  opts: {
+    customerId: string;
+    cartHash: string;
+    quotedEstCents: number;
+    quoteVersion?: number;
+    authorisedCeilingCents?: number;
+  },
+): Promise<string> {
+  const { rows } = await pool.query(
+    `INSERT INTO checkout_attempt
+       (customer_id, cart_hash, quote_version, quoted_est_cents,
+        authorised_ceiling_cents, payment_intent_id, status)
+     VALUES ($1, $2, $3, $4, $5, $6, 'AUTHORISED')
+     RETURNING id`,
+    [
+      opts.customerId,
+      opts.cartHash,
+      opts.quoteVersion ?? 1,
+      opts.quotedEstCents,
+      opts.authorisedCeilingCents ?? Math.ceil(opts.quotedEstCents * 1.1),
+      `pi_test_${Math.random().toString(36).slice(2, 12)}`,
+    ],
+  );
+  return rows[0].id as string;
+}

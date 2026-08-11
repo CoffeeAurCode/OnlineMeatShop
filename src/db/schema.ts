@@ -3,6 +3,7 @@ import {
   check,
   date,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -409,3 +410,396 @@ export const slot = pgTable(
     check('slot_capacity_positive', sql`${t.capacity} > 0`),
   ],
 );
+
+// ═════════════════════════════════════════════════════════════════════════
+// Increment 4 — orders, checkout, payments
+// ═════════════════════════════════════════════════════════════════════════
+
+export const orderStatusEnum = pgEnum('order_status', [
+  'PLACED',
+  'PREPARING',
+  'WEIGHED',
+  'READY',
+  'OUT',
+  'DELIVERED',
+  'CANCELLED',
+]);
+
+export const payModeEnum = pgEnum('pay_mode', ['PREPAID', 'COD']);
+
+/**
+ * Payment lifecycle — a SEPARATE state machine from `order_status`, joined by
+ * an ID and never derived from it (DTM §8.3).
+ *
+ * They fail independently. An order can be READY while its capture is still
+ * pending, and a capture can succeed against an order cancelled a second
+ * earlier. Collapsing them into one column makes those states inexpressible,
+ * which does not make them stop happening — it makes them unrecordable.
+ */
+export const paymentStatusEnum = pgEnum('payment_status', [
+  'REQUIRES_PAYMENT_METHOD',
+  'REQUIRES_CAPTURE',
+  'CAPTURED',
+  'CANCELLED',
+  'FAILED',
+  'DISPUTED',
+]);
+
+export const checkoutAttemptStatusEnum = pgEnum('checkout_attempt_status', [
+  'OPEN',
+  'AUTHORISED',
+  'CONSUMED',
+  'ABANDONED',
+]);
+
+// ── customer ─────────────────────────────────────────────────────────────
+
+export const customer = pgTable('customer', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull().unique(),
+  phone: text('phone'),
+  name: text('name'),
+
+  /**
+   * CASL (DTM §11.4). Transactional order messages need no consent; marketing
+   * does, and the penalties are severe. Stored WITH its timestamp and source
+   * because that record is the only defence.
+   */
+  marketingConsentAt: timestamp('marketing_consent_at', { withTimezone: true }),
+  marketingConsentSource: text('marketing_consent_source'),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ── order ────────────────────────────────────────────────────────────────
+
+export const order = pgTable(
+  'order',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    customerId: uuid('customer_id')
+      .notNull()
+      .references(() => customer.id, { onDelete: 'restrict' }),
+
+    /** Normalised: uppercase, no space. `fsa` is denormalised for reporting. */
+    postalCode: text('postal_code').notNull(),
+    fsa: text('fsa').notNull(),
+
+    slotId: uuid('slot_id')
+      .notNull()
+      .references(() => slot.id, { onDelete: 'restrict' }),
+
+    /** Which trading day's stock this order consumed. */
+    businessDayId: uuid('business_day_id')
+      .notNull()
+      .references(() => businessDay.id, { onDelete: 'restrict' }),
+
+    payMode: payModeEnum('pay_mode').notNull(),
+    status: orderStatusEnum('status').notNull().default('PLACED'),
+
+    /** Line estimates only — the fee is its own column, never folded in. */
+    estLineTotalCents: integer('est_line_total_cents').notNull(),
+    deliveryFeeCents: integer('delivery_fee_cents').notNull(),
+    estTotalCents: integer('est_total_cents').notNull(),
+
+    /** inv-O5 — present exactly when weighing is done. */
+    finalTotalCents: integer('final_total_cents'),
+
+    /**
+     * The catalog version this order's prices came from, so a dispute about
+     * what was charged can be answered from the order alone.
+     */
+    catalogVersion: integer('catalog_version').notNull(),
+
+    /**
+     * Denormalised copies of the hot-food facts at placement time.
+     *
+     * inv-O3 spans order_line → product → slot and cannot be a CHECK in that
+     * form. Recording both sides on the order lets the CHECK below express it
+     * anyway, and lets the nightly consistency query (DTM §15.3) find a
+     * violation without joining three tables per order.
+     */
+    slotHotEligible: boolean('slot_hot_eligible').notNull(),
+    hasHotLine: boolean('has_hot_line').notNull(),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  },
+  (t) => [
+    /**
+     * ⭐ inv-O5 — a final total exists exactly when weighing is done, and not
+     * before. Written as an equality between two booleans so it cannot be
+     * satisfied by accident in either direction.
+     */
+    check(
+      'order_final_total_iff_weighed',
+      sql`(${t.finalTotalCents} IS NULL)
+          = (${t.status} IN ('PLACED', 'PREPARING', 'CANCELLED'))`,
+    ),
+
+    /** inv-O3, in the one form a CHECK can express it. */
+    check('order_hot_line_needs_hot_slot', sql`NOT ${t.hasHotLine} OR ${t.slotHotEligible}`),
+
+    check(
+      'order_money_non_negative',
+      sql`${t.estLineTotalCents} >= 0 AND ${t.deliveryFeeCents} >= 0
+          AND ${t.estTotalCents} >= 0
+          AND (${t.finalTotalCents} IS NULL OR ${t.finalTotalCents} >= 0)`,
+    ),
+
+    /** The estimate is its parts. A total that is not its own sum is a bug. */
+    check(
+      'order_est_total_is_sum',
+      sql`${t.estTotalCents} = ${t.estLineTotalCents} + ${t.deliveryFeeCents}`,
+    ),
+  ],
+);
+
+// ── order_line ───────────────────────────────────────────────────────────
+
+/**
+ * One line of an order, with the price SNAPSHOT it was placed at.
+ *
+ * The snapshot columns are not denormalisation for speed. The product's price
+ * will change; the order's must not. Reading the rate back off `product` at
+ * settlement would re-price a two-day-old order at today's rate, and charge
+ * the customer something they never agreed to.
+ */
+export const orderLine = pgTable(
+  'order_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => order.id, { onDelete: 'cascade' }),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => product.id, { onDelete: 'restrict' }),
+
+    /**
+     * FR-4 — the cut preference. Deliberately NOT a separate product, which is
+     * exactly why one product legitimately appears on several lines of one
+     * order, and why stock demand must be aggregated across them.
+     */
+    prepOptionId: uuid('prep_option_id').references(() => prepOption.id, {
+      onDelete: 'set null',
+    }),
+
+    /** Name at time of order — receipts must not change when the catalog does. */
+    productName: text('product_name').notNull(),
+    pricingMode: pricingModeEnum('pricing_mode').notNull(),
+    handling: handlingEnum('handling').notNull(),
+
+    /** The snapshot. Exactly one of these is populated, per pricing mode. */
+    ratePerKgCents: integer('rate_per_kg_cents'),
+    packPriceCents: integer('pack_price_cents'),
+
+    requestedG: integer('requested_g').notNull(),
+    estAmountCents: integer('est_amount_cents').notNull(),
+
+    /** Null until weighed. Pack lines are never weighed at all (inv-O6). */
+    actWeightG: integer('act_weight_g'),
+    actAmountCents: integer('act_amount_cents'),
+
+    /**
+     * Tax breakdown per line, not per order (DTM §10). One basket legitimately
+     * mixes zero-rated raw meat and taxable hot food, so an order-level rate
+     * cannot represent it. Stored as the breakdown rather than only the total,
+     * because reconstructing it later from rates that have since changed is
+     * miserable.
+     */
+    taxCode: text('tax_code').notNull(),
+    taxRateBasisPoints: integer('tax_rate_basis_points'),
+    taxCents: integer('tax_cents'),
+
+    /** Set when a weight landed outside the tolerance band and was approved. */
+    varianceApprovedAt: timestamp('variance_approved_at', { withTimezone: true }),
+  },
+  (t) => [
+    /**
+     * inv-O6 — a pack line's estimate IS its actual, and it is never
+     * re-priced. Enforced rather than trusted, because the whole "two pricing
+     * modes in one cart" design rests on it.
+     */
+    check(
+      'order_line_pack_never_repriced',
+      sql`${t.pricingMode} <> 'pack'
+          OR (${t.actWeightG} IS NULL
+              AND (${t.actAmountCents} IS NULL OR ${t.actAmountCents} = ${t.estAmountCents}))`,
+    ),
+
+    /** The snapshot matches the mode. */
+    check(
+      'order_line_snapshot_matches_mode',
+      sql`(${t.pricingMode} = 'pack' AND ${t.packPriceCents} IS NOT NULL AND ${t.ratePerKgCents} IS NULL)
+          OR (${t.pricingMode} = 'perKg' AND ${t.ratePerKgCents} IS NOT NULL AND ${t.packPriceCents} IS NULL)`,
+    ),
+
+    check(
+      'order_line_money_non_negative',
+      sql`${t.requestedG} >= 0 AND ${t.estAmountCents} >= 0
+          AND (${t.actWeightG} IS NULL OR ${t.actWeightG} >= 0)
+          AND (${t.actAmountCents} IS NULL OR ${t.actAmountCents} >= 0)`,
+    ),
+  ],
+);
+
+// ── checkout_attempt (DTM §8.2) ──────────────────────────────────────────
+
+/**
+ * ⭐ The idempotency boundary. It exists BEFORE any money is touched.
+ *
+ * Without it, a browser retry, a timeout or an impatient double-tap creates
+ * two PaymentIntents and two holds on the customer's card for one purchase.
+ * The sweeper would clear the extra within fifteen minutes, but the customer
+ * sees two pending charges on their banking app meanwhile — for a shop whose
+ * entire pitch is "we only ever charge you the exact amount", that is the
+ * worst available way to be wrong.
+ */
+export const checkoutAttempt = pgTable(
+  'checkout_attempt',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    customerId: uuid('customer_id')
+      .notNull()
+      .references(() => customer.id, { onDelete: 'cascade' }),
+
+    /**
+     * `hash(lines, slot, postal)`. A CHANGED CART IS A NEW ATTEMPT — that is
+     * what stops a stale hold being reused for a different basket.
+     */
+    cartHash: text('cart_hash').notNull(),
+
+    /** The catalog version the quote was computed against. P8 compares this. */
+    quoteVersion: integer('quote_version').notNull(),
+    quotedEstCents: integer('quoted_est_cents').notNull(),
+    authorisedCeilingCents: integer('authorised_ceiling_cents').notNull(),
+
+    paymentIntentId: text('payment_intent_id').unique(),
+
+    /**
+     * Written BEFORE the Stripe call, not after.
+     *
+     * The hard crash case is between "PaymentIntent created" and "its ID
+     * stored": the retry has no ID to reuse and would create a second hold.
+     * Storing the derived idempotency key first means the retry re-derives it
+     * and Stripe returns the ORIGINAL intent instead of making a new one.
+     */
+    stripeIdempotencyKey: text('stripe_idempotency_key'),
+
+    orderId: uuid('order_id').unique(),
+
+    status: checkoutAttemptStatusEnum('status').notNull().default('OPEN'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /**
+     * ⭐ ONE LIVE ATTEMPT PER CUSTOMER PER IDENTICAL CART.
+     *
+     * This partial unique index IS the anti-double-hold rule, and it is what
+     * makes "create or reuse" atomic: a concurrent second submit loses the
+     * insert and reads the existing row, rather than both submits deciding
+     * they are the first.
+     */
+    uniqueIndex('checkout_attempt_one_live')
+      .on(t.customerId, t.cartHash)
+      .where(sql`${t.status} IN ('OPEN', 'AUTHORISED')`),
+
+    /** A consumed attempt produced exactly one order. */
+    check(
+      'checkout_attempt_consumed_has_order',
+      sql`${t.status} <> 'CONSUMED' OR ${t.orderId} IS NOT NULL`,
+    ),
+  ],
+);
+
+// ── payment ──────────────────────────────────────────────────────────────
+
+export const payment = pgTable(
+  'payment',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => order.id, { onDelete: 'restrict' })
+      .unique(),
+
+    provider: text('provider').notNull().default('stripe'),
+    paymentIntentId: text('payment_intent_id').unique(),
+
+    status: paymentStatusEnum('status').notNull(),
+
+    /** The ceiling held on the card: `estTotal × (1 + tolerance)`. */
+    authorisedCents: integer('authorised_cents').notNull(),
+    /** The exact amount actually taken. Null until the single capture fires. */
+    capturedCents: integer('captured_cents'),
+
+    /**
+     * The capture idempotency key, which MUST change when the amount changes.
+     * Stripe replays the original response for a reused key, so a key that
+     * ignored the amount would quietly capture the old number.
+     */
+    captureIdempotencyKey: text('capture_idempotency_key'),
+
+    authorisedAt: timestamp('authorised_at', { withTimezone: true }),
+    capturedAt: timestamp('captured_at', { withTimezone: true }),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /**
+     * You get exactly ONE capture per authorisation, and it can never exceed
+     * the hold. `cappedTotal` is what guarantees that upstream; this refuses
+     * to record it if the guarantee ever fails.
+     */
+    check(
+      'payment_capture_within_authorisation',
+      sql`${t.capturedCents} IS NULL
+          OR (${t.capturedCents} >= 0 AND ${t.capturedCents} <= ${t.authorisedCents})`,
+    ),
+    check('payment_authorised_positive', sql`${t.authorisedCents} > 0`),
+  ],
+);
+
+// ── stripe_event (DTM §8.4) ──────────────────────────────────────────────
+
+/**
+ * Webhook deduplication. Stripe retries, and a duplicate capture is a
+ * real-money bug — but a DROPPED event is one too.
+ *
+ * The rule that makes both safe: the insert, every local effect, every
+ * enqueued follow-up and the `processed_at` stamp happen in ONE transaction.
+ * The naive version — insert the ID, return 200 if it conflicts — loses
+ * events: if the insert commits and the process dies before the state change,
+ * Stripe's retry finds the ID present and discards it, permanently and
+ * silently.
+ */
+export const stripeEvent = pgTable('stripe_event', {
+  /** Stripe's own event id, `evt_…`. */
+  id: text('id').primaryKey(),
+  type: text('type').notNull(),
+  payload: jsonb('payload').notNull(),
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  /** NULL ⇒ not yet done ⇒ retryable. This nullability is the whole design. */
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+  attempts: integer('attempts').notNull().default(0),
+  lastError: text('last_error'),
+});
+
+// ── audit_log (NFR-9) ────────────────────────────────────────────────────
+
+export const auditLog = pgTable('audit_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  actor: text('actor').notNull(),
+  action: text('action').notNull(),
+  entity: text('entity').notNull(),
+  entityId: text('entity_id').notNull(),
+  before: jsonb('before'),
+  after: jsonb('after'),
+});

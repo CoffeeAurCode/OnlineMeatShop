@@ -65,18 +65,45 @@ jobs:
       - name: No server secret in request-time responses
         run: npm run scan:runtime
 
-  # Integration and concurrency suites arrive with increments 2 and 4.
-  # They need a real Postgres service container, and they are kept in a
-  # separate job so a slow database never blocks fast domain feedback.
+  # ⭐ THE GATE. Separate job so a slow database never blocks the fast
+  # pure-domain feedback above, and so a failure here is unmistakable in the
+  # checks list rather than buried in one long log.
   #
-  # integration:
-  #   runs-on: ubuntu-latest
-  #   services:
-  #     postgres:
-  #       image: postgres:17
-  #       env:
-  #         POSTGRES_PASSWORD: postgres
-  #       options: >-
-  #         --health-cmd pg_isready --health-interval 10s
-  #         --health-timeout 5s --health-retries 5
-  #       ports: ['5432:5432']
+  # If this job is not green, order placement is not done. It does not relax at
+  # low volume: two customers racing for the last tray is a correctness bug at
+  # 3 orders/day exactly as at 300 — just rarer, which is worse.
+  integration:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+        ports: ['5432:5432']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Integration suites, then the concurrency gate. Both run against the
+      # real service container above — there is no fake, because everything
+      # they check (row locks, CHECK constraints, lock ordering, rollback) is a
+      # property of PostgreSQL rather than of our code.
+      #
+      # The URL is passed explicitly. The local default is port 5433, chosen so
+      # the harness — which runs DROP SCHEMA — cannot land on a developer's own
+      # PostgreSQL on 5432. Here 5432 is the service container and is safe.
+      - name: Integration and concurrency suites
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: npm run test:db
