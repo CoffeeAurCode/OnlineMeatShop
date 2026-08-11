@@ -139,8 +139,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
           {item.pricing.mode === 'perKg' ? (
             <p className="mt-6 max-w-[60ch] text-body">
-              Cut to order, so the final weight decides the price. We hold the estimate and charge
-              the exact amount once it is weighed.
+              Cut to order, so the final weight decides the price. For now, you pay the exact
+              amount on delivery once the order has been weighed.
             </p>
           ) : null}
 

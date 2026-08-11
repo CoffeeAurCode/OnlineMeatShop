@@ -367,7 +367,7 @@ export function CheckoutForm({ slots }: { slots: readonly SlotOption[] }) {
         */}
         {total !== null && total !== undefined ? (
           <div className="mt-6">
-            <MoneySentence holdCents={total} />
+            <MoneySentence estimateCents={total} />
           </div>
         ) : null}
 

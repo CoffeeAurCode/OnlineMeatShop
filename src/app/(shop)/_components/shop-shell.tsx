@@ -16,20 +16,33 @@ import { BasketCount } from './basket-count';
 
 export function ShopHeader() {
   return (
-    <header className="border-b border-line">
-      {/* Single line at desktop, height under 80px. */}
-      <nav className="mx-auto flex h-16 max-w-[68rem] items-center justify-between gap-6 px-4">
-        <Link href="/" className="text-lead font-semibold tracking-tight">
-          {shopName()}
+    <header className="storefront-header sticky top-0 z-40 border-b border-line">
+      <nav className="mx-auto flex h-[4.5rem] max-w-[76rem] items-center justify-between gap-4 px-4 sm:px-6">
+        <Link href="/" className="group flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+          <span
+            aria-hidden="true"
+            className="grid size-9 shrink-0 place-items-center rounded-sm bg-accent-solid text-meta font-semibold text-accent-solid-ink transition-transform group-hover:-rotate-3"
+          >
+            {shopName().trim().charAt(0).toUpperCase()}
+          </span>
+          <span className="min-w-0 max-w-[8.5rem] sm:max-w-none">
+            <span className="block truncate text-body font-semibold tracking-tight">{shopName()}</span>
+            <span className="hidden text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-muted sm:block">
+              Local butcher delivery
+            </span>
+          </span>
         </Link>
-        <div className="flex items-center gap-5">
-          <Link href="/shop" className="text-body">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-5">
+          <Link href="/shop" className="tap inline-flex items-center text-body font-semibold sm:font-normal">
             Shop
           </Link>
-          <Link href="/delivery" className="hidden text-body sm:inline">
+          <Link href="/delivery" className="tap hidden items-center text-body sm:inline-flex">
             Delivery
           </Link>
-          <Link href="/basket" className="flex items-center gap-2 text-body">
+          <Link
+            href="/basket"
+            className="tap inline-flex items-center gap-2 rounded-sm border border-line bg-raised px-3 text-body font-semibold transition-colors hover:border-accent"
+          >
             Basket
             <BasketCount />
           </Link>
@@ -41,23 +54,31 @@ export function ShopHeader() {
 
 export function ShopFooter() {
   return (
-    <footer className="mt-24 border-t border-line">
-      <div className="mx-auto grid max-w-[68rem] gap-8 px-4 py-12 sm:grid-cols-3">
-        <div>
-          <p className="text-body font-semibold">{shopName()}</p>
-          <p className="mt-2 max-w-[40ch] text-meta text-muted">
-            Home delivery only, within our local radius. Everything is cut the day it goes out.
+    <footer className="mt-24 bg-accent-solid text-accent-solid-ink">
+      <div className="mx-auto max-w-[76rem] px-4 py-14 sm:px-6 sm:py-20">
+        <div className="grid gap-12 border-b border-white/25 pb-12 lg:grid-cols-[1.4fr_1fr]">
+          <div>
+            <p className="max-w-[13ch] text-[clamp(2rem,5vw,4.5rem)] font-semibold leading-[0.95] tracking-[-0.05em]">
+              Cut here. Delivered nearby.
+            </p>
+            <p className="mt-5 max-w-[46ch] text-body text-white/75">
+              Home delivery only, within our local radius. Everything is cut the day it goes out.
+            </p>
+          </div>
+          <nav className="grid content-start gap-4 text-body lg:justify-self-end">
+            <Link className="underline-offset-4 hover:underline" href="/shop">Everything we sell</Link>
+            <Link className="underline-offset-4 hover:underline" href="/delivery">Where we deliver</Link>
+            <Link className="underline-offset-4 hover:underline" href="/how-weighing-works">
+              How weighing and payment work
+            </Link>
+          </nav>
+        </div>
+        <div className="grid gap-4 pt-6 text-meta text-white/65 sm:grid-cols-2">
+          <p className="font-semibold text-white">{shopName()}</p>
+          <p className="sm:text-right">
+            Prices in Canadian dollars. Per-kilogram prices stay estimated until your order is cut and weighed.
           </p>
         </div>
-        <nav className="grid content-start gap-2 text-body">
-          <Link href="/shop">Everything we sell</Link>
-          <Link href="/delivery">Where we deliver</Link>
-          <Link href="/how-weighing-works">How weighing and charging work</Link>
-        </nav>
-        <p className="text-meta text-muted">
-          Prices in Canadian dollars. Per-kilogram items are cut to order, so the amount you see at
-          checkout is an estimate until they are weighed.
-        </p>
       </div>
     </footer>
   );
@@ -87,13 +108,18 @@ export function ProductTile({
 }) {
   return (
     <div
-      className={`flex items-end rounded-md border border-line bg-raised p-4 ${
+      className={`product-tile flex items-end rounded-md border border-line bg-raised p-5 transition-[transform,border-color] duration-300 hover:-translate-y-1 hover:border-accent ${
         ratio === 'square' ? 'aspect-square' : 'aspect-[4/3]'
       }`}
     >
+      <span aria-hidden="true" className="product-mark">
+        {name.trim().charAt(0).toUpperCase()}
+      </span>
       <div>
-        <p className="text-meta text-muted">{handlingLabel(handling)}</p>
-        <p className="mt-1 text-section font-semibold tracking-tight">{name}</p>
+        <p className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-muted">
+          {handlingLabel(handling)}
+        </p>
+        <p className="mt-2 max-w-[14ch] text-section font-semibold leading-tight tracking-tight">{name}</p>
       </div>
     </div>
   );

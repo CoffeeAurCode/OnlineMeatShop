@@ -54,8 +54,8 @@ export function PostcodeCheck() {
 
   return (
     <div>
-      <form onSubmit={check} className="flex flex-wrap items-end gap-3">
-        <div className="grow">
+      <form onSubmit={check} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div className="min-w-0">
           <label htmlFor="postcode" className="block text-body font-semibold">
             Do we deliver to you?
           </label>
@@ -77,7 +77,7 @@ export function PostcodeCheck() {
         <button
           type="submit"
           disabled={busy}
-          className="tap shrink-0 rounded-sm bg-accent px-5 text-body font-semibold text-accent-ink transition-colors hover:bg-accent-hover active:scale-[0.99] disabled:opacity-50"
+          className="tap w-full rounded-sm bg-accent px-5 text-body font-semibold text-accent-ink transition-colors hover:bg-accent-hover active:scale-[0.99] disabled:opacity-50 sm:w-auto"
         >
           {busy ? 'Checking' : 'Check'}
         </button>

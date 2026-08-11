@@ -27,6 +27,9 @@
   --accent: #0f5138;
   --accent-hover: #0b3f2b;
   --accent-ink: #fcfdfd;
+  --accent-solid: #0f5138;
+  --accent-solid-ink: #fcfdfd;
+  --surface-soft: #e9edef;
 
   /*
    * Semantic only.
@@ -52,6 +55,7 @@
     --accent: #3fa47a;
     --accent-hover: #55b98e;
     --accent-ink: #0b2019;
+    --surface-soft: #181d1f;
 
     --hot: #f97316;
     --hot-wash: #2a1a10;
@@ -77,6 +81,9 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-ink: var(--accent-ink);
+  --color-accent-solid: var(--accent-solid);
+  --color-accent-solid-ink: var(--accent-solid-ink);
+  --color-soft: var(--surface-soft);
   --color-hot: var(--hot);
   --color-hot-wash: var(--hot-wash);
   --color-danger: var(--danger);
@@ -117,6 +124,11 @@
     line-height: 1.55;
     /* iOS rubber-banding shows the ground behind the body; match it. */
     overscroll-behavior-y: none;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-ink);
   }
 
   /*
@@ -170,5 +182,56 @@
 
   .tap-lg {
     min-height: 56px;
+  }
+
+  .storefront-header {
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: blur(14px);
+  }
+
+  .editorial-frame {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .editorial-frame::before {
+    position: absolute;
+    z-index: 1;
+    inset: 14px;
+    border: 1px solid rgb(252 253 253 / 0.48);
+    border-radius: 6px;
+    content: '';
+    pointer-events: none;
+  }
+
+  .product-tile {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  .product-tile::after {
+    position: absolute;
+    z-index: -1;
+    right: -10%;
+    bottom: -18%;
+    width: 62%;
+    aspect-ratio: 1;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    content: '';
+  }
+
+  .product-mark {
+    position: absolute;
+    z-index: -1;
+    top: -0.18em;
+    right: 0.08em;
+    color: var(--surface-soft);
+    font-size: clamp(5rem, 14vw, 9rem);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.08em;
+    user-select: none;
   }
 }
