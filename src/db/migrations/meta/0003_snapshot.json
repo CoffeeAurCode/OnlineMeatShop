@@ -1,0 +1,635 @@
+{
+  "id": "43e65c3d-70bb-4ccd-939e-1faf138ff13e",
+  "prevId": "d4aca2a0-2a2d-49eb-a2ac-65cd507368e6",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.business_day": {
+      "name": "business_day",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "business_date": {
+          "name": "business_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "open": {
+          "name": "open",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "opened_at": {
+          "name": "opened_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "business_day_one_open": {
+          "name": "business_day_one_open",
+          "columns": [
+            {
+              "expression": "(true)",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"business_day\".\"open\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "business_day_business_date_unique": {
+          "name": "business_day_business_date_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "business_date"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "business_day_closed_at_iff_closed": {
+          "name": "business_day_closed_at_iff_closed",
+          "value": "\"business_day\".\"open\" = (\"business_day\".\"closed_at\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.catalog_version": {
+      "name": "catalog_version",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "catalog_version_single_row": {
+          "name": "catalog_version_single_row",
+          "value": "\"catalog_version\".\"id\" = 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.prep_option": {
+      "name": "prep_option",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "prep_option_product_id_product_id_fk": {
+          "name": "prep_option_product_id_product_id_fk",
+          "tableFrom": "prep_option",
+          "tableTo": "product",
+          "columnsFrom": [
+            "product_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.product": {
+      "name": "product",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "handling": {
+          "name": "handling",
+          "type": "handling",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pricing_mode": {
+          "name": "pricing_mode",
+          "type": "pricing_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pack_price_cents": {
+          "name": "pack_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "w_min_g": {
+          "name": "w_min_g",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "w_max_g": {
+          "name": "w_max_g",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rate_per_kg_cents": {
+          "name": "rate_per_kg_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_order_g": {
+          "name": "min_order_g",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "step_g": {
+          "name": "step_g",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tax_code": {
+          "name": "tax_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "product_slug_unique": {
+          "name": "product_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "product_pricing_mode_xor": {
+          "name": "product_pricing_mode_xor",
+          "value": "(\n        \"product\".\"pricing_mode\" = 'pack'\n        AND \"product\".\"pack_price_cents\" IS NOT NULL AND \"product\".\"w_min_g\" IS NOT NULL AND \"product\".\"w_max_g\" IS NOT NULL\n        AND \"product\".\"rate_per_kg_cents\" IS NULL AND \"product\".\"min_order_g\" IS NULL AND \"product\".\"step_g\" IS NULL\n      ) OR (\n        \"product\".\"pricing_mode\" = 'perKg'\n        AND \"product\".\"rate_per_kg_cents\" IS NOT NULL AND \"product\".\"min_order_g\" IS NOT NULL AND \"product\".\"step_g\" IS NOT NULL\n        AND \"product\".\"pack_price_cents\" IS NULL AND \"product\".\"w_min_g\" IS NULL AND \"product\".\"w_max_g\" IS NULL\n      )"
+        },
+        "product_pack_range_valid": {
+          "name": "product_pack_range_valid",
+          "value": "\"product\".\"pricing_mode\" <> 'pack' OR (\n        \"product\".\"pack_price_cents\" > 0 AND \"product\".\"w_min_g\" > 0 AND \"product\".\"w_min_g\" <= \"product\".\"w_max_g\"\n      )"
+        },
+        "product_perkg_valid": {
+          "name": "product_perkg_valid",
+          "value": "\"product\".\"pricing_mode\" <> 'perKg' OR (\n        \"product\".\"rate_per_kg_cents\" > 0 AND \"product\".\"step_g\" > 0 AND \"product\".\"min_order_g\" >= \"product\".\"step_g\"\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.serviceable_fsa": {
+      "name": "serviceable_fsa",
+      "schema": "",
+      "columns": {
+        "fsa": {
+          "name": "fsa",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "zone_id": {
+          "name": "zone_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "serviceable_fsa_zone_id_zone_id_fk": {
+          "name": "serviceable_fsa_zone_id_zone_id_fk",
+          "tableFrom": "serviceable_fsa",
+          "tableTo": "zone",
+          "columnsFrom": [
+            "zone_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "fsa_format": {
+          "name": "fsa_format",
+          "value": "\"serviceable_fsa\".\"fsa\" ~ '^[A-Z][0-9][A-Z]$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.slot": {
+      "name": "slot",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "service_date": {
+          "name": "service_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cutoff_at": {
+          "name": "cutoff_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "capacity": {
+          "name": "capacity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "booked_count": {
+          "name": "booked_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "hot_eligible": {
+          "name": "hot_eligible",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "slot_not_overbooked": {
+          "name": "slot_not_overbooked",
+          "value": "\"slot\".\"booked_count\" >= 0 AND \"slot\".\"booked_count\" <= \"slot\".\"capacity\""
+        },
+        "slot_times_ordered": {
+          "name": "slot_times_ordered",
+          "value": "\"slot\".\"cutoff_at\" <= \"slot\".\"starts_at\" AND \"slot\".\"starts_at\" < \"slot\".\"ends_at\""
+        },
+        "slot_capacity_positive": {
+          "name": "slot_capacity_positive",
+          "value": "\"slot\".\"capacity\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.stock_item": {
+      "name": "stock_item",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "business_day_id": {
+          "name": "business_day_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stocked_g": {
+          "name": "stocked_g",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reserved_g": {
+          "name": "reserved_g",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "stock_item_day_product": {
+          "name": "stock_item_day_product",
+          "columns": [
+            {
+              "expression": "business_day_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "product_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "stock_item_business_day_id_business_day_id_fk": {
+          "name": "stock_item_business_day_id_business_day_id_fk",
+          "tableFrom": "stock_item",
+          "tableTo": "business_day",
+          "columnsFrom": [
+            "business_day_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "stock_item_product_id_product_id_fk": {
+          "name": "stock_item_product_id_product_id_fk",
+          "tableFrom": "stock_item",
+          "tableTo": "product",
+          "columnsFrom": [
+            "product_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "stock_not_oversold": {
+          "name": "stock_not_oversold",
+          "value": "\"stock_item\".\"reserved_g\" >= 0 AND \"stock_item\".\"reserved_g\" <= \"stock_item\".\"stocked_g\""
+        },
+        "stock_stocked_non_negative": {
+          "name": "stock_stocked_non_negative",
+          "value": "\"stock_item\".\"stocked_g\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.zone": {
+      "name": "zone",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fee_cents": {
+          "name": "fee_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "free_above_cents": {
+          "name": "free_above_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "zone_name_unique": {
+          "name": "zone_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "zone_fee_non_negative": {
+          "name": "zone_fee_non_negative",
+          "value": "\"zone\".\"fee_cents\" >= 0"
+        },
+        "zone_free_above_positive": {
+          "name": "zone_free_above_positive",
+          "value": "\"zone\".\"free_above_cents\" IS NULL OR \"zone\".\"free_above_cents\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.handling": {
+      "name": "handling",
+      "schema": "public",
+      "values": [
+        "RAW",
+        "MARINATED",
+        "COOKED_CHILLED",
+        "COOKED_HOT"
+      ]
+    },
+    "public.pricing_mode": {
+      "name": "pricing_mode",
+      "schema": "public",
+      "values": [
+        "pack",
+        "perKg"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

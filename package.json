@@ -13,7 +13,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "scan:secrets": "node scripts/scan-secrets.mjs",
-    "scan:runtime": "node scripts/scan-runtime.mjs"
+    "scan:runtime": "node scripts/scan-runtime.mjs",
+    "test:db": "vitest run --config vitest.integration.config.ts",
+    "db:test:up": "docker run -d --rm --name meatshop-testdb -e POSTGRES_PASSWORD=postgres -p 5433:5432 postgres:17",
+    "db:test:down": "docker rm -f meatshop-testdb"
   },
   "license": "ISC",
   "type": "module",

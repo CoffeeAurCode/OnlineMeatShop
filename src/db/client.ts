@@ -88,3 +88,13 @@ pool.on('error', (err) => {
 });
 
 export const db = drizzle(pool);
+
+/**
+ * The transaction handle drizzle hands to a `db.transaction` callback.
+ *
+ * Named so repository functions can declare "this must run inside a caller's
+ * transaction" in their signature rather than in a comment. `PlaceOrder` is
+ * one transaction spanning several repositories (DTM §7); a function that
+ * quietly opened its own would break that atomicity while still type-checking.
+ */
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
