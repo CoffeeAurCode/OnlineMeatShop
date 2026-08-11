@@ -87,3 +87,18 @@ export function kgInputFromGrams(g: number): string {
   const rest = String(g % 1000).padStart(3, '0').replace(/0+$/, '');
   return rest === '' ? String(kg) : `${kg}.${rest}`;
 }
+
+/**
+ * Integer cents as a bare decimal string: `1840` → `"18.40"`.
+ *
+ * For JSON-LD and anywhere else that wants a number without a currency symbol.
+ * `cents / 100` would be exact at these magnitudes and is still not used, for
+ * the reason in this file's header: no float is created anywhere, including in
+ * JSON that leaves the server. schema.org accepts a string here.
+ */
+export function decimalString(cents: number): string {
+  if (!Number.isSafeInteger(cents) || cents < 0) {
+    throw new Error(`decimalString() takes non-negative integer cents, got ${cents}`);
+  }
+  return `${Math.trunc(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
+}

@@ -46,6 +46,11 @@ export async function startServer(): Promise<void> {
         ADMIN_PREVIEW_TOKEN: E2E_TOKEN,
         SHOP_TIMEZONE: 'America/Toronto',
         NODE_ENV: 'development',
+        // Fictional, per CLAUDE.md §1. These make the sitemap, the canonical
+        // URLs and the JSON-LD deterministic so the suite can assert on them.
+        NEXT_PUBLIC_SHOP_NAME: 'Test Butcher Ltd',
+        NEXT_PUBLIC_SITE_ORIGIN: 'https://shop.example.invalid',
+        DELIVERY_TOWNS: 'sample-town|Sample Town',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: process.platform === 'win32',
