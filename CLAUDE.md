@@ -171,7 +171,15 @@ tests/
 
 ## 6. Scheduled work
 
-Runs in-process (the service is always on), guarded by **transaction-scoped**
-advisory locks — one per job, never session-scoped, because session locks
-attach to a pooled connection and leak. Every job is independently idempotent;
+Runs in-process, guarded by **transaction-scoped** advisory locks — one per
+job, never session-scoped, because session locks attach to a pooled connection
+and leak. Every job is independently idempotent;
 the lock reduces duplicate work, it does not guarantee its absence.
+
+In-process work presumes the process is running. On a **free** instance it is
+not: the host spins the service down after 15 minutes without traffic, and a
+spun-down process runs no jobs. `render.yaml` is on `free` deliberately while
+the shop is not trading. Nothing invokes the scheduler yet, so nothing is
+currently broken — but **do not wire a job to the request lifecycle and call it
+scheduled until the instance is always-on**, and make every job tolerate having
+been asleep for hours rather than assuming a regular tick.

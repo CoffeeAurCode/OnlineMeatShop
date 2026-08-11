@@ -1,4 +1,20 @@
-# Render service definition.
+# ⚠⚠ THIS FILE IS NOT IN EFFECT. IT CONFIGURES NOTHING. ⚠⚠
+#
+# Blueprints (infrastructure-as-code, i.e. this file) are a PAID Render
+# feature; the workspace is on Hobby. The web service was therefore created by
+# hand in the dashboard, and Render never reads this file. **The dashboard is
+# the source of truth for every value below.**
+#
+# It is kept, rather than deleted, for two reasons: it is the written record of
+# what the dashboard should say, and it becomes live unchanged the day the
+# workspace is on a paid plan.
+#
+# ⚠ THE FAILURE MODE THIS CREATES: edit this file, believe you changed the
+# deployment, and you have changed nothing. **Change the dashboard first, then
+# mirror it here in the same commit.** If the two ever disagree, the dashboard
+# is right and this file is the bug.
+#
+# ── Render service definition (mirror of the dashboard) ──────────────
 #
 # Render connects to THIS repository directly (root directory `/`), not to the
 # private parent repo — so documentation commits never trigger a rebuild.
@@ -16,9 +32,34 @@ services:
     name: online-meat-shop
     runtime: node
     region: ohio
-    plan: starter # always-on. The free instance spins down; not viable for a shop.
+    # FREE FOR NOW — deliberately, and temporarily. Change this one line to
+    # `starter` (and nothing else) before the shop takes a real order.
+    #
+    # What `free` costs, so the next session does not rediscover it:
+    #   - The instance SPINS DOWN after 15 minutes without traffic, and the
+    #     next request waits ~1 minute for it to come back. Fine while the only
+    #     visitors are us and the client; not fine for a customer mid-checkout.
+    #   - 750 free instance-hours per calendar month, workspace-wide.
+    #   - No zero-downtime deploys: a deploy is a short outage, not a handover.
+    #   - Ephemeral filesystem, no persistent disk, no SSH, no one-off jobs.
+    #     None of these are used — the state is all in Postgres.
+    #   - Pre-deploy commands stay unavailable, which changes nothing:
+    #     migrations already run from CI (see the note at the top of this file).
+    #
+    # ⚠ THE ONE THING THAT BREAKS ON FREE is the in-process scheduler
+    # (`src/jobs/scheduler.ts`, D11): it can only run while the process is
+    # awake, and a spun-down process runs nothing. Nothing calls it yet, so
+    # this is latent rather than broken — but the outbox drain and the stale-
+    # attempt sweeper cannot be trusted until this is `starter`.
+    plan: free
     branch: main
-    buildCommand: npm ci && npm run build
+    # `--include=dev` IS LOAD-BEARING. NODE_ENV=production is set below (correct
+    # for the runtime), and npm treats that as an implicit `--omit=dev`. Without
+    # the flag, `npm ci` skips devDependencies — typescript, @types/*,
+    # eslint-config-next — and `next build` fails on a TypeScript project that
+    # has no TypeScript. The error names a missing module, not the env var, so
+    # it reads as a broken lockfile and is not one.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start
     healthCheckPath: /healthz
 
@@ -35,6 +76,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: '24'
+      # Runtime only. See the build command above — this is why it needs
+      # `--include=dev`.
       - key: NODE_ENV
         value: production
       # Every secret below is set in the Render dashboard, never in this file.
