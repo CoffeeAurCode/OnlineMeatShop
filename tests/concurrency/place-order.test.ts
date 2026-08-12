@@ -33,6 +33,13 @@ import {
 
 const POSTAL = `${FSA_SERVED} 1A1`;
 
+/**
+ * Every placement needs a delivery address since migration 0006. It is
+ * irrelevant to what these tests actually measure -- stock, slots and locks --
+ * so it is one shared constant rather than noise at nineteen call sites.
+ */
+const ADDRESS = { line1: '1 Test Street', city: 'Testville', province: 'QC' } as const;
+
 /** 50, as specified. Enough that a missing lock loses reliably, not sometimes. */
 const N = 50;
 
@@ -105,6 +112,7 @@ describe('1. N buyers, ONE unit of stock', () => {
           attemptId: null,
           customerId,
           postalCode: POSTAL,
+          address: ADDRESS,
           slotId,
           businessDayId: dayId,
           payMode: 'PREPAID',
@@ -167,6 +175,7 @@ describe('1b. N buyers, ONE unit of stock, DIFFERENT slots', () => {
           attemptId: null,
           customerId,
           postalCode: POSTAL,
+          address: ADDRESS,
           slotId: slotIds[i] as string,
           businessDayId: dayId,
           payMode: 'PREPAID',
@@ -213,6 +222,7 @@ describe('2. N buyers, slot capacity ONE', () => {
           attemptId: null,
           customerId,
           postalCode: POSTAL,
+          address: ADDRESS,
           slotId,
           businessDayId: dayId,
           payMode: 'PREPAID',
@@ -254,6 +264,7 @@ describe('3. The same product on TWO lines of one basket', () => {
       attemptId: null,
       customerId,
       postalCode: POSTAL,
+      address: ADDRESS,
       slotId,
       businessDayId: dayId,
       payMode: 'PREPAID',
@@ -290,6 +301,7 @@ describe('3. The same product on TWO lines of one basket', () => {
       attemptId: null,
       customerId,
       postalCode: POSTAL,
+      address: ADDRESS,
       slotId,
       businessDayId: dayId,
       payMode: 'PREPAID',
@@ -336,6 +348,7 @@ describe('4. The SAME checkout attempt submitted twice, concurrently', () => {
         attemptId,
         customerId,
         postalCode: POSTAL,
+        address: ADDRESS,
         slotId,
         businessDayId: dayId,
         payMode: 'PREPAID',
@@ -392,6 +405,7 @@ describe('4. The SAME checkout attempt submitted twice, concurrently', () => {
       attemptId,
       customerId,
       postalCode: POSTAL,
+      address: ADDRESS,
       slotId,
       businessDayId: dayId,
       payMode: 'PREPAID' as const,
@@ -474,6 +488,7 @@ describe('5. An admin repricing or deactivating MID-placement', () => {
           attemptId,
           customerId,
           postalCode: POSTAL,
+          address: ADDRESS,
           slotId,
           businessDayId: dayId,
           payMode: 'PREPAID',
@@ -519,6 +534,7 @@ describe('5. An admin repricing or deactivating MID-placement', () => {
           attemptId,
           customerId,
           postalCode: POSTAL,
+          address: ADDRESS,
           slotId,
           businessDayId: dayId,
           payMode: 'PREPAID',
@@ -576,6 +592,7 @@ describe('Deadlock resistance — baskets in opposite orders', () => {
           attemptId: null,
           customerId,
           postalCode: POSTAL,
+          address: ADDRESS,
           slotId,
           businessDayId: dayId,
           payMode: 'PREPAID',

@@ -43,6 +43,13 @@
       "when": 1786438418819,
       "tag": "0005_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786550182974,
+      "tag": "0006_prototype_foundations",
+      "breakpoints": true
     }
   ]
 }

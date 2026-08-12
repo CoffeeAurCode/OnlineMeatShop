@@ -2,8 +2,10 @@ import {
   boolean,
   check,
   date,
+  index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -44,6 +46,47 @@ export const handlingEnum = pgEnum('handling', [
 /** Exactly one per product. Which columns must be populated depends on it. */
 export const pricingModeEnum = pgEnum('pricing_mode', ['pack', 'perKg']);
 
+// ── category ─────────────────────────────────────────────────────────────
+
+/**
+ * The merchandising axis: how a shopper is invited to browse.
+ *
+ * ⭐ `category` and `handling` are orthogonal and both are needed.
+ *
+ * `handling` is a FOOD-SAFETY axis and it drives delivery-slot eligibility.
+ * `category` is a SHOPPING axis. Collapsing them would either hand a
+ * food-safety rule to whoever arranges the shelves, or force a category like
+ * "Lobster" to pick a single shelf life when it legitimately spans live, raw
+ * and cooked. Handling is therefore a FILTER within a category, never the
+ * top-level grouping.
+ *
+ * Bilingual because the storefront is, and because these are words the owner
+ * edits rather than strings a developer ships. See the note on `name_fr` in
+ * `product`.
+ */
+export const category = pgTable(
+  'category',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    slug: text('slug').notNull().unique(),
+
+    nameEn: text('name_en').notNull(),
+    nameFr: text('name_fr').notNull(),
+    blurbEn: text('blurb_en'),
+    blurbFr: text('blurb_fr'),
+
+    /** Path under `public/`, not a URL. Resolved by `next/image` at render. */
+    imagePath: text('image_path'),
+
+    sortOrder: integer('sort_order').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('category_sort_idx').on(t.sortOrder)],
+);
+
 // ── product ──────────────────────────────────────────────────────────────
 
 export const product = pgTable(
@@ -53,6 +96,30 @@ export const product = pgTable(
     name: text('name').notNull(),
     slug: text('slug').notNull().unique(),
     description: text('description'),
+
+    /**
+     * French copy. Nullable, and the storefront falls back to the English
+     * column when it is absent, because a product with no French name must
+     * still be sellable — the alternative is that adding a product in a hurry
+     * at 6am fails a NOT NULL and the fish does not go on sale.
+     *
+     * `name`/`description` are the English columns. They are not renamed to
+     * `name_en` on purpose: every existing query, repository and test reads
+     * `name`, and a rename buys nothing but a large diff and a migration that
+     * can half-apply.
+     */
+    nameFr: text('name_fr'),
+    descriptionFr: text('description_fr'),
+
+    /** Path under `public/`, not a URL. See the note on `category`. */
+    imagePath: text('image_path'),
+
+    /**
+     * `on delete restrict`: deleting a category that still has products must
+     * fail loudly rather than cascade the catalog away or silently orphan it.
+     * Nullable so a product can exist before it has been merchandised.
+     */
+    categoryId: uuid('category_id').references(() => category.id, { onDelete: 'restrict' }),
 
     handling: handlingEnum('handling').notNull(),
 
@@ -126,6 +193,9 @@ export const product = pgTable(
         ${t.ratePerKgCents} > 0 AND ${t.stepG} > 0 AND ${t.minOrderG} >= ${t.stepG}
       )`,
     ),
+
+    /** Every category page runs this filter; it is the storefront's hot path. */
+    index('product_category_idx').on(t.categoryId, t.active),
   ],
 );
 
@@ -454,22 +524,61 @@ export const checkoutAttemptStatusEnum = pgEnum('checkout_attempt_status', [
 
 // ── customer ─────────────────────────────────────────────────────────────
 
-export const customer = pgTable('customer', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  email: text('email').notNull().unique(),
-  phone: text('phone'),
-  name: text('name'),
+export const customer = pgTable(
+  'customer',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
 
-  /**
-   * CASL (DTM §11.4). Transactional order messages need no consent; marketing
-   * does, and the penalties are severe. Stored WITH its timestamp and source
-   * because that record is the only defence.
-   */
-  marketingConsentAt: timestamp('marketing_consent_at', { withTimezone: true }),
-  marketingConsentSource: text('marketing_consent_source'),
+    /**
+     * NULLABLE, and it used to be `notNull().unique()`.
+     *
+     * The shop is phone-first: a customer identifies themselves with a number
+     * and may never give an email at all. Widening a NOT NULL is safe;
+     * narrowing it back is not, because by then rows exist that violate it.
+     * The uniqueness is kept but moves to a PARTIAL index for the same reason
+     * as `phone` below.
+     */
+    email: text('email'),
 
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+    /** Normalised to E.164 before it is written. Never stored as typed. */
+    phone: text('phone'),
+    name: text('name'),
+
+    /**
+     * Stamped by a successful OTP check, and NULL for the whole prototype
+     * because no verification happens yet.
+     *
+     * Its nullness is the point: it is what tells a future reader that a
+     * given customer's number was never proven, rather than leaving that fact
+     * recorded nowhere. This is the seam `TwilioPhoneVerifier` plugs into.
+     */
+    phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
+
+    /**
+     * CASL (DTM §11.4). Transactional order messages need no consent; marketing
+     * does, and the penalties are severe. Stored WITH its timestamp and source
+     * because that record is the only defence.
+     */
+    marketingConsentAt: timestamp('marketing_consent_at', { withTimezone: true }),
+    marketingConsentSource: text('marketing_consent_source'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /**
+     * ⭐ PARTIAL unique indexes, on purpose, for both optional identifiers.
+     *
+     * A plain `UNIQUE` treats NULLs as distinct in Postgres, which happens to
+     * be the behaviour we want — but it is not the behaviour every engine or
+     * every `NULLS NOT DISTINCT` configuration gives, and relying on a default
+     * that varies is how "only one customer may have no email" becomes a
+     * production incident at the second anonymous checkout. Saying `where …
+     * is not null` states the intent instead of inheriting it.
+     */
+    uniqueIndex('customer_phone_unique').on(t.phone).where(sql`${t.phone} IS NOT NULL`),
+    uniqueIndex('customer_email_unique').on(t.email).where(sql`${t.email} IS NOT NULL`),
+  ],
+);
 
 // ── order ────────────────────────────────────────────────────────────────
 
@@ -484,6 +593,51 @@ export const order = pgTable(
     /** Normalised: uppercase, no space. `fsa` is denormalised for reporting. */
     postalCode: text('postal_code').notNull(),
     fsa: text('fsa').notNull(),
+
+    /**
+     * ⭐ THE STREET ADDRESS. Until migration 0006 this table stored a postal
+     * code and an FSA and nothing else, and you cannot deliver to a forward
+     * sortation area.
+     *
+     * Snapshotted onto the order rather than read from the customer, for the
+     * same reason the line prices are snapshotted: the customer will move, and
+     * an order delivered last month must still say where it went.
+     */
+    addressLine1: text('address_line1').notNull(),
+    addressLine2: text('address_line2'),
+    city: text('city').notNull(),
+    province: text('province').notNull(),
+    /** "Buzz 302, side door." Free text, shown to whoever carries the box. */
+    deliveryNotes: text('delivery_notes'),
+
+    /**
+     * NULL for the whole prototype. Populated once address capture becomes a
+     * map pin (`05-PLAN` §9.2), at which point serviceability changes from an
+     * FSA lookup to a distance.
+     *
+     * `numeric`, not `real`: these are coordinates, and the float that is fine
+     * for a map pin is not fine for a value that gets compared for equality
+     * in a test. The money rule generalises.
+     */
+    lat: numeric('lat', { precision: 9, scale: 6 }),
+    lng: numeric('lng', { precision: 9, scale: 6 }),
+
+    /**
+     * ⭐ The credential for `/orders/[token]`.
+     *
+     * Tracking has no login: the unguessable link IS the authorisation. That
+     * is not a prototype shortcut, it is the right long-term shape — it works
+     * for a customer with no account, on a borrowed phone, from a link in an
+     * email, and it is what every delivery company does.
+     *
+     * A v4 UUID is 122 bits of randomness, which is not guessable. It is
+     * generated by the DEFAULT so that no code path can create an order
+     * without one.
+     */
+    publicToken: text('public_token')
+      .notNull()
+      .unique()
+      .default(sql`gen_random_uuid()::text`),
 
     slotId: uuid('slot_id')
       .notNull()
@@ -728,7 +882,25 @@ export const payment = pgTable(
       .references(() => order.id, { onDelete: 'restrict' })
       .unique(),
 
-    provider: text('provider').notNull().default('stripe'),
+    /**
+     * ⭐ WHICH ADAPTER MADE THIS ROW. `stub` | `clover` | …
+     *
+     * The default used to be `'stripe'`, which is now wrong twice over: the
+     * processor changed, and prototype orders are placed by a stub adapter
+     * that moves no money. Those orders are deliberately `pay_mode = PREPAID`
+     * — that is what routes them down the authorise-then-capture path this
+     * prototype exists to exercise — so the pay mode CANNOT distinguish a test
+     * order from a real one, by design.
+     *
+     * ⚠ THIS COLUMN IS THEREFORE THE ONLY DISCRIMINATOR. Anything that ever
+     * reads takings, reconciles against the processor, or reports revenue must
+     * filter on `provider <> 'stub'`. Nothing reads those yet; the first thing
+     * that does inherits this obligation.
+     *
+     * No default: the caller states which processor it is. A defaulted value
+     * here is a row that lies about its own origin.
+     */
+    provider: text('provider').notNull(),
     paymentIntentId: text('payment_intent_id').unique(),
 
     status: paymentStatusEnum('status').notNull(),
@@ -790,6 +962,56 @@ export const stripeEvent = pgTable('stripe_event', {
   attempts: integer('attempts').notNull().default(0),
   lastError: text('last_error'),
 });
+
+// ── staff (DTM §9 / D5) ──────────────────────────────────────────────────
+
+export const staffRoleEnum = pgEnum('staff_role', ['OWNER', 'STAFF']);
+
+/**
+ * Who may operate the console. Small, deliberately: one shop, one or two
+ * people, and every extra field here is another thing to keep correct.
+ *
+ * ⚠ `active` is re-read from THIS TABLE on every admin mutation, never taken
+ * from the session cookie. A cookie says what was true when it was signed;
+ * revoking access has to take effect now, not in twelve hours.
+ */
+export const staff = pgTable(
+  'staff',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    /** Lowercased before storage, so `Owner` and `owner` cannot be two people. */
+    username: text('username').notNull().unique(),
+
+    /**
+     * `scrypt`, as `N$r$p$salt$hash` — see `src/auth/password.ts`.
+     *
+     * The parameters live INSIDE the string rather than in a constant, so a
+     * future increase in cost does not invalidate every existing hash: an old
+     * hash still carries the parameters it was made with and still verifies.
+     */
+    passwordHash: text('password_hash').notNull(),
+
+    role: staffRoleEnum('role').notNull().default('STAFF'),
+    active: boolean('active').notNull().default(true),
+
+    /**
+     * Lockout without Redis. `failed_attempts` counts consecutive failures and
+     * resets to zero on success; `locked_until` is set once it crosses the
+     * threshold.
+     *
+     * Both are on the row rather than in memory because the process restarts
+     * on every deploy, and a lockout that a redeploy clears is not a lockout.
+     */
+    failedAttempts: integer('failed_attempts').notNull().default(0),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
+
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('staff_failed_attempts_non_negative', sql`${t.failedAttempts} >= 0`)],
+);
 
 // ── audit_log (NFR-9) ────────────────────────────────────────────────────
 

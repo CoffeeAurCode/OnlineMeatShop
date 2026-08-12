@@ -152,6 +152,7 @@ describe('the console runs a trading day', () => {
       attemptId,
       customerId,
       postalCode: `${FSA_SERVED} 1A1`,
+      address: { line1: '1 Test Street', city: 'Testville', province: 'QC' },
       slotId,
       businessDayId,
       payMode: 'PREPAID',

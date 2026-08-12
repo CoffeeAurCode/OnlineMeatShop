@@ -185,10 +185,12 @@ async function seedMinimalOrder(p: Pool): Promise<string> {
 
   const { rows } = await p.query(
     `INSERT INTO "order"
-       (customer_id, postal_code, fsa, slot_id, business_day_id, pay_mode, status,
+       (customer_id, postal_code, fsa, address_line1, city, province,
+        slot_id, business_day_id, pay_mode, status,
         est_line_total_cents, delivery_fee_cents, est_total_cents, catalog_version,
         slot_hot_eligible, has_hot_line)
-     VALUES ($1, 'A1A1A1', 'A1A', $2, $3, 'PREPAID', 'PLACED', 1200, 0, 1200, 1, false, false)
+     VALUES ($1, 'A1A1A1', 'A1A', '1 Test Street', 'Testville', 'QC',
+             $2, $3, 'PREPAID', 'PLACED', 1200, 0, 1200, 1, false, false)
      RETURNING id`,
     [customerId, slotId, dayId],
   );

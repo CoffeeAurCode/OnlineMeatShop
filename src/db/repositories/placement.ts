@@ -54,10 +54,27 @@ import { cents, grams, type Cents, type PayMode, type Pricing } from '@/domain/t
  * duration is set by someone else's availability.
  */
 
+/**
+ * Where the box actually goes.
+ *
+ * Separate from `postalCode` because the postal code is a SERVICEABILITY
+ * input — it decides whether we deliver here and what the fee is — while
+ * these lines are a FULFILMENT output that a human reads off a screen while
+ * carrying a box. They travel together and mean different things.
+ */
+export interface DeliveryAddress {
+  readonly line1: string;
+  readonly line2?: string | null;
+  readonly city: string;
+  readonly province: string;
+  readonly notes?: string | null;
+}
+
 export interface PlaceOrderInput {
   readonly attemptId: string | null;
   readonly customerId: string;
   readonly postalCode: string;
+  readonly address: DeliveryAddress;
   readonly slotId: string;
   readonly businessDayId: string;
   readonly payMode: PayMode;
@@ -66,7 +83,15 @@ export interface PlaceOrderInput {
 }
 
 export type PlaceOrderResult =
-  | { readonly ok: true; readonly orderId: string; readonly estTotalCents: Cents; readonly duplicate: boolean }
+  | {
+      readonly ok: true;
+      readonly orderId: string;
+      /** The tracking credential. Returned here so the caller never re-reads
+       *  the row to find it — and so the success path cannot forget it. */
+      readonly publicToken: string;
+      readonly estTotalCents: Cents;
+      readonly duplicate: boolean;
+    }
   | (Extract<PlacementDecision, { ok: false }> & { readonly orderId?: undefined })
   | { readonly ok: false; readonly reason: 'checkoutAttemptNotOpen'; readonly orderId?: string };
 
@@ -268,6 +293,11 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
         customerId: input.customerId,
         postalCode,
         fsa,
+        addressLine1: input.address.line1,
+        addressLine2: input.address.line2 ?? null,
+        city: input.address.city,
+        province: input.address.province,
+        deliveryNotes: input.address.notes ?? null,
         slotId: input.slotId,
         businessDayId: input.businessDayId,
         payMode: input.payMode,
@@ -279,7 +309,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
         slotHotEligible: slotView?.hotEligible ?? false,
         hasHotLine: decision.hasHotLine,
       })
-      .returning({ id: order.id });
+      .returning({ id: order.id, publicToken: order.publicToken });
 
     if (!created) throw new Error('order insert returned no row');
 
@@ -311,6 +341,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     return {
       ok: true as const,
       orderId: created.id,
+      publicToken: created.publicToken,
       estTotalCents: decision.estTotalCents,
       duplicate: false,
     };

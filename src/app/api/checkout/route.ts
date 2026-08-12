@@ -40,6 +40,18 @@ const schema = z.object({
     .min(1)
     .max(100),
   postalCode: z.string().min(3).max(20),
+
+  /**
+   * The street address, added by migration 0006. `order` previously stored a
+   * postal code and an FSA and nothing else, and you cannot deliver to a
+   * forward sortation area.
+   */
+  addressLine1: z.string().trim().min(1).max(200),
+  addressLine2: z.string().trim().max(200).nullable(),
+  city: z.string().trim().min(1).max(120),
+  province: z.string().trim().min(2).max(80),
+  deliveryNotes: z.string().trim().max(500).nullable(),
+
   slotId: z.uuid(),
   email: z.email().max(200),
   name: z.string().max(120).nullable(),
@@ -80,6 +92,13 @@ export async function POST(request: Request) {
     attemptId: null,
     customerId,
     postalCode: input.postalCode,
+    address: {
+      line1: input.addressLine1,
+      line2: input.addressLine2,
+      city: input.city,
+      province: input.province,
+      notes: input.deliveryNotes,
+    },
     slotId: input.slotId,
     businessDayId: day.id,
     payMode: 'COD',
@@ -98,6 +117,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     orderId: result.orderId,
+    publicToken: result.publicToken,
     estTotalCents: result.estTotalCents,
     paymentPending: true,
   });
