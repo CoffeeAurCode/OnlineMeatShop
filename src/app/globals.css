@@ -4,64 +4,160 @@
  * ═══════════════════════════════════════════════════════════════════════════
  * The token layer. Both halves of the app share it; nothing else is shared.
  *
- * The palette is cool and low-chroma ON PURPOSE, and the reason is specific to
- * this shop rather than a matter of taste: raw meat photography is the most
- * saturated thing that will ever be on the page. A warm cream interface — the
- * default every butcher template reaches for — competes with the product and
- * both come out muddy. So the interface stays cool and the product is the only
- * warm thing on the screen.
+ * ⚠ THIS PALETTE IS THE SHOP'S OWN BRAND, taken from its existing landing
+ * page. It is not a choice made here and it is not up for negotiation.
  *
- * ONE accent. `--hot` and `--danger` carry meaning and are never decorative:
- * if either appears on a heading it has become a second accent and is a bug.
+ * It replaced a cool-green "cold larder" palette whose written rationale was
+ * that "raw meat photography is the most saturated thing that will ever be on
+ * the page". That rationale did not survive the pivot from meat to fish, and
+ * the shop has its own brand anyway.
+ *
+ * The brand, as given:
+ *   --midnight #031923   --coral #f06449   --ice   #f4f7f5   --mist  #c7d5d7
+ *   --atlantic #06283d   --glass #63b7c8   --cream #e9e2d6   --brand #6dd0f5
+ *
+ * ONE accent. `--danger` carries meaning and is never decorative: if it turns
+ * up on a heading it has become a second accent, and that is a bug.
  * ═══════════════════════════════════════════════════════════════════════════
  */
+
+/*
+ * Self-hosted, both faces, subset to latin. No Google Fonts request: one less
+ * network dependency in the LCP path, and no third-party in the critical path.
+ *
+ * `font-display: swap`, where the landing page uses `optional`. `optional`
+ * gives the face about 100ms to arrive and otherwise abandons it for the whole
+ * page view. That is right for a marketing page that must never shift. Here
+ * the headings ARE the brand and a silently-unstyled catalog reads as broken,
+ * so a brief swap is the better trade.
+ */
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/manrope-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Bodoni Moda';
+  src: url('/fonts/bodoni-moda-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+}
 
 :root {
   color-scheme: light dark;
 
-  --surface: #f3f5f6;
-  --surface-raised: #fcfdfd;
-  --ink: #14181a;
-  --ink-muted: #5a6469;
-  --line: #dde2e4;
-  --accent: #0f5138;
-  --accent-hover: #0b3f2b;
-  --accent-ink: #fcfdfd;
-  --accent-solid: #0f5138;
-  --accent-solid-ink: #fcfdfd;
-  --surface-soft: #e9edef;
+  /* ── The brand, unmodified. Referenced below, never used directly. ────── */
+  --midnight: #031923;
+  --atlantic: #06283d;
+  --ice: #f4f7f5;
+  --cream: #e9e2d6;
+  --coral: #f06449;
+  --glass: #63b7c8;
+  --brand: #6dd0f5;
+  --mist: #c7d5d7;
+
+  /* ── Semantic roles, light. ───────────────────────────────────────────── */
+  --surface: var(--ice);
+  /* Cards lift by being pure white on ice, so no shadow is needed to say so. */
+  --surface-raised: #ffffff;
+  /* Section bands only. NEVER behind body text: cream drops contrast below AA. */
+  --surface-soft: var(--cream);
+
+  --ink: #10202a;
+  /*
+   * Derived, not from the brand. `--mist #c7d5d7` is the brand's muted tone and
+   * it fails AA against ice at roughly 1.6:1. It is a HAIRLINE colour, not a
+   * text colour. This is the darkened equivalent that passes.
+   */
+  --ink-muted: #4a5f6b;
+  --line: var(--mist);
 
   /*
-   * Semantic only.
+   * ⚠ ATLANTIC IS THE ACCENT ON LIGHT, CYAN IS THE ACCENT ON DARK.
    *
-   * `--danger` is a COOL crimson deliberately. A warm error red sits inside the
-   * colour range of the product photography, and an inline error rendered
-   * beside a photo of lamb reads as part of the photo rather than as an error.
+   * `--brand #6dd0f5` is the landing page's CTA colour, but there it only ever
+   * appears on midnight or atlantic grounds. Against white it is about 1.7:1:
+   * unusable for text, and illegible as a button fill. Ice on atlantic is
+   * about 13:1, comfortably AAA. Same brand, correct contrast in both modes.
+   *
+   * NEVER put cyan text on a light ground.
    */
-  --hot: #c2410c;
-  --hot-wash: #fdf1e9;
+  --accent: var(--atlantic);
+  --accent-hover: var(--midnight);
+  --accent-ink: var(--ice);
+  --accent-solid: var(--atlantic);
+  --accent-solid-ink: var(--ice);
+
+  /*
+   * ⭐ CORAL IS AN INTERACTION COLOUR AND NOTHING ELSE.
+   *
+   * The brand gives it exactly one job on the landing page, `::selection` and
+   * `:focus-visible`, and it keeps exactly that job here. Semantic rather than
+   * decorative, and inherited rather than invented.
+   *
+   * This matters because coral collides with two things that already carry
+   * meaning: hot food and errors. Three warm reds within about 30 degrees of
+   * hue, all semantic, is a system nobody can read. The resolution is that hot
+   * food STOPS BEING COLOUR-CODED (see `--hot`) and `--danger` stays a cool
+   * crimson, which leaves coral alone in its hue.
+   */
+  --focus: var(--coral);
+
+  /*
+   * ⚠ `--hot` IS NO LONGER A COLOUR-CODING. Hot cooked-to-order food is a
+   * filled atlantic pill carrying a flame glyph and the words "Hot kitchen",
+   * so this token is simply the accent again.
+   *
+   * That is better regardless of the coral collision: colour alone was never
+   * an accessible way to carry a food-safety constraint, and a label survives
+   * greyscale, colour blindness, and a dimmed phone at 6am.
+   */
+  --hot: var(--atlantic);
+  --hot-ink: var(--ice);
+
+  /*
+   * A COOL crimson, deliberately, and it has to stay distinguishable from
+   * coral now that coral sits on every focus ring: an error message beside a
+   * focused input must still read as an error. Different hue, much darker.
+   */
   --danger: #a81244;
-  --danger-ink: #fcfdfd;
+  --danger-ink: var(--ice);
   --danger-wash: #fdeef3;
 }
 
+/*
+ * Dark mode is nearly free, and that is the good news: THE BRAND IS NATIVELY
+ * DARK. The landing page's hero and trust sections are already midnight and
+ * atlantic. So this is not an invention, it is the same brand with the roles
+ * swapped.
+ */
 @media (prefers-color-scheme: dark) {
   :root {
-    --surface: #14181a;
-    --surface-raised: #1d2225;
-    --ink: #e8ecee;
-    --ink-muted: #9aa5aa;
-    --line: #2c3336;
-    --accent: #3fa47a;
-    --accent-hover: #55b98e;
-    --accent-ink: #0b2019;
-    --surface-soft: #181d1f;
+    --surface: var(--midnight);
+    --surface-raised: var(--atlantic);
+    --surface-soft: #052132;
 
-    --hot: #f97316;
-    --hot-wash: #2a1a10;
+    --ink: var(--ice);
+    /* Mist IS the right muted tone here: on midnight it is about 12:1. */
+    --ink-muted: var(--mist);
+    --line: rgb(199 213 215 / 0.18);
+
+    --accent: var(--brand);
+    --accent-hover: var(--glass);
+    --accent-ink: var(--midnight);
+    --accent-solid: var(--brand);
+    --accent-solid-ink: var(--midnight);
+
+    --hot: var(--brand);
+    --hot-ink: var(--midnight);
+
+    /* Flipped, because the fill lightens: dark ink on a light rose. White on
+       #ff7a9c is 2.1:1 and unreadable. */
     --danger: #ff7a9c;
-    /* Flipped, because --danger flips: dark ink on a light pink fill. White
-       text on #ff7a9c is 2.1:1 and unreadable. */
     --danger-ink: #2a1119;
     --danger-wash: #2a1119;
   }
@@ -85,30 +181,53 @@
   --color-accent-solid-ink: var(--accent-solid-ink);
   --color-soft: var(--surface-soft);
   --color-hot: var(--hot);
-  --color-hot-wash: var(--hot-wash);
+  --color-hot-ink: var(--hot-ink);
+  --color-focus: var(--focus);
   --color-danger: var(--danger);
   --color-danger-ink: var(--danger-ink);
   --color-danger-wash: var(--danger-wash);
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  /*
+   * ⚠ BODONI IS A DISPLAY FACE ONLY, AND THIS IS A HARD RULE.
+   *
+   * It is a high-contrast didone: its hairlines physically disappear below
+   * roughly 28px on an ordinary screen. Allowed on headings and the wordmark,
+   * and nowhere else. Never a label, never a button, never a form field,
+   * never a price.
+   *
+   * Manrope is everything functional: every price, weight, quantity, address,
+   * slot time, status, error and button label.
+   */
+  --font-display: 'Bodoni Moda', ui-serif, Georgia, serif;
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  /* §9.7 — one radius system. 6 interactive, 10 container, full ONLY the badge. */
+  /* One radius system. 6 interactive, 10 container, full ONLY the pill. */
   --radius-sm: 6px;
   --radius-md: 10px;
 
-  /* §9.6 — the whole scale. Anything not here is an ad-hoc value and a bug. */
+  /* The whole scale. Anything not here is an ad-hoc value and a bug. */
   --text-meta: 0.875rem;
   --text-body: 1rem;
   --text-lead: 1.125rem;
   --text-section: 1.375rem;
+  /*
+   * ⚠ THE BODONI FLOOR. 1.75rem is 28px. Nothing set in `--font-display` may
+   * be smaller than this, which is why the display steps start here and there
+   * is deliberately no smaller one to reach for.
+   */
   --text-display: 1.75rem;
+  --text-display-lg: 2.5rem;
+  --text-display-xl: clamp(2.75rem, 6vw, 4.5rem);
   /*
    * The weighing input only. It is read at arm's length at a scale, and it is
    * the one number in the application that has to be legible from further away
    * than a phone is normally held.
    */
   --text-scale: 2.5rem;
+
+  /* The landing page's own easing, so motion here feels like motion there. */
+  --ease-brand: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 @layer base {
@@ -126,9 +245,42 @@
     overscroll-behavior-y: none;
   }
 
+  /*
+   * Coral, inherited from the brand, which gives it exactly this job and the
+   * focus ring below. It appears nowhere else in the system.
+   */
   ::selection {
-    background: var(--accent);
-    color: var(--accent-ink);
+    background: var(--coral);
+    color: #ffffff;
+  }
+
+  /*
+   * ⭐ THE BODONI GUARDRAIL, expressed as CSS rather than as a code review.
+   *
+   * `--font-display` is a didone whose hairlines vanish below about 28px, so
+   * the face is applied HERE, to the heading elements, together with a
+   * `font-size` floor. Reaching for the display face by hand on a small label
+   * is the mistake this prevents, and the floor makes it self-correcting.
+   *
+   * `h4`-`h6` are deliberately NOT in this list. A heading that small is a
+   * label, and labels are Manrope.
+   */
+  h1,
+  h2,
+  h3,
+  .display {
+    font-family: var(--font-display);
+    font-size: max(var(--text-display), 1em);
+    font-weight: 600;
+    /*
+     * Italic Bodoni in a heading containing `y g j p q` clips its descender at
+     * `leading-none`. 1.1 plus the padding below is the reserve that prevents
+     * it, applied unconditionally because the copy is bilingual and French is
+     * full of descenders.
+     */
+    line-height: 1.1;
+    padding-bottom: 0.06em;
+    letter-spacing: -0.01em;
   }
 
   /*
@@ -148,8 +300,8 @@
    * by the browser default being removed for looking untidy.
    */
   :focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
     border-radius: 2px;
   }
 

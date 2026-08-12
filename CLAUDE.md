@@ -13,32 +13,52 @@
 
 ## 1. This repository is public
 
-Nothing here may contain — in code, config, seed files, test fixtures,
+**The client relaxed this rule on 2026-08-12**, having been told what it
+protected and that git history is permanent. The shop's own identity may now
+live here. What stays banned did not change, and the reason it stays banned is
+that none of it has any upside in a public repository.
+
+**Still banned outright** — in code, config, seed files, test fixtures,
 migrations, comments or commit messages:
 
-- The shop's **name, address, phone, owner's name**, or licensing numbers
-- Real **delivery postal codes**, zone fees, or slot times
-- Real **product names or prices** from the client's catalog
-- Any **customer data**, real or realistic-looking
+- Any **customer data**, real or realistic-looking. This is the important one.
+- **Licence numbers** (CFIA, provincial), insurance or registration numbers
+- **Cost figures**, invoices, margins, or anything about what the build cost
+- **Client correspondence**, quotes, or messages
 
-Use obviously-fictional fixtures: `Test Butcher Ltd`, postal code `A1A 1A1`,
-`Sample Lamb Leg`. Real values arrive at runtime through environment
-variables (`.env.example` documents the names only).
+**Now permitted, by explicit client decision:** the shop's name, address,
+phone, photography, brand assets, and its real product names and categories.
+
+**Still a good idea, and still the default:** anything that varies by
+deployment stays in an environment variable rather than a literal, because
+that is configuration hygiene and not secrecy. `src/ui/shop-config.ts` reads
+every presentation value from `.env`, and `.env.example` documents the names
+only. Test fixtures stay fictional (`Sample Lamb Leg`, postal code `A1A 1A1`)
+because a test that depends on real catalog data breaks when the catalog
+changes.
 
 **Git history is permanent.** Committing client data and removing it in the
 next commit leaves it in the history, in every fork, and in anything that
 scraped the repository in between. There is no clean-up path, only
 prevention. If you think something slipped through, say so immediately —
-the remedy differs once it has been pushed.
+the remedy differs once it has been pushed. **This is exactly why the four
+categories above are still absolute: the relaxation above was reversible only
+because it was decided BEFORE anything was pushed.**
 
 ---
 
 ## 2. What this application is
 
-An online store for a butcher shop: raw meat, marinated meat, packed cooked
-meat, and hot cooked-to-order food. Home delivery only, within a local
-radius. One Next.js app containing the customer storefront, the owner's
+An online store for a **fishmonger**: raw fish and shellfish, marinated,
+packed cooked, and hot cooked-to-order food. Home delivery only, within a
+local radius. One Next.js app containing the customer storefront, the owner's
 console, and the order rules.
+
+> The repository is still named `OnlineMeatShop` and parts of the code still
+> say butcher. The shop pivoted from meat to fish; the four handling classes
+> and every domain rule survived the pivot unchanged, because none of them was
+> ever about the species. Renaming the repository drags the submodule pin, the
+> deploy hook and CI, so it has not been done.
 
 Four things make it harder than a normal store:
 

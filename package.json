@@ -1,7 +1,7 @@
 {
   "name": "online-meat-shop",
   "version": "0.1.0",
-  "description": "Online store for a butcher shop: cut-to-order meat, weighed and billed on actual weight, home delivery only.",
+  "description": "Online store for a fishmonger: cut-to-order fish and seafood, weighed and billed on actual weight, home delivery only.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
