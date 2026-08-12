@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { currentBusinessDay } from '@/db/repositories/availability';
 import { orderQueue } from '@/db/repositories/orders';
 import { shopTimeZone, slotWindow } from '@/ui/business-date';
-import { money, weight } from '@/ui/format';
+import { ADMIN_LOCALE, money, weight } from '@/ui/format';
 
 import { Empty, Screen } from '../_components/shell';
 import { RefreshButton } from '../_components/refresh-button';
@@ -65,8 +65,8 @@ export default async function OrdersPage() {
                       <span className="text-lead font-semibold">{order.postalCode}</span>
                       <span className="tnum text-lead">
                         {order.finalTotalCents === null
-                          ? `${money(order.estTotalCents)} est.`
-                          : money(order.finalTotalCents)}
+                          ? `${money(order.estTotalCents, ADMIN_LOCALE)} est.`
+                          : money(order.finalTotalCents, ADMIN_LOCALE)}
                       </span>
                     </div>
                     <p className="mt-1 text-meta text-muted">
@@ -76,7 +76,7 @@ export default async function OrdersPage() {
                     </p>
                     <p className="mt-1 text-meta text-muted">
                       {order.lines
-                        .map((l) => `${l.productName} ${weight(l.requestedG)}`)
+                        .map((l) => `${l.productName} ${weight(l.requestedG, ADMIN_LOCALE)}`)
                         .join(', ')}
                     </p>
                   </Link>

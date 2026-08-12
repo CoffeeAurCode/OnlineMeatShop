@@ -1,88 +1,85 @@
-import Link from 'next/link';
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 
 import { currentBusinessDay } from '@/db/repositories/availability';
-import { listCatalog } from '@/db/repositories/catalog';
-import { weight } from '@/ui/format';
+import { listCatalog, listCategories, prepsForProducts } from '@/db/repositories/catalog';
 import type { Handling } from '@/domain/types';
+import { isLocale, t, type Locale } from '@/i18n';
 
-import { PriceLine, ProductTile, handlingLabel } from '../_components/shop-shell';
+import { CategoryTabs, FilterBar } from '../_components/category-nav';
+import { ProductGrid } from '../_components/product-grid';
 
 /**
- * Everything the shop sells, grouped by how it is handled.
+ * Everything on the counter, in one grid, with the counters as tabs.
  *
- * Handling is the right grouping because it is what changes the customer's
- * experience: a hot cooked item constrains the delivery slot for the whole
- * order, and raw versus marinated is the actual decision being made at the
- * counter. Grouping by species would look tidier and tell the customer less.
+ * Server rendered, and every price and quantity is in the HTML. That is not a
+ * performance choice: organic local search is the whole reason this app has a
+ * server tier, and a catalog that assembles itself in the browser is invisible
+ * to a crawler.
  */
-export const metadata: Metadata = {
-  title: 'Everything we sell',
-  description:
-    'Raw cuts, marinated meat, cooked and packed, and hot cooked-to-order food. Availability is per trading day.',
-};
 
-export const revalidate = 60;
+const HANDLINGS = new Set<string>(['RAW', 'MARINATED', 'COOKED_CHILLED', 'COOKED_HOT']);
 
-const ORDER: readonly Handling[] = ['RAW', 'MARINATED', 'COOKED_CHILLED', 'COOKED_HOT'];
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const l: Locale = isLocale(locale) ? locale : 'fr';
+  return { title: t(l, 'shop.title') };
+}
 
-export default async function ShopPage() {
+export default async function ShopPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ handling?: string }>;
+}) {
+  const { locale } = await params;
+  if (!isLocale(locale)) notFound();
+  const { handling } = await searchParams;
+
+  // Anything unrecognised is treated as no filter rather than as an error. A
+  // hand-edited query string is not worth a 404, and a filter that silently
+  // shows everything is obvious to the person who mistyped it.
+  const active: Handling | null =
+    handling !== undefined && HANDLINGS.has(handling) ? (handling as Handling) : null;
+
   const day = await currentBusinessDay();
-  const catalog = await listCatalog(day?.id ?? null);
+  const [categories, catalog] = await Promise.all([
+    listCategories(locale),
+    listCatalog(day?.id ?? null),
+  ]);
+
+  const items = active === null ? catalog : catalog.filter((i) => i.handling === active);
+  const preps = await prepsForProducts(items.map((i) => i.id));
 
   return (
-    <main className="mx-auto max-w-[68rem] px-4 py-12">
-      <h1 className="text-display font-semibold tracking-tight">Everything we sell</h1>
-      <p className="mt-3 max-w-[60ch] text-lead text-muted">
-        Stock is declared fresh each trading day. Anything without a quantity today has not been put
-        out.
+    <div className="mx-auto max-w-[76rem] px-4 py-10 sm:px-6 sm:py-14">
+      <header className="grid gap-6">
+        <h1 className="!text-display-lg">{t(locale, 'shop.title')}</h1>
+        <CategoryTabs categories={categories} locale={locale} activeSlug={null} />
+        <FilterBar locale={locale} basePath={`/${locale}/shop`} active={active} />
+      </header>
+
+      {day === null && (
+        <p className="mt-8 rounded-md border border-line bg-soft px-4 py-3 text-body">
+          <strong className="font-semibold">{t(locale, 'shop.shopClosed')}</strong>{' '}
+          {t(locale, 'shop.shopClosedBody')}
+        </p>
+      )}
+
+      <p className="mt-8 text-meta text-muted" aria-live="polite">
+        {t(locale, items.length === 1 ? 'shop.resultCountOne' : 'shop.resultCount', {
+          count: items.length,
+        })}
       </p>
 
-      {catalog.length === 0 ? (
-        <p className="mt-12 rounded-md border border-line bg-raised px-4 py-8 text-body text-muted">
-          There is nothing in the catalog yet.
-        </p>
-      ) : null}
-
-      {ORDER.filter((h) => catalog.some((c) => c.handling === h)).map((handling) => (
-        <section key={handling} id={handling.toLowerCase()} className="mt-14 scroll-mt-20">
-          <h2 className="text-section font-semibold tracking-tight">{handlingLabel(handling)}</h2>
-          {handling === 'COOKED_HOT' ? (
-            <p className="mt-2 max-w-[60ch] text-body text-muted">
-              Anything from here limits your order to a delivery slot we can get it to you hot in.
-            </p>
-          ) : null}
-
-          <ul className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {catalog
-              .filter((c) => c.handling === handling)
-              .map((item) => {
-                const soldOut = item.availableG !== null && item.availableG === 0;
-                const notToday = item.availableG === null;
-                return (
-                  <li key={item.id}>
-                    <Link href={`/p/${item.slug}`} className="block">
-                      <ProductTile name={item.name} handling={item.handling} />
-                      <div className="mt-3">
-                        <p className="text-body font-semibold">{item.name}</p>
-                        <div className="mt-1">
-                          <PriceLine pricing={item.pricing} />
-                        </div>
-                        <p className="mt-1 text-meta text-muted">
-                          {notToday
-                            ? 'Not out today'
-                            : soldOut
-                              ? 'Gone for today'
-                              : `${weight(item.availableG ?? 0)} left today`}
-                        </p>
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-          </ul>
-        </section>
-      ))}
-    </main>
+      <div className="mt-4">
+        <ProductGrid items={items} locale={locale} prepsByProduct={preps} />
+      </div>
+    </div>
   );
 }

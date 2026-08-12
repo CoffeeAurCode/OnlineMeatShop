@@ -24,6 +24,11 @@ const schema = z.object({
     )
     .max(100),
   postalCode: z.string().max(20).nullable(),
+  /**
+   * Only affects the product NAMES in the response. Every amount is
+   * locale-independent integer cents, computed the same way either way.
+   */
+  locale: z.enum(['en', 'fr']).default('en'),
 });
 
 export async function POST(request: Request) {
@@ -37,6 +42,6 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ reason: 'invalidBody' }, { status: 400 });
 
-  const quote = await quoteBasket(parsed.data.lines, parsed.data.postalCode);
+  const quote = await quoteBasket(parsed.data.lines, parsed.data.postalCode, parsed.data.locale);
   return NextResponse.json(quote);
 }

@@ -1,17 +1,24 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 
 import { currentBusinessDay } from '@/db/repositories/availability';
 import { slotsFrom } from '@/db/repositories/fulfilment';
+import { isLocale, t, type Locale } from '@/i18n';
 import { businessDateIn, shopTimeZone, slotWindow } from '@/ui/business-date';
 
 import { CheckoutForm } from '../_components/checkout-form';
 
-export const metadata: Metadata = {
-  title: 'Checkout',
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const l: Locale = isLocale(locale) ? locale : 'fr';
+  return { title: t(l, 'checkout.title'), robots: { index: false, follow: false } };
+}
 
-// Slot capacity is point-in-time. A cached checkout page offers a slot that
+// Slot capacity is point-in-time. A cached checkout page offers a window that
 // filled up ten minutes ago, and the customer finds out at the last step.
 export const dynamic = 'force-dynamic';
 
@@ -36,22 +43,34 @@ async function loadSlots(tz: string) {
   }));
 }
 
-export default async function CheckoutPage() {
+export default async function CheckoutPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  if (!isLocale(locale)) notFound();
+
   const tz = shopTimeZone();
   const day = await currentBusinessDay();
   const slots = await loadSlots(tz);
 
   return (
-    <main className="mx-auto max-w-[46rem] px-4 py-12">
-      <h1 className="text-display font-semibold tracking-tight">Checkout</h1>
+    <div className="mx-auto max-w-[36rem] px-4 py-10 sm:px-6 sm:py-14">
+      {/*
+        One column, capped at 560px, at every width. A checkout that reflows
+        into two columns on a laptop makes the reader hunt for the next field,
+        and there is nothing here worth the extra horizontal space.
+      */}
+      <h1 className="!text-display-lg">{t(locale, 'checkout.title')}</h1>
 
       {day === null ? (
         <p className="mt-8 rounded-md border border-line bg-raised px-4 py-8 text-body text-muted">
-          The shop is not taking orders at the moment. Stock goes up each trading morning.
+          {t(locale, 'errors.shopClosed')}
         </p>
       ) : (
-        <CheckoutForm slots={slots} />
+        <CheckoutForm slots={slots} locale={locale} />
       )}
-    </main>
+    </div>
   );
 }

@@ -1,16 +1,26 @@
-import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
+import Image from 'next/image';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
 
 import { currentBusinessDay } from '@/db/repositories/availability';
-import { listCatalog, productBySlug } from '@/db/repositories/catalog';
-import { decimalString, money, weight } from '@/ui/format';
-import { shopName, siteOrigin } from '@/ui/shop-config';
+import {
+  listCatalog,
+  localisedDescription,
+  localisedName,
+  prepsForProducts,
+  productBySlug,
+} from '@/db/repositories/catalog';
+import { LOCALES, htmlLang, isLocale, t, type Locale } from '@/i18n';
+import { decimalString, money, ratePerKg, weight } from '@/ui/format';
+import { siteOrigin } from '@/ui/shop-config';
 
 import { AddToBasket } from '../../_components/add-to-basket';
-import { PriceLine, ProductTile, handlingLabel } from '../../_components/shop-shell';
+import { HotPill, ProductCard } from '../../_components/product-card';
 
 /**
- * One product.
+ * One product. The deep dive, not the only way to buy: the grid's card can add
+ * to the basket without ever opening this page.
  *
  * ⭐ The price and today's availability are IN THE HTML, not fetched after
  * load. That is the whole SEO argument for this stack (`04-PLAN` §5): a
@@ -22,53 +32,75 @@ import { PriceLine, ProductTile, handlingLabel } from '../../_components/shop-sh
 export const revalidate = 60;
 
 export async function generateStaticParams() {
-  // Slugs only. The prices and quantities on these pages are re-read at
-  // request time; pre-rendering the paths just avoids a cold render.
+  // Slugs only. Prices and quantities are re-read at request time; prerendering
+  // the paths just avoids a cold render.
   const catalog = await listCatalog(null);
-  return catalog.map((c) => ({ slug: c.slug }));
+  return LOCALES.flatMap((locale) => catalog.map((c) => ({ locale, slug: c.slug })));
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ locale: string; slug: string }>;
 }): Promise<Metadata> {
-  const { slug } = await params;
+  const { locale, slug } = await params;
+  const l: Locale = isLocale(locale) ? locale : 'fr';
   const found = await productBySlug(slug, null);
-  if (found === null) return { title: 'Not found' };
+  if (found === null) return {};
 
   const { item } = found;
+  const name = localisedName(item, l);
   const price =
     item.pricing.mode === 'perKg'
-      ? `${money(item.pricing.ratePerKg)} per kg`
-      : `${money(item.pricing.price)} a pack`;
+      ? ratePerKg(item.pricing.ratePerKg, l)
+      : money(item.pricing.price, l);
 
   return {
-    title: `${item.name} · ${shopName()}`,
-    description:
-      item.description ??
-      `${item.name}, ${price}. ${item.pricing.mode === 'perKg' ? 'Cut to order and charged on the exact weight.' : 'Fixed price.'} Delivered locally.`,
-    alternates: { canonical: `${siteOrigin()}/p/${item.slug}` },
+    title: name,
+    description: localisedDescription(item, l) ?? `${name}, ${price}.`,
+    alternates: {
+      languages: { 'en-CA': `/en/p/${slug}`, 'fr-CA': `/fr/p/${slug}` },
+    },
   };
 }
 
-export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+export default async function ProductPage({
+  params,
+}: {
+  params: Promise<{ locale: string; slug: string }>;
+}) {
+  const { locale, slug } = await params;
+  if (!isLocale(locale)) notFound();
+
   const day = await currentBusinessDay();
   const found = await productBySlug(slug, day?.id ?? null);
   if (found === null) notFound();
 
   const { item, preps } = found;
+  const name = localisedName(item, locale);
+  const description = localisedDescription(item, locale);
   const origin = siteOrigin();
-  const soldOut = item.availableG !== null && item.availableG === 0;
+
+  const minOrderG = item.pricing.mode === 'perKg' ? item.pricing.minOrder : item.pricing.wMin;
+  const soldOut = item.availableG !== null && item.availableG < minOrderG;
   const notToday = item.availableG === null;
+
+  // Same counter, minus this fish. Loaded here rather than in a client
+  // component so the links are in the HTML and crawlable.
+  const catalog = await listCatalog(day?.id ?? null);
+  const related = catalog
+    .filter((c) => c.categoryId === item.categoryId && c.id !== item.id)
+    .slice(0, 4);
+  const relatedPreps = await prepsForProducts(related.map((r) => r.id));
 
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
-    name: item.name,
-    description: item.description ?? undefined,
-    url: `${origin}/p/${item.slug}`,
+    name,
+    description: description ?? undefined,
+    inLanguage: htmlLang(locale),
+    image: item.imagePath === null ? undefined : `${origin}${item.imagePath}`,
+    url: `${origin}/${locale}/p/${item.slug}`,
     offers: {
       '@type': 'Offer',
       priceCurrency: 'CAD',
@@ -78,12 +110,15 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         item.pricing.mode === 'perKg' ? item.pricing.ratePerKg : item.pricing.price,
       ),
       ...(item.pricing.mode === 'perKg'
-        ? { priceSpecification: { '@type': 'UnitPriceSpecification', referenceQuantity: { '@type': 'QuantitativeValue', value: 1, unitCode: 'KGM' } } }
+        ? {
+            priceSpecification: {
+              '@type': 'UnitPriceSpecification',
+              referenceQuantity: { '@type': 'QuantitativeValue', value: 1, unitCode: 'KGM' },
+            },
+          }
         : {}),
       availability:
-        notToday || soldOut
-          ? 'https://schema.org/OutOfStock'
-          : 'https://schema.org/InStock',
+        notToday || soldOut ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock',
       seller: { '@id': `${origin}/#shop` },
     },
   };
@@ -92,70 +127,129 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Shop', item: `${origin}/shop` },
-      { '@type': 'ListItem', position: 2, name: item.name, item: `${origin}/p/${item.slug}` },
+      { '@type': 'ListItem', position: 1, name: t(locale, 'shop.title'), item: `${origin}/${locale}/shop` },
+      { '@type': 'ListItem', position: 2, name, item: `${origin}/${locale}/p/${item.slug}` },
     ],
   };
 
   return (
-    <main className="mx-auto max-w-[68rem] px-4 py-12">
+    <div className="mx-auto max-w-[76rem] px-4 py-10 sm:px-6 sm:py-14">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }}
       />
 
-      <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
-        <div>
-          <ProductTile name={item.name} handling={item.handling} ratio="wide" />
+      <Link
+        href={`/${locale}/shop`}
+        className="arrow-link inline-flex text-meta font-semibold text-muted hover:text-ink"
+      >
+        {t(locale, 'product.backToShop')}
+      </Link>
+
+      <div className="mt-6 grid gap-8 lg:grid-cols-2 lg:gap-14">
+        <div className="relative aspect-4/3 overflow-hidden rounded-md bg-soft">
+          {item.imagePath !== null && (
+            <Image
+              src={item.imagePath}
+              alt={name}
+              fill
+              // The LCP element on this page, so it is priority and its sizes
+              // are honest: full width on a phone, half above 1024.
+              sizes="(max-width: 1023px) 100vw, 50vw"
+              priority
+              className="object-cover"
+            />
+          )}
         </div>
 
-        <div>
-          <p className="text-meta text-muted">{handlingLabel(item.handling)}</p>
-          <h1 className="mt-1 text-display font-semibold tracking-tight">{item.name}</h1>
+        <div className="grid content-start gap-5">
+          {item.handling === 'COOKED_HOT' ? (
+            <HotPill locale={locale} />
+          ) : (
+            <p className="text-meta font-semibold uppercase tracking-[0.12em] text-muted">
+              {t(locale, `handling.${item.handling}`)}
+            </p>
+          )}
 
-          <div className="mt-4 text-lead">
-            <PriceLine pricing={item.pricing} />
+          <h1 className="!text-display-xl">{name}</h1>
+
+          <div className="grid gap-1">
+            <p className="tnum text-section font-semibold">
+              {item.pricing.mode === 'perKg'
+                ? ratePerKg(item.pricing.ratePerKg, locale)
+                : money(item.pricing.price, locale)}
+            </p>
+            <p className="text-meta text-muted">
+              {item.pricing.mode === 'perKg'
+                ? t(locale, 'product.estimatedNote')
+                : t(locale, 'product.fixedWeightNote')}
+            </p>
+            {item.pricing.mode === 'pack' && (
+              <p className="tnum text-meta text-muted">
+                {t(locale, 'product.packRange', {
+                  min: weight(item.pricing.wMin, locale),
+                  max: weight(item.pricing.wMax, locale),
+                })}
+              </p>
+            )}
+            {item.pricing.mode === 'perKg' && (
+              <p className="tnum text-meta text-muted">
+                {t(locale, 'product.minimumOrder', {
+                  amount: weight(item.pricing.minOrder, locale),
+                })}{' '}
+                · {t(locale, 'product.stepNote', { amount: weight(item.pricing.step, locale) })}
+              </p>
+            )}
           </div>
 
-          {item.description !== null ? (
-            <p className="mt-4 max-w-[60ch] text-body text-muted">{item.description}</p>
-          ) : null}
+          {description !== null && (
+            <p className="max-w-[58ch] text-body text-muted">{description}</p>
+          )}
 
-          <p className="mt-4 text-body text-muted">
+          <p className="text-body">
             {notToday
-              ? 'Not out today. Stock is declared each trading morning.'
+              ? t(locale, 'shop.shopClosed')
               : soldOut
-                ? 'Gone for today.'
-                : `${weight(item.availableG ?? 0)} left today.`}
+                ? t(locale, 'shop.soldOut')
+                : t(locale, 'shop.leftToday', { amount: weight(item.availableG ?? 0, locale) })}
           </p>
 
-          {item.handling === 'COOKED_HOT' ? (
-            <p className="mt-4 rounded-sm bg-hot-wash px-3 py-3 text-body text-hot">
-              Hot food limits your whole order to a delivery slot we can get it to you hot in. That
-              is a food-safety rule.
+          {item.handling === 'COOKED_HOT' && (
+            <p className="rounded-md border border-line bg-soft px-4 py-3 text-body">
+              {t(locale, 'handling.hotExplainer')}
             </p>
-          ) : null}
+          )}
 
-          {item.pricing.mode === 'perKg' ? (
-            <p className="mt-6 max-w-[60ch] text-body">
-              Cut to order, so the final weight decides the price. For now, you pay the exact
-              amount on delivery once the order has been weighed.
-            </p>
-          ) : null}
-
-          <div className="mt-8">
-            <AddToBasket
-              productId={item.id}
-              slug={item.slug}
-              name={item.name}
-              pricing={item.pricing}
-              preps={preps}
-              disabled={notToday || soldOut}
-            />
-          </div>
+          <AddToBasket
+            variant="page"
+            locale={locale}
+            product={{
+              productId: item.id,
+              slug: item.slug,
+              name,
+              pricingMode: item.pricing.mode,
+              minOrderG,
+              stepG: item.pricing.mode === 'perKg' ? item.pricing.step : minOrderG,
+              availableG: item.availableG,
+              preps,
+            }}
+          />
         </div>
       </div>
-    </main>
+
+      {related.length > 0 && (
+        <section className="mt-20">
+          <h2 className="!text-display">{t(locale, 'product.relatedHeading')}</h2>
+          <ul className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            {related.map((r) => (
+              <li key={r.id} className="relative">
+                <ProductCard item={r} locale={locale} preps={relatedPreps.get(r.id) ?? []} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
   );
 }

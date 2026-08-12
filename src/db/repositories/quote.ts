@@ -2,12 +2,18 @@ import 'server-only';
 
 import { db, type Tx } from '@/db/client';
 import { currentBusinessDay } from '@/db/repositories/availability';
-import { listCatalog, currentCatalogVersion, type CatalogItem } from '@/db/repositories/catalog';
+import {
+  listCatalog,
+  localisedName,
+  currentCatalogVersion,
+  type CatalogItem,
+} from '@/db/repositories/catalog';
 import { zoneFeesByFsa } from '@/db/repositories/fulfilment';
 import { demandByProduct } from '@/domain/availability';
 import { isLegalQuantity, lineEst, sumCents } from '@/domain/pricing';
 import { checkServiceability, deliveryFee, amountToFreeDelivery } from '@/domain/serviceability';
 import { cents, grams, type Cents } from '@/domain/types';
+import type { Locale } from '@/ui/format';
 
 /**
  * The basket, priced by the server.
@@ -61,9 +67,20 @@ export interface Quote {
   readonly problems: readonly LineProblem[];
 }
 
+/**
+ * Price a basket, server-side, in one locale.
+ *
+ * The locale reaches this far down for exactly one reason: the quote carries
+ * the product NAMES that the basket drawer and the checkout summary render,
+ * and a French basket listing English fish is the most visible possible way to
+ * say the translation is skin deep. Nothing else here varies by language;
+ * every AMOUNT is locale-independent integer cents and is formatted at the
+ * edge.
+ */
 export async function quoteBasket(
   request: readonly QuoteRequestLine[],
   postalCode: string | null,
+  locale: Locale = 'en',
   tx: Tx | typeof db = db,
 ): Promise<Quote> {
   const day = await currentBusinessDay(tx);
@@ -89,7 +106,7 @@ export async function quoteBasket(
       return {
         productId: l.productId,
         slug: '',
-        name: 'No longer available',
+        name: locale === 'fr' ? 'Plus disponible' : 'No longer available',
         requestedG: l.requestedG,
         prepOptionId: l.prepOptionId,
         pricingMode: 'pack' as const,
@@ -112,7 +129,7 @@ export async function quoteBasket(
     return {
       productId: item.id,
       slug: item.slug,
-      name: item.name,
+      name: localisedName(item, locale),
       requestedG: l.requestedG,
       prepOptionId: l.prepOptionId,
       pricingMode: item.pricing.mode,

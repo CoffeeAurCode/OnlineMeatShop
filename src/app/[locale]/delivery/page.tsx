@@ -1,53 +1,56 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 
-import { deliveryTowns, shopName, siteOrigin } from '@/ui/shop-config';
+import { isLocale, t, type Locale } from '@/i18n';
+import { deliveryTowns, shopName } from '@/ui/shop-config';
 
 import { PostcodeCheck } from '../_components/postcode-check';
 
-export const metadata: Metadata = {
-  title: 'Where we deliver',
-  description:
-    'We deliver within a local radius only, in time slots you choose at checkout. Check your postal code.',
-  alternates: { canonical: `${siteOrigin()}/delivery` },
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const l: Locale = isLocale(locale) ? locale : 'fr';
+  return {
+    title: t(l, 'delivery.title'),
+    description: t(l, 'home.deliveryBody'),
+    alternates: {
+      languages: { 'en-CA': '/en/delivery', 'fr-CA': '/fr/delivery' },
+    },
+  };
+}
 
-export default function DeliveryPage() {
+export default async function DeliveryPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  if (!isLocale(locale)) notFound();
+
   const towns = deliveryTowns();
 
   return (
-    <main className="mx-auto max-w-[46rem] px-4 py-12">
-      <h1 className="text-display font-semibold tracking-tight">Where we deliver</h1>
-      <p className="mt-4 max-w-[60ch] text-lead text-muted">
-        {shopName()} is one shop with one counter. We deliver within a local radius and there is no
-        collection point.
-      </p>
+    <div className="mx-auto max-w-[46rem] px-4 py-14 sm:px-6 sm:py-20">
+      <h1 className="!text-display-xl">{t(locale, 'delivery.title')}</h1>
+      <p className="mt-6 max-w-[58ch] text-lead text-muted">{t(locale, 'home.deliveryBody')}</p>
 
-      <div className="mt-8">
-        <PostcodeCheck />
+      <div className="mt-10">
+        <PostcodeCheck locale={locale} />
       </div>
 
-      <section className="mt-12 border-t border-line pt-8">
-        <h2 className="text-section font-semibold tracking-tight">Delivery times</h2>
-        <p className="mt-3 max-w-[60ch] text-body text-muted">
-          You choose a time slot at checkout. Each slot has a cut-off, after which it stops being
-          offered, and a limited number of deliveries.
-        </p>
-        <p className="mt-3 max-w-[60ch] text-body text-muted">
-          If your basket contains anything cooked hot, only the slots we can get it to you hot in
-          are offered. That is a food-safety rule rather than a scheduling preference.
-        </p>
-      </section>
-
-      {towns.length > 0 ? (
-        <section className="mt-8 border-t border-line pt-8">
-          <h2 className="text-section font-semibold tracking-tight">Areas we cover</h2>
-          <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+      {towns.length > 0 && (
+        <section className="mt-14 border-t border-line pt-10">
+          <h2 className="!text-display">{shopName()}</h2>
+          <ul className="mt-6 flex flex-wrap gap-2">
             {towns.map((town) => (
               <li key={town.slug}>
                 <Link
-                  href={`/delivery/${town.slug}`}
-                  className="text-body underline underline-offset-4"
+                  href={`/${locale}/delivery/${town.slug}`}
+                  className="tap inline-flex items-center rounded-full border border-line bg-raised px-4 text-meta transition-colors hover:border-accent"
                 >
                   {town.name}
                 </Link>
@@ -55,7 +58,7 @@ export default function DeliveryPage() {
             ))}
           </ul>
         </section>
-      ) : null}
-    </main>
+      )}
+    </div>
   );
 }

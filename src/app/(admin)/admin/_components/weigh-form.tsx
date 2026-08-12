@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import type { OrderStatus } from '@/domain/types';
-import { weight } from '@/ui/format';
+import { ADMIN_LOCALE, weight } from '@/ui/format';
 
 import { PrimaryBar, PrimaryButton, SecondaryButton } from './shell';
 
@@ -112,7 +112,7 @@ export function WeighForm({
 
   return (
     <>
-      <p className="mt-2 text-body text-muted">Ordered {weight(requestedG)}</p>
+      <p className="mt-2 text-body text-muted">Ordered {weight(requestedG, ADMIN_LOCALE)}</p>
 
       <label htmlFor="weighed" className="mt-8 block text-body font-semibold">
         Weight on the scale
@@ -142,7 +142,7 @@ export function WeighForm({
 
       {outOfBand ? (
         <p className="mt-3 rounded-sm bg-hot-wash px-3 py-3 text-body text-hot">
-          {weight(enteredG ?? 0)} is outside that. The customer has to agree before this can be
+          {weight(enteredG ?? 0, ADMIN_LOCALE)} is outside that. The customer has to agree before this can be
           charged.
         </p>
       ) : null}

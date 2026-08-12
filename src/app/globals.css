@@ -188,6 +188,15 @@
   --color-danger-wash: var(--danger-wash);
 
   /*
+   * The raw brand hues, exposed as utilities for the ONE place that needs
+   * them: the hero is always on an atlantic ground in both schemes, so its CTA
+   * is always cyan-on-midnight and must not follow `--accent`, which flips.
+   * Nothing else may reach for these.
+   */
+  --color-brand: var(--brand);
+  --color-midnight: var(--midnight);
+
+  /*
    * ⚠ BODONI IS A DISPLAY FACE ONLY, AND THIS IS A HARD RULE.
    *
    * It is a high-contrast didone: its hairlines physically disappear below
@@ -710,5 +719,30 @@
 
   to {
     transform: scale(1);
+  }
+}
+
+/*
+ * The drawer's two entrances. Transform and opacity only, so they run on the
+ * compositor, and both are inert under `prefers-reduced-motion` because the
+ * global reduce block collapses every animation to 0.01ms.
+ */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
   }
 }

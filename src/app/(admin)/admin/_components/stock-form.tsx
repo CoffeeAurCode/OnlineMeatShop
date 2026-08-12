@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { gramsFromKgInput, kgInputFromGrams, weight } from '@/ui/format';
+import { ADMIN_LOCALE, gramsFromKgInput, kgInputFromGrams, weight } from '@/ui/format';
 
 import { PrimaryBar, PrimaryButton } from './shell';
 
@@ -112,7 +112,7 @@ export function StockForm({
                   {line.name}
                   {line.reservedG !== null && line.reservedG > 0 ? (
                     <span className="mt-0.5 block text-meta text-muted">
-                      {weight(line.reservedG)} already promised to orders
+                      {weight(line.reservedG, ADMIN_LOCALE)} already promised to orders
                     </span>
                   ) : null}
                 </label>

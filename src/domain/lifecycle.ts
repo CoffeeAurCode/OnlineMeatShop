@@ -40,6 +40,25 @@ const TRANSITIONS: Readonly<Record<OrderStatus, readonly OrderStatus[]>> = {
   CANCELLED: [],
 };
 
+/**
+ * The happy path, in order, for anything that has to DISPLAY progress.
+ *
+ * Derived by hand rather than walked from `TRANSITIONS`, because a graph walk
+ * would have to pick a branch at `PLACED` and the answer it needs is "the
+ * sequence a customer expects to see", not "a valid path". `CANCELLED` is
+ * deliberately absent: it is not a point on the line, it is the line ending,
+ * and a timeline that renders it as a seventh step implies every order passes
+ * through it.
+ */
+export const LIFECYCLE_ORDER = [
+  'PLACED',
+  'PREPARING',
+  'WEIGHED',
+  'READY',
+  'OUT',
+  'DELIVERED',
+] as const satisfies readonly OrderStatus[];
+
 export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
   return TRANSITIONS[from].includes(to);
 }

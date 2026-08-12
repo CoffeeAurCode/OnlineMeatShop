@@ -1,33 +1,46 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { captureKey, paymentAdapter } from '@/adapters/payments';
 import { currentBusinessDay } from '@/db/repositories/availability';
-import { findOrCreateCustomer } from '@/db/repositories/customers';
-import { placeOrder } from '@/db/repositories/placement';
+import { findOrCreateCustomerByPhone, normalisePhone } from '@/db/repositories/customers';
+import { cancelOrder, placeOrder } from '@/db/repositories/placement';
 import { quoteBasket } from '@/db/repositories/quote';
+import { DEFAULT_TOLERANCE } from '@/domain/pricing';
 import { grams } from '@/domain/types';
 
 /**
- * Place the order.
+ * Place the order, and put a hold on the money.
  *
- * 🔴 THERE IS NO PAYMENT HERE, AND THE ORDER IS RECORDED AS PAY-ON-DELIVERY.
+ * ⭐ `pay_mode` IS `PREPAID`, NOT `COD`, AND THAT IS THE WHOLE POINT.
  *
- * The designed flow authorises a ceiling on the customer's card BEFORE
- * placement, then captures the exact amount after weighing. That needs the
- * Stripe adapter, which does not exist. Rather than pretend, this route passes
- * `attemptId: null` — a shape `placeOrder` already supports for a placement
- * with no payment stage — and `payMode: 'COD'`.
+ * `pay_mode` does not describe whether real money moved. It SELECTS A CODE
+ * PATH. `COD` skips authorisation and skips settlement because there is
+ * nothing to capture; `PREPAID` means a processor holds an authorisation that
+ * will later be captured. Marking these orders `COD` because the adapter is a
+ * stub would route them down the branch with no hold and no capture, and the
+ * lifecycle this prototype exists to exercise would never run. The prototype
+ * would report success while testing nothing.
  *
- * ⚠ THIS CHANGES A COMMITMENT MADE TO THE CLIENT. The hold-then-charge-exact
- * checkout is one of the four promises in `WHATSAPP-architecture-options.md`.
- * The storefront still SHOWS the money sentence, because that is the design
- * and the copy is correct for the flow that is coming, and the checkout screen
- * says plainly that card payment is not connected yet. Flagged in `DEVLOG.md`.
+ * "No real money moved" is carried by the ADAPTER IDENTITY and by the UI
+ * banner. Never by the pay mode.
  *
- * Note what passing `attemptId: null` costs: P8, the stale-quote check, does
- * not run, because there is no earlier authorisation to have gone stale. The
- * other seven preconditions all still apply, inside the one transaction.
+ * ══ THE ORDER OF OPERATIONS, AND WHY IT IS THIS WAY ═══════════════════════
+ *
+ * ⚠ NO HTTP INSIDE THE TRANSACTION. A transaction holding row locks across a
+ * call to a payment processor has its duration set by someone else's
+ * availability. So:
+ *
+ *   1. re-quote and compare the catalog version   (cheap, outside)
+ *   2. place the order                            (ONE transaction, 8 preconditions)
+ *   3. authorise the ceiling                      (the adapter, outside)
+ *   4. if authorisation fails, CANCEL the order   (returns stock and the slot)
+ *
+ * Step 4 is the part that is easy to leave out. Without it a declined card
+ * leaves an order holding stock and a delivery slot that nobody will ever
+ * collect, and the shop finds out when the fish does not sell.
  */
+
 const schema = z.object({
   lines: z
     .array(
@@ -41,11 +54,6 @@ const schema = z.object({
     .max(100),
   postalCode: z.string().min(3).max(20),
 
-  /**
-   * The street address, added by migration 0006. `order` previously stored a
-   * postal code and an FSA and nothing else, and you cannot deliver to a
-   * forward sortation area.
-   */
   addressLine1: z.string().trim().min(1).max(200),
   addressLine2: z.string().trim().max(200).nullable(),
   city: z.string().trim().min(1).max(120),
@@ -53,9 +61,16 @@ const schema = z.object({
   deliveryNotes: z.string().trim().max(500).nullable(),
 
   slotId: z.uuid(),
-  email: z.email().max(200),
-  name: z.string().max(120).nullable(),
-  phone: z.string().max(40).nullable(),
+
+  /**
+   * ⚠ UNVERIFIED. Anyone who knows a number can type it. That is tolerable
+   * only because nothing sensitive hangs off it: order tracking is gated on
+   * the order's own `public_token`, not on this. See `05-PLAN` §4.5.
+   */
+  phone: z.string().min(7).max(40),
+  name: z.string().trim().max(120).nullable(),
+  email: z.email().max(200).nullable(),
+
   /** Echoed back from the quote so a moved catalog is detectable. */
   catalogVersion: z.number().int().positive(),
 });
@@ -72,21 +87,30 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ reason: 'invalidBody' }, { status: 400 });
   const input = parsed.data;
 
+  const phoneE164 = normalisePhone(input.phone);
+  if (phoneE164 === null) return NextResponse.json({ reason: 'invalidPhone' }, { status: 400 });
+
   const day = await currentBusinessDay();
   if (day === null) return NextResponse.json({ reason: 'shopClosed' }, { status: 409 });
 
-  // Re-quoted here so that a catalog change between the screen and this call
-  // is caught before an order is written. With no PaymentIntent to cancel this
-  // is cheaper than P8, and it covers the same mistake.
+  // Re-quoted so a catalog change between the screen and this call is caught
+  // before an order is written and before a card is touched.
   const quote = await quoteBasket(input.lines, input.postalCode);
   if (quote.catalogVersion !== input.catalogVersion) {
     return NextResponse.json(
-      { reason: 'priceChanged', estTotalCents: quote.estTotalCents, catalogVersion: quote.catalogVersion },
+      {
+        reason: 'priceChanged',
+        estTotalCents: quote.estTotalCents,
+        catalogVersion: quote.catalogVersion,
+      },
       { status: 409 },
     );
   }
+  if (quote.estTotalCents === null) {
+    return NextResponse.json({ reason: 'outsideDeliveryArea' }, { status: 409 });
+  }
 
-  const customerId = await findOrCreateCustomer(input.email, input.name, input.phone);
+  const customerId = await findOrCreateCustomerByPhone(phoneE164, input.name, input.email);
 
   const result = await placeOrder({
     attemptId: null,
@@ -101,7 +125,8 @@ export async function POST(request: Request) {
     },
     slotId: input.slotId,
     businessDayId: day.id,
-    payMode: 'COD',
+    // See the header. This is the branch with a hold and a capture in it.
+    payMode: 'PREPAID',
     lines: input.lines.map((l) => ({
       productId: l.productId,
       requestedG: grams(l.requestedG),
@@ -111,7 +136,37 @@ export async function POST(request: Request) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ reason: result.reason, orderId: result.orderId }, { status: 409 });
+    return NextResponse.json(
+      { reason: result.reason, orderId: result.orderId, detail: 'detail' in result ? result.detail : undefined },
+      { status: 409 },
+    );
+  }
+
+  /*
+   * ⭐ AUTHORISE THE CEILING, NOT THE ESTIMATE.
+   *
+   * `estTotal × (1 + tolerance)`. Holding the estimate itself would fail the
+   * capture every time a cut came in heavy, which is the normal case here, not
+   * an edge case. `cappedTotal` at settlement is what guarantees the customer
+   * is never charged more than this.
+   */
+  const ceilingCents = Math.ceil(result.estTotalCents * (1 + DEFAULT_TOLERANCE));
+
+  try {
+    const adapter = paymentAdapter();
+    await adapter.authoriseCeiling({
+      orderId: result.orderId,
+      ceilingCents,
+      idempotencyKey: captureKey(result.orderId, ceilingCents),
+    });
+  } catch {
+    /*
+     * ⚠ THE PART THAT IS EASY TO FORGET. A failed authorisation must return
+     * the stock and the slot, or the shop holds fish for an order that will
+     * never be paid for and only finds out when it does not sell.
+     */
+    await cancelOrder(result.orderId);
+    return NextResponse.json({ reason: 'paymentFailed' }, { status: 402 });
   }
 
   return NextResponse.json({
@@ -119,6 +174,8 @@ export async function POST(request: Request) {
     orderId: result.orderId,
     publicToken: result.publicToken,
     estTotalCents: result.estTotalCents,
-    paymentPending: true,
+    ceilingCents,
+    /** The UI banner keys off this, not off the pay mode. */
+    testOrder: true,
   });
 }

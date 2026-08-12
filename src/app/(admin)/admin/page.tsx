@@ -4,7 +4,7 @@ import { currentBusinessDay } from '@/db/repositories/availability';
 import { listCatalog } from '@/db/repositories/catalog';
 import { orderQueue } from '@/db/repositories/orders';
 import { businessDateIn, shopTimeZone } from '@/ui/business-date';
-import { weight } from '@/ui/format';
+import { ADMIN_LOCALE, weight } from '@/ui/format';
 
 import { Empty, Row, Screen } from './_components/shell';
 
@@ -99,7 +99,7 @@ export default async function TodayPage() {
         >
           <span>Stock</span>
           <span className="tnum text-muted">
-            {weight(declared.reduce((g, i) => g + (i.stockedG ?? 0), 0))}
+            {weight(declared.reduce((g, i) => g + (i.stockedG ?? 0), 0), ADMIN_LOCALE)}
           </span>
         </Link>
       </nav>

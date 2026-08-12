@@ -1,62 +1,69 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
+import { notFound } from 'next/navigation';
 
-import { siteOrigin } from '@/ui/shop-config';
+import { isLocale, t, type Locale } from '@/i18n';
 
-export const metadata: Metadata = {
-  title: 'How weighing and payment work',
-  description:
-    'Per-kilogram meat is cut after you order, weighed at the counter, and paid for at the exact final weight on delivery.',
-  alternates: { canonical: `${siteOrigin()}/how-weighing-works` },
-};
+/**
+ * The money page.
+ *
+ * ⭐ THIS IS THE PROMISE THE SHOP MADE, written out. Every other page links to
+ * it and the checkout repeats its one sentence. It exists as a page rather
+ * than a tooltip because "we hold a maximum and charge the exact weight" is
+ * the single most surprising thing about buying here, and a customer who does
+ * not understand it reads the hold on their card as an overcharge.
+ */
 
-export default function HowWeighingWorksPage() {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const l: Locale = isLocale(locale) ? locale : 'fr';
+  return {
+    title: t(l, 'weighing.title'),
+    description: t(l, 'weighing.intro'),
+    alternates: {
+      languages: {
+        'en-CA': '/en/how-weighing-works',
+        'fr-CA': '/fr/how-weighing-works',
+      },
+    },
+  };
+}
+
+export default async function HowWeighingWorksPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  if (!isLocale(locale)) notFound();
+
+  const steps = [
+    ['weighing.step1Heading', 'weighing.step1Body'],
+    ['weighing.step2Heading', 'weighing.step2Body'],
+    ['weighing.step3Heading', 'weighing.step3Body'],
+  ] as const;
+
   return (
-    <main>
-      <section className="border-b border-line bg-soft">
-        <div className="mx-auto max-w-[60rem] px-4 py-16 sm:px-6 sm:py-24">
-          <h1 className="max-w-[12ch] text-[clamp(2.7rem,6vw,5.8rem)] font-semibold leading-[0.92] tracking-[-0.06em]">
-            How weighing and payment work
-          </h1>
-          <p className="mt-6 max-w-[52ch] text-lead text-muted">
-            Meat sold by the kilogram cannot have a final price until the butcher has made the cut.
-          </p>
-        </div>
-      </section>
+    <div className="mx-auto max-w-[46rem] px-4 py-14 sm:px-6 sm:py-20">
+      <h1 className="!text-display-xl">{t(locale, 'weighing.title')}</h1>
+      <p className="mt-6 max-w-[56ch] text-lead text-muted">{t(locale, 'weighing.intro')}</p>
 
-      <section className="mx-auto max-w-[60rem] px-4 py-14 sm:px-6 sm:py-20">
-        <div className="grid gap-10 lg:grid-cols-[0.65fr_1.35fr] lg:gap-20">
-          <p className="text-meta font-semibold uppercase tracking-[0.16em] text-accent">At the counter</p>
-          <div>
-            {[
-              [
-                'You order a weight',
-                'Pick roughly how much you want. Because nothing has been cut yet, the basket labels the price as an estimate.',
-              ],
-              [
-                'We cut, then weigh',
-                'A hand-cut piece is rarely exact. If it lands within ten percent either way, the butcher records that weight. If it is further out, the shop calls before continuing.',
-              ],
-              [
-                'You pay for the piece',
-                'Card payment is not connected yet. Orders placed now are pay on delivery, and the amount follows the final recorded weight.',
-              ],
-              [
-                'Fixed-price packs stay fixed',
-                'Anything sold as a pack keeps one price. Only items sold by the kilogram are repriced after weighing.',
-              ],
-            ].map(([title, copy]) => (
-              <div key={title} className="border-t border-line py-8 first:pt-0">
-                <h2 className="text-section font-semibold tracking-tight">{title}</h2>
-                <p className="mt-3 max-w-[58ch] text-body text-muted">{copy}</p>
-              </div>
-            ))}
-            <Link href="/shop" className="mt-4 inline-block text-body font-semibold underline underline-offset-4">
-              See what we have today
-            </Link>
-          </div>
-        </div>
-      </section>
-    </main>
+      {/*
+        An ordered list, not three cards. The steps are a sequence and the
+        numbering is the content, not decoration.
+      */}
+      <ol className="mt-12 grid gap-10">
+        {steps.map(([heading, body], i) => (
+          <li key={heading} className="grid gap-2 border-t border-line pt-6">
+            <span className="tnum text-meta font-semibold text-muted">{i + 1}</span>
+            <h2 className="!text-display">{t(locale, heading)}</h2>
+            <p className="max-w-[58ch] text-body text-muted">{t(locale, body)}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }

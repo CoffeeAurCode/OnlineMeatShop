@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { orderForWeighing } from '@/db/repositories/orders';
-import { money, weight } from '@/ui/format';
+import { ADMIN_LOCALE, money, weight } from '@/ui/format';
 
 import { Screen } from '../../_components/shell';
 import { AdvanceButton } from '../../_components/advance-button';
@@ -43,15 +43,15 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               <div className="flex items-baseline justify-between gap-4">
                 <span className="text-body font-semibold">{line.productName}</span>
                 <span className="tnum text-body">
-                  {money(line.actAmountCents ?? line.estAmountCents)}
+                  {money(line.actAmountCents ?? line.estAmountCents, ADMIN_LOCALE)}
                   {done || !weighable ? '' : ' est.'}
                 </span>
               </div>
 
               <p className="mt-1 text-meta text-muted">
                 {weighable ? 'Ordered ' : ''}
-                {weight(line.requestedG)}
-                {done ? `, weighed ${weight(line.actWeightG ?? 0)}` : ''}
+                {weight(line.requestedG, ADMIN_LOCALE)}
+                {done ? `, weighed ${weight(line.actWeightG ?? 0, ADMIN_LOCALE)}` : ''}
                 {line.varianceApproved ? ', variance approved' : ''}
               </p>
 
@@ -70,14 +70,14 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
 
       <div className="mt-6 flex items-baseline justify-between gap-4 border-b border-line py-3">
         <span className="text-body">Delivery</span>
-        <span className="tnum text-body">{money(order.deliveryFeeCents)}</span>
+        <span className="tnum text-body">{money(order.deliveryFeeCents, ADMIN_LOCALE)}</span>
       </div>
       <div className="flex items-baseline justify-between gap-4 py-3">
         <span className="text-lead font-semibold">
           {order.finalTotalCents === null ? 'Estimated total' : 'Final total'}
         </span>
         <span className="tnum text-lead font-semibold">
-          {money(order.finalTotalCents ?? linesTotal + order.deliveryFeeCents)}
+          {money(order.finalTotalCents ?? linesTotal + order.deliveryFeeCents, ADMIN_LOCALE)}
         </span>
       </div>
 

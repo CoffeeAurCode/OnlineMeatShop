@@ -1,25 +1,26 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-import { clearCart, useCart } from '@/ui/cart';
-import { money } from '@/ui/format';
+import { t, type Locale } from '@/i18n';
+import { clearCart, lineKey, useCart } from '@/ui/cart';
+import { money, weight } from '@/ui/format';
 
-import { MoneySentence } from './money-sentence';
+import { MoneySentence, TestOrderBanner } from './money-sentence';
 
 /**
- * Checkout.
+ * Checkout. The one gate.
  *
- * Every one of the nine failure codes from `03-PLAN` §3.3 is handled, in the
- * five presentation classes `04-PLAN` §10.3 defines. The classes are what stop
- * this becoming nine bespoke error screens:
+ * ⚠ THE DESIGN SKILL DOES NOT APPLY TO THIS SCREEN, by its own scope rule:
+ * multi-step forms and wizards are out of it. This follows `04-PLAN` §11
+ * instead, at VARIANCE 3 / MOTION 2 / DENSITY 6. Predictability is the feature
+ * here. No asymmetry, no reveal animations, no surprises between the total and
+ * the button.
  *
- *   A — inline field    invalidQuantity, insufficientStock
- *   B — picker re-render slotCutoffPassed, slotFull, hotFoodNotAllowedInSlot
- *   C — basket notice   productUnavailable, outsideDeliveryArea
- *   D — blocking dialog priceChanged
- *   E — silent success  checkoutAttemptNotOpen
+ * ⚠ THE BROWSER DECIDES NOTHING. Every amount on this screen came from
+ * `/api/quote`, and the amount actually charged is recomputed inside the
+ * placement transaction. The fields below are intent.
  */
 
 export interface SlotOption {
@@ -31,456 +32,455 @@ export interface SlotOption {
 }
 
 interface Quote {
+  lines: { productId: string; prepOptionId: string | null; name: string; amountCents: number }[];
   lineSubtotalCents: number;
   deliveryFeeCents: number | null;
   estTotalCents: number | null;
-  toFreeDeliveryCents: number | null;
   catalogVersion: number;
   hasHotLine: boolean;
-  hasEstimate: boolean;
   serviceable: boolean | null;
-  problems: string[];
 }
 
-export function CheckoutForm({ slots }: { slots: readonly SlotOption[] }) {
-  const { lines, ready } = useCart();
+const PROVINCES = ['QC', 'ON', 'NB', 'NS', 'PE', 'NL', 'MB', 'SK', 'AB', 'BC', 'YT', 'NT', 'NU'];
 
-  const [postalCode, setPostalCode] = useState('');
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
+export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: Locale }) {
+  const router = useRouter();
+  const cart = useCart();
+
   const [phone, setPhone] = useState('');
-  const [slotId, setSlotId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [line1, setLine1] = useState('');
+  const [line2, setLine2] = useState('');
+  const [city, setCity] = useState('');
+  const [province, setProvince] = useState('QC');
+  const [postalCode, setPostalCode] = useState('');
+  const [notes, setNotes] = useState('');
+  const [slotId, setSlotId] = useState('');
 
   const [quote, setQuote] = useState<Quote | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [slotProblem, setSlotProblem] = useState<string | null>(null);
-  const [basketProblem, setBasketProblem] = useState<string | null>(null);
-  const [fieldProblem, setFieldProblem] = useState<string | null>(null);
-  const [placed, setPlaced] = useState<{ orderId: string; estTotalCents: number } | null>(null);
-  const [repriced, setRepriced] = useState<{ was: number; now: number; version: number } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const dialog = useRef<HTMLDialogElement>(null);
+  const signature = cart.lines.map((l) => `${lineKey(l)}@${l.requestedG}`).join('|');
 
-  // Re-quote whenever the basket or the address changes. The delivery fee
-  // depends on both, and the free-delivery threshold depends on the subtotal,
-  // so neither can be worked out until the postcode is known.
+  // Re-quoted whenever the basket or the postal code changes, because the
+  // delivery fee depends on the second and every amount depends on the first.
   useEffect(() => {
-    if (!ready || lines.length === 0) return;
-    let cancelled = false;
-
-    void (async () => {
-      const res = await fetch('/api/quote', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          lines: lines.map((l) => ({
-            productId: l.productId,
-            requestedG: l.requestedG,
-            prepOptionId: l.prepOptionId,
-          })),
-          postalCode: postalCode.trim() === '' ? null : postalCode,
-        }),
-      });
-      if (cancelled || !res.ok) return;
-      setQuote((await res.json()) as Quote);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lines, ready, postalCode]);
-
-  // Class B: hot food narrows the picker, and the reason is stated. A slot
-  // that is merely disabled with no explanation reads as a broken website.
-  const hot = quote?.hasHotLine === true;
-  const selectable = slots.filter((s) => !s.cutoffPassed && !s.full && (!hot || s.hotEligible));
-
-  // If the chosen slot stops being selectable — hot food was added, its
-  // cut-off passed — it is simply not chosen any more. Derived rather than
-  // reset in an effect, which would render once with an impossible selection
-  // and once without.
-  const chosenSlotId = slotId !== null && selectable.some((s) => s.id === slotId) ? slotId : null;
-
-  if (ready && lines.length === 0 && placed === null) {
-    return (
-      <div className="mt-8 rounded-md border border-line bg-raised px-4 py-10">
-        <p className="text-section font-semibold tracking-tight">Your basket is empty</p>
-        <Link href="/shop" className="mt-4 inline-block text-body underline underline-offset-4">
-          See what we have today
-        </Link>
-      </div>
-    );
-  }
-
-  // Class E: a double submit is NOT an error. The customer sees their order.
-  if (placed !== null) {
-    return (
-      <div className="mt-8">
-        <p className="text-section font-semibold tracking-tight">Order placed</p>
-        <p className="mt-3 max-w-[60ch] text-body text-muted">
-          We have your order and the shop can see it. Anything cut to order is weighed before it
-          goes out, and the amount you pay is the weight you actually get.
-        </p>
-        <p className="tnum mt-6 text-lead">
-          Estimated total <span className="font-semibold">{money(placed.estTotalCents)}</span>
-        </p>
-        <p className="mt-6 rounded-sm bg-hot-wash px-3 py-3 text-body text-hot">
-          Card payment is not connected yet, so this order is marked pay on delivery.
-        </p>
-      </div>
-    );
-  }
-
-  async function submit() {
-    setBusy(true);
-    setSlotProblem(null);
-    setBasketProblem(null);
-    setFieldProblem(null);
-
-    if (chosenSlotId === null) {
-      setSlotProblem('Choose a delivery time.');
-      setBusy(false);
+    if (cart.lines.length === 0) {
+      setQuote(null);
       return;
     }
-
-    const res = await fetch('/api/checkout', {
+    const controller = new AbortController();
+    void fetch('/api/quote', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
-        lines: lines.map((l) => ({
+        lines: cart.lines.map((l) => ({
           productId: l.productId,
           requestedG: l.requestedG,
           prepOptionId: l.prepOptionId,
         })),
-        postalCode,
-        slotId: chosenSlotId,
-        email,
-        name: name.trim() === '' ? null : name,
-        phone: phone.trim() === '' ? null : phone,
-        catalogVersion: quote?.catalogVersion ?? 0,
+        postalCode: postalCode.trim() === '' ? null : postalCode,
+        locale,
       }),
-    });
+    })
+      .then((r) => (r.ok ? (r.json() as Promise<Quote>) : Promise.reject(new Error('quote'))))
+      .then(setQuote)
+      .catch((e: unknown) => {
+        if (e instanceof Error && e.name === 'AbortError') return;
+      });
+    return () => controller.abort();
+  }, [signature, postalCode, locale, cart.lines]);
 
-    const body = (await res.json()) as {
-      ok?: boolean;
-      orderId?: string;
-      estTotalCents?: number;
-      reason?: string;
-      catalogVersion?: number;
-    };
+  /*
+   * ⭐ THE HOT-FOOD SLOT RULE, SHOWN. Hiding the windows that cannot carry hot
+   * food is a COURTESY, not the guarantee: precondition P7 refuses the order
+   * server-side regardless, because this is a food-safety rule and a filtered
+   * dropdown is not an enforcement mechanism. Both exist on purpose.
+   */
+  const hot = quote?.hasHotLine === true;
+  const usable = slots.filter((s) => !s.cutoffPassed && (!hot || s.hotEligible));
 
-    if (res.ok && body.ok === true) {
-      setPlaced({ orderId: body.orderId ?? '', estTotalCents: body.estTotalCents ?? 0 });
-      clearCart();
-      setBusy(false);
-      return;
+  function validate(): boolean {
+    const errors: Record<string, string> = {};
+    if (!/^\+?1?[\s\-().]*(\d[\s\-().]*){10}$/.test(phone)) {
+      errors.phone = t(locale, 'checkout.phoneInvalid');
     }
-
-    switch (body.reason) {
-      // Class E — silent success. The first submit already made the order.
-      case 'checkoutAttemptNotOpen':
-        setPlaced({ orderId: body.orderId ?? '', estTotalCents: quote?.estTotalCents ?? 0 });
-        clearCart();
-        break;
-
-      // Class D — blocking re-confirm. Never accepted automatically.
-      case 'priceChanged':
-        setRepriced({
-          was: quote?.estTotalCents ?? 0,
-          now: body.estTotalCents ?? 0,
-          version: body.catalogVersion ?? 0,
-        });
-        dialog.current?.showModal();
-        break;
-
-      // Class B — the picker re-renders with the reason above it.
-      case 'slotCutoffPassed':
-        setSlotId(null);
-        setSlotProblem('That time closed while you were ordering. Pick another.');
-        break;
-      case 'slotFull':
-        setSlotId(null);
-        setSlotProblem('That time filled up. The rest of your basket is untouched.');
-        break;
-      case 'hotFoodNotAllowedInSlot':
-        setSlotId(null);
-        setSlotProblem(
-          'Your basket has hot food, so we can only deliver it in a slot we can get it to you hot in. That is a food-safety rule.',
-        );
-        break;
-
-      // Class C — basket-level notice naming the thing, one action.
-      case 'outsideDeliveryArea':
-        setBasketProblem('We do not deliver to that postal code. We only cover a small local radius.');
-        break;
-      case 'productUnavailable':
-        setBasketProblem('Something in your basket has just come off the shop. Go back and remove it.');
-        break;
-
-      // Class A — inline, next to the field it is about.
-      case 'invalidQuantity':
-        setFieldProblem('One of your quantities is not one we can cut. Adjust it in the basket.');
-        break;
-      case 'insufficientStock':
-        setFieldProblem('Someone got there first. Check the basket for what is left.');
-        break;
-
-      case 'shopClosed':
-        setBasketProblem('The shop stopped taking orders while you were checking out.');
-        break;
-      default:
-        setBasketProblem('That did not go through, and nothing has been charged.');
-    }
-    setBusy(false);
+    if (line1.trim() === '') errors.line1 = t(locale, 'checkout.required');
+    if (city.trim() === '') errors.city = t(locale, 'checkout.required');
+    if (postalCode.trim() === '') errors.postalCode = t(locale, 'checkout.required');
+    if (slotId === '') errors.slotId = t(locale, 'checkout.required');
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   }
 
-  const total = quote?.estTotalCents;
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (submitting || quote === null) return;
+    if (!validate()) return;
+
+    setSubmitting(true);
+    setFailure(null);
+
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          lines: cart.lines.map((l) => ({
+            productId: l.productId,
+            requestedG: l.requestedG,
+            prepOptionId: l.prepOptionId,
+          })),
+          postalCode,
+          addressLine1: line1,
+          addressLine2: line2.trim() === '' ? null : line2,
+          city,
+          province,
+          deliveryNotes: notes.trim() === '' ? null : notes,
+          slotId,
+          phone,
+          name: name.trim() === '' ? null : name,
+          email: email.trim() === '' ? null : email,
+          catalogVersion: quote.catalogVersion,
+        }),
+      });
+
+      const body = (await res.json()) as {
+        ok?: boolean;
+        publicToken?: string;
+        reason?: string;
+        detail?: { productName?: string };
+      };
+
+      if (res.ok && body.ok === true && body.publicToken !== undefined) {
+        // Cleared only AFTER the server confirms. Clearing optimistically loses
+        // the basket on any failure, which is the worst possible moment.
+        clearCart();
+        router.push(`/${locale}/orders/${body.publicToken}?placed=1`);
+        return;
+      }
+
+      // The nine failure codes each have their own sentence. A generic
+      // "something went wrong" on a checkout is what makes a customer try
+      // again and place two orders.
+      const reason = body.reason ?? 'generic';
+      setFailure(
+        body.detail?.productName !== undefined
+          ? t(locale, 'errors.insufficientStock', { name: body.detail.productName })
+          : t(locale, `errors.${reason}`),
+      );
+    } catch {
+      setFailure(t(locale, 'errors.generic'));
+    }
+    setSubmitting(false);
+  }
+
+  if (cart.ready && cart.lines.length === 0) {
+    return (
+      <div className="mt-10 rounded-md border border-line bg-raised px-6 py-14 text-center">
+        <p className="text-lead font-semibold">{t(locale, 'basket.empty')}</p>
+        <p className="mx-auto mt-2 max-w-[36ch] text-body text-muted">
+          {t(locale, 'basket.emptyBody')}
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <>
-      {basketProblem !== null ? (
-        <p role="alert" className="mt-6 rounded-sm bg-danger-wash px-3 py-3 text-body text-danger">
-          {basketProblem}{' '}
-          <Link href="/basket" className="underline underline-offset-4">
-            Go to basket
-          </Link>
-        </p>
-      ) : null}
+    <form onSubmit={submit} noValidate className="mt-8 grid gap-10">
+      <TestOrderBanner locale={locale} />
 
-      <section className="mt-8">
-        <h2 className="text-section font-semibold tracking-tight">Where to</h2>
-        <div className="mt-4 grid gap-4">
+      <Section heading={t(locale, 'checkout.contactHeading')}>
+        <Field
+          id="phone"
+          label={t(locale, 'checkout.phoneLabel')}
+          help={t(locale, 'checkout.phoneHelp')}
+          error={fieldErrors.phone}
+          value={phone}
+          onChange={setPhone}
+          type="tel"
+          autoComplete="tel"
+          required
+        />
+        <Field
+          id="name"
+          label={t(locale, 'checkout.nameLabel')}
+          value={name}
+          onChange={setName}
+          autoComplete="name"
+        />
+        <Field
+          id="email"
+          label={t(locale, 'checkout.emailLabel')}
+          help={t(locale, 'checkout.emailOptional')}
+          value={email}
+          onChange={setEmail}
+          type="email"
+          autoComplete="email"
+        />
+      </Section>
+
+      <Section heading={t(locale, 'checkout.addressHeading')}>
+        <Field
+          id="line1"
+          label={t(locale, 'checkout.line1Label')}
+          error={fieldErrors.line1}
+          value={line1}
+          onChange={setLine1}
+          autoComplete="address-line1"
+          required
+        />
+        <Field
+          id="line2"
+          label={t(locale, 'checkout.line2Label')}
+          help={t(locale, 'checkout.line2Optional')}
+          value={line2}
+          onChange={setLine2}
+          autoComplete="address-line2"
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field
-            id="postal"
-            label="Postal code"
-            value={postalCode}
-            onChange={setPostalCode}
-            autoComplete="postal-code"
-            placeholder="A1A 1A1"
-            error={quote?.serviceable === false ? 'We do not deliver to that postal code yet.' : null}
+            id="city"
+            label={t(locale, 'checkout.cityLabel')}
+            error={fieldErrors.city}
+            value={city}
+            onChange={setCity}
+            autoComplete="address-level2"
+            required
           />
-          <Field id="email" label="Email" value={email} onChange={setEmail} autoComplete="email" type="email" />
-          <Field id="name" label="Name" value={name} onChange={setName} autoComplete="name" />
-          <Field
-            id="phone"
-            label="Phone"
-            value={phone}
-            onChange={setPhone}
-            autoComplete="tel"
-            type="tel"
-            help="We only call if a cut comes out heavier or lighter than you asked for."
-          />
-        </div>
-      </section>
-
-      <section className="mt-10">
-        <h2 className="text-section font-semibold tracking-tight">When</h2>
-
-        {hot ? (
-          <p className="mt-3 rounded-sm bg-hot-wash px-3 py-3 text-body text-hot">
-            Your basket has hot food, so only the times we can get it to you hot in are shown.
-          </p>
-        ) : null}
-
-        {slotProblem !== null ? (
-          <p role="alert" className="mt-3 rounded-sm bg-danger-wash px-3 py-3 text-body text-danger">
-            {slotProblem}
-          </p>
-        ) : null}
-
-        {selectable.length === 0 ? (
-          <p className="mt-4 rounded-md border border-line bg-raised px-4 py-6 text-body text-muted">
-            {hot
-              ? 'There are no delivery times left today that can carry hot food. Removing the hot items will open up more.'
-              : 'There are no delivery times left today.'}
-          </p>
-        ) : (
-          <fieldset className="mt-4">
-            <legend className="sr-only">Delivery time</legend>
-            <div className="grid gap-2">
-              {selectable.map((slot) => (
-                <label
-                  key={slot.id}
-                  className={`tap-lg flex cursor-pointer items-center justify-between rounded-sm border px-4 text-body ${
-                    chosenSlotId === slot.id ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-raised'
-                  }`}
-                >
-                  <span className="tnum">{slot.label}</span>
-                  <input
-                    type="radio"
-                    name="slot"
-                    value={slot.id}
-                    checked={chosenSlotId === slot.id}
-                    onChange={() => {
-                      setSlotId(slot.id);
-                      setSlotProblem(null);
-                    }}
-                    className="sr-only"
-                  />
-                  {slot.hotEligible ? <span className="text-meta">Can carry hot food</span> : null}
-                </label>
+          <div className="grid gap-2">
+            <label htmlFor="province" className="text-body font-semibold">
+              {t(locale, 'checkout.provinceLabel')}
+            </label>
+            <select
+              id="province"
+              value={province}
+              onChange={(e) => setProvince(e.target.value)}
+              autoComplete="address-level1"
+              className="tap rounded-sm border border-line bg-raised px-3 text-body text-ink"
+            >
+              {PROVINCES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
               ))}
-            </div>
-          </fieldset>
+            </select>
+          </div>
+        </div>
+        <Field
+          id="postalCode"
+          label={t(locale, 'checkout.postalLabel')}
+          help={t(locale, 'checkout.postalHelp')}
+          error={
+            fieldErrors.postalCode ??
+            (quote?.serviceable === false ? t(locale, 'errors.outsideDeliveryArea') : undefined)
+          }
+          value={postalCode}
+          onChange={setPostalCode}
+          autoComplete="postal-code"
+          required
+        />
+        <Field
+          id="notes"
+          label={t(locale, 'checkout.notesLabel')}
+          help={t(locale, 'checkout.notesHelp')}
+          value={notes}
+          onChange={setNotes}
+        />
+      </Section>
+
+      <Section heading={t(locale, 'checkout.slotHeading')}>
+        {hot && (
+          <p className="rounded-sm border border-line bg-soft px-3 py-2 text-body">
+            {t(locale, 'checkout.hotWarning')}
+          </p>
         )}
-      </section>
-
-      <section className="mt-10">
-        <h2 className="text-section font-semibold tracking-tight">Total</h2>
-        <div className="mt-4 border-b border-line pb-3">
-          <Row label="Items" value={quote === null ? null : quote.lineSubtotalCents} />
-          <Row
-            label="Delivery"
-            value={quote?.deliveryFeeCents ?? null}
-            hint={quote?.deliveryFeeCents === null ? 'Enter a postal code' : undefined}
-          />
+        {fieldErrors.slotId !== undefined && (
+          <p className="text-meta text-danger">{fieldErrors.slotId}</p>
+        )}
+        <div className="grid gap-2">
+          {usable.length === 0 && (
+            <p className="text-body text-muted">{t(locale, 'errors.slotClosed')}</p>
+          )}
+          {usable.map((s) => (
+            <label
+              key={s.id}
+              className={`tap-lg flex cursor-pointer items-center gap-3 rounded-sm border px-4 transition-colors ${
+                slotId === s.id ? 'border-accent bg-soft' : 'border-line bg-raised'
+              } ${s.full ? 'pointer-events-none opacity-50' : ''}`}
+            >
+              <input
+                type="radio"
+                name="slot"
+                value={s.id}
+                disabled={s.full}
+                checked={slotId === s.id}
+                onChange={() => setSlotId(s.id)}
+                className="size-5 accent-[var(--accent)]"
+              />
+              <span className="tnum text-body font-semibold">{s.label}</span>
+              {s.full && <span className="text-meta text-muted">{t(locale, 'checkout.slotFull')}</span>}
+              {s.hotEligible && (
+                <span className="ml-auto text-meta text-muted">
+                  {t(locale, 'checkout.slotHotOnly')}
+                </span>
+              )}
+            </label>
+          ))}
         </div>
-        <div className="mt-3 flex items-baseline justify-between gap-4">
-          <span className="text-lead font-semibold">Estimated total</span>
-          <span className="tnum text-lead font-semibold">
-            {total === null || total === undefined ? '· · ·' : money(total)}
-          </span>
-        </div>
+      </Section>
 
-        {quote?.toFreeDeliveryCents != null ? (
-          <p className="mt-2 text-body text-muted">
-            {money(quote.toFreeDeliveryCents)} more for free delivery.
-          </p>
-        ) : null}
+      <Section heading={t(locale, 'basket.title')}>
+        <ul className="grid gap-2">
+          {cart.lines.map((l) => {
+            const q = quote?.lines.find(
+              (x) => x.productId === l.productId && x.prepOptionId === l.prepOptionId,
+            );
+            return (
+              <li key={lineKey(l)} className="flex justify-between gap-4 text-body">
+                <span className="min-w-0">
+                  <span className="font-semibold">{q?.name ?? l.name}</span>{' '}
+                  <span className="tnum text-muted">{weight(l.requestedG, locale)}</span>
+                </span>
+                <span className="tnum shrink-0">
+                  {q === undefined ? '' : money(q.amountCents, locale)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
 
-        {fieldProblem !== null ? (
-          <p role="alert" className="mt-4 rounded-sm bg-danger-wash px-3 py-3 text-body text-danger">
-            {fieldProblem}{' '}
-            <Link href="/basket" className="underline underline-offset-4">
-              Go to basket
-            </Link>
-          </p>
-        ) : null}
-
-        <p className="mt-6 rounded-sm border border-line bg-raised px-3 py-3 text-body text-muted">
-          Card payment is not connected yet. Orders placed now are marked pay on delivery.
-        </p>
-
-        {/*
-          §10.4: the money sentence sits DIRECTLY above the button, with
-          nothing between them, at full size. Do not insert anything here.
-        */}
-        {total !== null && total !== undefined ? (
-          <div className="mt-6">
-            <MoneySentence estimateCents={total} />
+        <dl className="grid gap-1 border-t border-line pt-4 text-body">
+          <div className="flex justify-between">
+            <dt>{t(locale, 'basket.subtotal')}</dt>
+            <dd className="tnum">
+              {quote === null ? '' : money(quote.lineSubtotalCents, locale)}
+            </dd>
           </div>
-        ) : null}
+          <div className="flex justify-between">
+            <dt>{t(locale, 'basket.delivery')}</dt>
+            <dd className="tnum">
+              {quote?.deliveryFeeCents == null
+                ? ''
+                : quote.deliveryFeeCents === 0
+                  ? t(locale, 'basket.deliveryFree')
+                  : money(quote.deliveryFeeCents, locale)}
+            </dd>
+          </div>
+          <div className="flex justify-between text-section font-semibold">
+            <dt>{t(locale, 'basket.total')}</dt>
+            <dd className="tnum">
+              {quote?.estTotalCents == null ? '' : money(quote.estTotalCents, locale)}
+            </dd>
+          </div>
+        </dl>
+      </Section>
 
-        <button
-          type="button"
-          onClick={() => void submit()}
-          disabled={busy || total === null || total === undefined || quote?.serviceable !== true}
-          className="tap-lg mt-4 flex w-full items-center justify-center rounded-sm bg-accent px-4 text-lead font-semibold text-accent-ink transition-colors hover:bg-accent-hover active:scale-[0.99] disabled:opacity-50"
+      {failure !== null && (
+        <p
+          role="alert"
+          className="rounded-sm border border-danger bg-danger-wash px-4 py-3 text-body text-danger"
         >
-          {busy ? 'Placing your order' : 'Place order'}
-        </button>
-      </section>
-
-      {/* Class D — native dialog. No default button, no auto-dismiss. */}
-      <dialog
-        ref={dialog}
-        className="w-[min(28rem,92vw)] rounded-md border border-line bg-raised p-6 text-ink backdrop:bg-black/40"
-      >
-        <h2 className="text-section font-semibold tracking-tight">The price changed</h2>
-        <p className="mt-3 max-w-[50ch] text-body text-muted">
-          Our prices moved while you were checking out. Nothing has been charged. Have a look before
-          you carry on.
+          {failure}
         </p>
-        <div className="mt-5 grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-meta text-muted">You were quoted</p>
-            <p className="tnum text-lead font-semibold">{money(repriced?.was ?? 0)}</p>
-          </div>
-          <div>
-            <p className="text-meta text-muted">It is now</p>
-            <p className="tnum text-lead font-semibold">{money(repriced?.now ?? 0)}</p>
-          </div>
-        </div>
-        <div className="mt-6 grid gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setQuote((q) => (q === null ? q : { ...q, catalogVersion: repriced?.version ?? q.catalogVersion }));
-              dialog.current?.close();
-            }}
-            className="tap-lg w-full rounded-sm bg-accent px-4 text-lead font-semibold text-accent-ink"
-          >
-            Accept the new price
-          </button>
-          <button
-            type="button"
-            onClick={() => dialog.current?.close()}
-            className="tap-lg w-full rounded-sm border border-line bg-raised px-4 text-lead font-semibold"
-          >
-            Go back
-          </button>
-        </div>
-      </dialog>
-    </>
+      )}
+
+      {/*
+        ⚠ NOTHING GOES BETWEEN THE MONEY SENTENCE AND THE BUTTON. Not a
+        checkbox, not a promo field, not a reassurance. `04-PLAN` §10.4.
+      */}
+      <div className="grid gap-4">
+        {quote?.estTotalCents != null && (
+          <MoneySentence estimateCents={quote.estTotalCents} locale={locale} />
+        )}
+        <button
+          type="submit"
+          disabled={submitting || quote?.estTotalCents == null}
+          className="tap-lg inline-flex items-center justify-center rounded-sm bg-accent px-6 text-lead font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover disabled:opacity-60 active:scale-[0.99]"
+        >
+          {submitting ? t(locale, 'checkout.placing') : t(locale, 'checkout.place')}
+        </button>
+      </div>
+    </form>
   );
 }
 
-function Row({ label, value, hint }: { label: string; value: number | null; hint?: string | undefined }) {
+function Section({ heading, children }: { heading: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-1">
-      <span className="text-body">{label}</span>
-      <span className="tnum text-body">
-        {value === null ? <span className="text-muted">{hint ?? '· · ·'}</span> : money(value)}
-      </span>
-    </div>
+    <section className="grid gap-4">
+      <h2 className="!font-sans !text-section !pb-0 !tracking-normal font-semibold">{heading}</h2>
+      {children}
+    </section>
   );
 }
 
-/** Label ABOVE the input, help under it, error under that. Never a placeholder as a label. */
+/**
+ * One field. Label ABOVE, help below the label, error BELOW the input.
+ *
+ * Never a placeholder as a label: the placeholder disappears the moment
+ * someone types, which is exactly when they most want to check what the field
+ * was asking for.
+ */
 function Field({
   id,
   label,
+  help,
+  error,
   value,
   onChange,
-  error,
-  help,
-  ...rest
+  type = 'text',
+  autoComplete,
+  required = false,
 }: {
   id: string;
   label: string;
+  // `| undefined` explicitly, because `exactOptionalPropertyTypes` is on: an
+  // optional prop and a prop that may be undefined are different types here,
+  // and every call site below passes a possibly-undefined error.
+  help?: string | undefined;
+  error?: string | undefined;
   value: string;
   onChange: (v: string) => void;
-  error?: string | null;
-  help?: string;
-  // `onChange` is deliberately replaced by a value-taking callback, so the
-  // native handler has to be omitted or the two collide.
-} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'id' | 'value'>) {
+  type?: string | undefined;
+  autoComplete?: string | undefined;
+  required?: boolean | undefined;
+}) {
+  const describedBy = [help !== undefined ? `${id}-help` : null, error !== undefined ? `${id}-error` : null]
+    .filter((x) => x !== null)
+    .join(' ');
+
   return (
-    <div>
-      <label htmlFor={id} className="block text-body font-semibold">
+    <div className="grid gap-2">
+      <label htmlFor={id} className="text-body font-semibold">
         {label}
       </label>
-      <input
-        {...rest}
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-invalid={error != null}
-        aria-describedby={error != null ? `${id}-error` : help !== undefined ? `${id}-help` : undefined}
-        className={`tap mt-2 w-full rounded-sm border bg-raised px-3 text-body ${
-          error != null ? 'border-danger' : 'border-line'
-        }`}
-      />
-      {help !== undefined && error == null ? (
-        <p id={`${id}-help`} className="mt-1 text-meta text-muted">
+      {help !== undefined && (
+        <p id={`${id}-help`} className="text-meta text-muted">
           {help}
         </p>
-      ) : null}
-      {error != null ? (
-        <p id={`${id}-error`} className="mt-1 text-meta text-danger">
+      )}
+      <input
+        id={id}
+        name={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        aria-invalid={error !== undefined}
+        aria-describedby={describedBy === '' ? undefined : describedBy}
+        className={`tap rounded-sm border bg-raised px-3 text-body text-ink placeholder:text-muted ${
+          error === undefined ? 'border-line' : 'border-danger'
+        }`}
+      />
+      {error !== undefined && (
+        <p id={`${id}-error`} className="text-meta font-semibold text-danger">
           {error}
         </p>
-      ) : null}
+      )}
     </div>
   );
 }

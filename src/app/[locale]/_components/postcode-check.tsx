@@ -2,26 +2,28 @@
 
 import { useState } from 'react';
 
+import { t, type Locale } from '@/i18n';
 import { money } from '@/ui/format';
 
 /**
  * "Do you deliver to me?"
  *
- * ⭐ The hero's primary control, and the one structural argument in the design
- * direction (`04-PLAN` §10.1). This shop is delivery-only inside a radius, so
- * this is the first question every visitor actually has. The failure code for
- * getting it wrong, `outsideDeliveryArea` (P1), otherwise fires at checkout,
- * after someone has built a whole basket.
+ * ⭐ The first question every visitor to a delivery-only shop actually has,
+ * and the reason it has its own control rather than living at checkout: the
+ * failure code for getting it wrong, `outsideDeliveryArea` (P1), otherwise
+ * fires after someone has built a whole basket.
  *
- * Presentation class C (`04-PLAN` §10.3): a notice naming the area, with
- * exactly one action.
+ * All four interaction states are here: idle, busy, the two answers, and two
+ * distinct errors. A malformed postal code and an unreachable server are
+ * different problems and the customer can act on exactly one of them, so they
+ * do not share a message.
  */
 
 type Result =
   | { served: true; postalCode: string; feeCents: number; freeAboveCents: number | null }
   | { served: false; postalCode: string };
 
-export function PostcodeCheck() {
+export function PostcodeCheck({ locale }: { locale: Locale }) {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
@@ -41,13 +43,13 @@ export function PostcodeCheck() {
         body: JSON.stringify({ postalCode: value }),
       });
       if (!res.ok) {
-        setError('That does not look like a postal code. Try the first three characters.');
+        setError(t(locale, 'checkout.postalHelp'));
         setBusy(false);
         return;
       }
       setResult((await res.json()) as Result);
     } catch {
-      setError('We could not check just now. Try again in a moment.');
+      setError(t(locale, 'errors.generic'));
     }
     setBusy(false);
   }
@@ -56,68 +58,52 @@ export function PostcodeCheck() {
     <div>
       <form onSubmit={check} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <div className="min-w-0">
+          {/* Label ABOVE the input, always. Never a placeholder as a label. */}
           <label htmlFor="postcode" className="block text-body font-semibold">
-            Do we deliver to you?
+            {t(locale, 'delivery.checkHeading')}
           </label>
           <input
             id="postcode"
             name="postcode"
-            type="text"
-            autoComplete="postal-code"
-            placeholder="A1A 1A1"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            aria-describedby={error === null ? undefined : 'postcode-error'}
-            aria-invalid={error !== null}
-            className={`tap mt-2 w-full rounded-sm border bg-raised px-3 text-body ${
-              error === null ? 'border-line' : 'border-danger'
-            }`}
+            autoComplete="postal-code"
+            inputMode="text"
+            placeholder={t(locale, 'delivery.checkPlaceholder')}
+            aria-describedby="postcode-help"
+            className="tap mt-2 w-full rounded-sm border border-line bg-raised px-3 text-body text-ink placeholder:text-muted"
           />
+          <p id="postcode-help" className="mt-2 text-meta text-muted">
+            {t(locale, 'checkout.postalHelp')}
+          </p>
         </div>
         <button
           type="submit"
           disabled={busy}
-          className="tap w-full rounded-sm bg-accent px-5 text-body font-semibold text-accent-ink transition-[transform,background-color,opacity] hover:bg-accent-hover active:translate-y-px active:scale-[0.99] disabled:opacity-50 sm:w-28"
+          className="tap inline-flex items-center justify-center rounded-sm bg-accent px-6 text-body font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover disabled:opacity-60 active:scale-[0.98]"
         >
-          {busy ? 'Checking' : 'Check'}
+          {busy ? t(locale, 'common.loading') : t(locale, 'delivery.checkCta')}
         </button>
       </form>
 
-      {error !== null ? (
-        <p id="postcode-error" role="alert" className="mt-3 text-body text-danger">
-          {error}
-        </p>
-      ) : null}
-
-      {result !== null ? (
-        <p
-          role="status"
-          className={`mt-3 rounded-sm px-3 py-3 text-body ${
-            result.served ? 'bg-raised text-ink' : 'bg-danger-wash text-danger'
-          }`}
-        >
-          {result.served ? (
-            <>
-              Yes, we deliver to {result.postalCode}.{' '}
-              {result.feeCents === 0 ? (
-                'Delivery is free.'
-              ) : (
-                <>
-                  Delivery is {money(result.feeCents)}
-                  {result.freeAboveCents === null
-                    ? '.'
-                    : `, or free over ${money(result.freeAboveCents)}.`}
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              We do not deliver to {result.postalCode} yet. We only cover a small local radius, and
-              there is no counter to collect from.
-            </>
-          )}
-        </p>
-      ) : null}
+      {/* `aria-live` so the answer is announced, not just painted. */}
+      <div aria-live="polite" className="mt-4 empty:hidden">
+        {error !== null && (
+          <p className="rounded-sm bg-danger-wash px-3 py-2 text-body text-danger">{error}</p>
+        )}
+        {result !== null && result.served && (
+          <p className="rounded-sm border border-line bg-soft px-3 py-2 text-body">
+            {result.feeCents === 0
+              ? t(locale, 'delivery.servedFree')
+              : t(locale, 'delivery.served', { fee: money(result.feeCents, locale) })}
+          </p>
+        )}
+        {result !== null && !result.served && (
+          <p className="rounded-sm border border-line bg-soft px-3 py-2 text-body">
+            {t(locale, 'delivery.notServed')}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
