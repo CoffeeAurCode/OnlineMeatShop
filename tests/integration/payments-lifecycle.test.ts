@@ -224,31 +224,45 @@ describe('3. ⭐ CAPTURE NEVER EXCEEDS THE CEILING', () => {
     expect(exact).toEqual({ ok: true, capturedCents: 11_000 });
   });
 
-  it('⭐ PROPERTY: cappedTotal never exceeds the ceiling, for ANY actual weight', async () => {
+  it('⭐ PROPERTY: cappedTotal never exceeds the authorised ceiling, for ANY actual weight', async () => {
     // The arithmetic gate, checked against the domain rather than the adapter.
-    // `cappedTotal = min(actual + fee, estimate x (1 + tol) + fee)`, so the
-    // cap is what makes the single-capture limitation safe no matter how heavy
-    // the cut came in.
+    //
+    //   cappedTotal = min(actualLineTotal, ceil(estLineTotal x (1 + tol))) + fee
+    //   ceiling     = ceil((estLineTotal + fee) x (1 + tol))     <- what the
+    //                                                               checkout
+    //                                                               route holds
+    //
+    // The cap is what makes the single-capture limitation safe: however heavy
+    // the cut came in, the captured amount cannot exceed the hold, so the one
+    // capture we get can never be declined for being over.
     const { cappedTotal } = await import('@/domain/pricing');
     const { cents } = await import('@/domain/types');
 
     const TOL = 0.1;
-    for (let i = 0; i < 2000; i += 1) {
-      const estLine = 100 + Math.floor(Math.random() * 500_00);
+    for (let i = 0; i < 5000; i += 1) {
+      const estLine = 1 + Math.floor(Math.random() * 500_00);
       const fee = Math.floor(Math.random() * 20_00);
-      // Actual weight can be anything, including absurdly heavy: the point is
-      // that the cap holds without assuming the weighing stayed in band.
+      // Deliberately unbounded above: the point is that the cap holds WITHOUT
+      // assuming the weighing stayed inside the tolerance band. A 3x overweight
+      // cut is not realistic, and it is exactly the case that must not charge.
       const actLine = Math.floor(Math.random() * estLine * 3);
 
       const ceiling = Math.ceil((estLine + fee) * (1 + TOL));
-      const capped = cappedTotal(
-        [{ estAmountCents: cents(estLine), actAmountCents: cents(actLine) }],
-        cents(fee),
-        TOL,
-      );
+      const capped = cappedTotal(cents(actLine), cents(estLine), cents(fee), TOL);
 
       expect(capped, `est=${estLine} act=${actLine} fee=${fee}`).toBeLessThanOrEqual(ceiling);
     }
+  });
+
+  it('caps at the tolerance ceiling once the actual passes it', async () => {
+    const { cappedTotal } = await import('@/domain/pricing');
+    const { cents } = await import('@/domain/types');
+
+    // 10,000 estimated, 10% tolerance, so the line cap is 11,000 whatever the
+    // scale said. 500 fee rides on top and is never itself capped.
+    expect(cappedTotal(cents(50_000), cents(10_000), cents(500), 0.1)).toBe(11_500);
+    // Under the cap, the customer pays what was actually cut.
+    expect(cappedTotal(cents(9_400), cents(10_000), cents(500), 0.1)).toBe(9_900);
   });
 });
 

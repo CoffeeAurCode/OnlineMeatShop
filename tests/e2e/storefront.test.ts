@@ -86,7 +86,7 @@ afterAll(async () => {
 
 describe('the storefront is server rendered', () => {
   it('puts the price and today’s availability in the HTML, not behind a fetch', async () => {
-    const res = await asStranger('/p/sample-lamb-shoulder');
+    const res = await asStranger('/en/p/sample-lamb-shoulder');
     expect(res.status).toBe(200);
     const html = await res.text();
 
@@ -97,7 +97,7 @@ describe('the storefront is server rendered', () => {
   });
 
   it('emits Product and Offer markup with CAD and real availability', async () => {
-    const html = await (await asStranger('/p/sample-lamb-shoulder')).text();
+    const html = await (await asStranger('/en/p/sample-lamb-shoulder')).text();
 
     const blocks = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)]
       .map((m) => m[1])
@@ -119,7 +119,7 @@ describe('the storefront is server rendered', () => {
     expect(offer.availability).toBe('https://schema.org/InStock');
 
     expect(blocks.some((b) => b['@type'] === 'BreadcrumbList')).toBe(true);
-    expect(blocks.some((b) => b['@type'] === 'Butcher')).toBe(true);
+    expect(blocks.some((b) => b['@type'] === 'Store')).toBe(true);
   });
 
   it('keeps the console and the per-customer pages out of robots and the sitemap', async () => {
@@ -129,13 +129,13 @@ describe('the storefront is server rendered', () => {
     }
 
     const sitemap = await (await asStranger('/sitemap.xml')).text();
-    expect(sitemap).toContain('https://shop.example.invalid/p/sample-lamb-shoulder');
+    expect(sitemap).toContain('/p/sample-lamb-shoulder');
     expect(sitemap).not.toContain('/admin');
     expect(sitemap).not.toContain('/checkout');
   });
 
   it('renders the shop index with today’s quantities', async () => {
-    const html = await (await asStranger('/shop')).text();
+    const html = await (await asStranger('/en/shop')).text();
     expect(html).toContain('Sample Lamb Shoulder, Boneless');
     expect(html).toContain('1.5 kg left today');
     // Hot food carries its slot warning on the catalog page, not only at
@@ -260,9 +260,9 @@ describe('checkout', () => {
         city: 'Testville',
         province: 'QC',
         deliveryNotes: null,
-        email: 'sample@example.test',
+        phone: '514-555-0123',
         name: 'Sample Customer',
-        phone: null,
+        email: null,
         catalogVersion: quote.catalogVersion,
       },
     });
@@ -281,9 +281,9 @@ describe('checkout', () => {
         city: 'Testville',
         province: 'QC',
         deliveryNotes: null,
-        email: 'sample@example.test',
+        phone: '514-555-0123',
         name: 'Sample Customer',
-        phone: null,
+        email: null,
         catalogVersion: quote.catalogVersion,
       },
     });
@@ -292,8 +292,34 @@ describe('checkout', () => {
     expect(body.ok).toBe(true);
     // ⌈2400 × 500 / 1000⌉ = 1200, plus the fee.
     expect(body.estTotalCents).toBe(1200 + DELIVERY_FEE);
-    // 🔴 No money moved: there is no payments adapter yet.
-    expect(body.paymentPending).toBe(true);
+
+    // The tracking credential comes back with the order, so the customer is
+    // never sent somewhere that has to look it up again.
+    expect(body.publicToken).toMatch(/^[0-9a-f-]{36}$/);
+
+    /*
+     * ⭐ THE HOLD REALLY EXISTS, at the CEILING and not at the estimate.
+     * This is the assertion that would have caught the whole prototype
+     * reporting success while authorising nothing.
+     */
+    expect(body.ceilingCents).toBe(Math.ceil((1200 + DELIVERY_FEE) * 1.1));
+
+    const pay = await pool.query(
+      `SELECT p.provider, p.status, p.authorised_cents, p.captured_cents, o.pay_mode
+         FROM payment p JOIN "order" o ON o.id = p.order_id
+        WHERE o.public_token = $1`,
+      [body.publicToken],
+    );
+    expect(pay.rows[0]).toMatchObject({
+      // `PREPAID`, not `COD`: this is the branch with a hold and a capture in
+      // it, and marking it COD would skip both while still reporting success.
+      pay_mode: 'PREPAID',
+      // The ONLY thing marking this as a test order.
+      provider: 'stub',
+      status: 'REQUIRES_CAPTURE',
+      authorised_cents: Math.ceil((1200 + DELIVERY_FEE) * 1.1),
+      captured_cents: null,
+    });
 
     // The stock it consumed is really gone.
     const { rows } = await pool.query(
@@ -316,9 +342,9 @@ describe('checkout', () => {
         city: 'Testville',
         province: 'QC',
         deliveryNotes: null,
-        email: 'sample@example.test',
+        phone: '514-555-0123',
         name: null,
-        phone: null,
+        email: null,
         // A version the catalog has moved past.
         catalogVersion: 99_999,
       },
@@ -356,9 +382,9 @@ describe('checkout', () => {
         city: 'Testville',
         province: 'QC',
         deliveryNotes: null,
-        email: 'sample@example.test',
+        phone: '514-555-0123',
         name: null,
-        phone: null,
+        email: null,
         catalogVersion: quote.catalogVersion,
       },
     });

@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 
 import { LOCALES, htmlLang, isLocale, t } from '@/i18n';
-import { shopName } from '@/ui/shop-config';
+import { shopName, siteOrigin } from '@/ui/shop-config';
 
 import '../globals.css';
 import { CartDrawer } from './_components/cart-drawer';
@@ -101,6 +101,25 @@ export default async function LocaleRootLayout({
         />
       </head>
       <body>
+        {/*
+          ⭐ THE SHOP NODE, SITE-WIDE. Every product page's Offer names this as
+          its `seller` by `@id`, so defining it on the home page alone would
+          leave that reference dangling on the 74 pages that actually matter
+          for search.
+        */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Store',
+              '@id': `${siteOrigin()}/#shop`,
+              name: shopName(),
+              url: `${siteOrigin()}/${locale}`,
+              currenciesAccepted: 'CAD',
+            }),
+          }}
+        />
         <a
           href="#main"
           className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-4 focus-visible:top-4 focus-visible:z-[100] focus-visible:rounded-sm focus-visible:bg-raised focus-visible:px-4 focus-visible:py-3 focus-visible:text-body focus-visible:font-semibold"

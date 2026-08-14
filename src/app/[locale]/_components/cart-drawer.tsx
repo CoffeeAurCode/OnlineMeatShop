@@ -43,7 +43,7 @@ interface QuoteResponse {
 export function CartDrawer({ locale }: { locale: Locale }) {
   const open = useCartOpen();
   const cart = useCart();
-  const [quote, setQuote] = useState<QuoteResponse | null>(null);
+  const [fetchedQuote, setQuote] = useState<QuoteResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -53,12 +53,10 @@ export function CartDrawer({ locale }: { locale: Locale }) {
   // Re-quote whenever the basket changes, and only while the drawer is open:
   // a closed drawer has nothing to show and the request would be wasted.
   useEffect(() => {
-    if (!open || cart.lines.length === 0) {
-      setQuote(null);
-      return;
-    }
+    // See `checkout-form.tsx`: the empty case is DERIVED below rather than
+    // written back into state from inside the effect.
+    if (!open || cart.lines.length === 0) return;
     const controller = new AbortController();
-    setFailed(false);
 
     void fetch('/api/quote', {
       method: 'POST',
@@ -75,7 +73,10 @@ export function CartDrawer({ locale }: { locale: Locale }) {
       }),
     })
       .then((r) => (r.ok ? (r.json() as Promise<QuoteResponse>) : Promise.reject(new Error('quote'))))
-      .then(setQuote)
+      .then((q) => {
+        setQuote(q);
+        setFailed(false);
+      })
       .catch((error: unknown) => {
         // An aborted request is the effect cleaning up after itself, not a
         // failure, and showing an error for it would flash on every keystroke.
@@ -105,6 +106,8 @@ export function CartDrawer({ locale }: { locale: Locale }) {
   if (!open) return null;
 
   const empty = cart.lines.length === 0;
+  // Derived, so removing the last line cannot leave a stale subtotal on screen.
+  const quote = empty ? null : fetchedQuote;
 
   return (
     <div className="fixed inset-0 z-50">

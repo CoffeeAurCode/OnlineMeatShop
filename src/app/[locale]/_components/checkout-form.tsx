@@ -58,7 +58,7 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
   const [notes, setNotes] = useState('');
   const [slotId, setSlotId] = useState('');
 
-  const [quote, setQuote] = useState<Quote | null>(null);
+  const [fetchedQuote, setQuote] = useState<Quote | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -68,10 +68,10 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
   // Re-quoted whenever the basket or the postal code changes, because the
   // delivery fee depends on the second and every amount depends on the first.
   useEffect(() => {
-    if (cart.lines.length === 0) {
-      setQuote(null);
-      return;
-    }
+    // No `setQuote(null)` here for the empty basket. Calling setState in an
+    // effect body causes a cascading render, and React 19's lint rejects it
+    // for good reason; the empty case is DERIVED below instead.
+    if (cart.lines.length === 0) return;
     const controller = new AbortController();
     void fetch('/api/quote', {
       method: 'POST',
@@ -101,6 +101,13 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
    * server-side regardless, because this is a food-safety rule and a filtered
    * dropdown is not an enforcement mechanism. Both exist on purpose.
    */
+  /*
+   * Derived, not stored. An emptied basket must not keep showing the totals of
+   * what used to be in it, and deriving that is both simpler and correct
+   * during the render where the basket changed.
+   */
+  const quote = cart.lines.length === 0 ? null : fetchedQuote;
+
   const hot = quote?.hasHotLine === true;
   const usable = slots.filter((s) => !s.cutoffPassed && (!hot || s.hotEligible));
 
@@ -472,6 +479,10 @@ function Field({
         autoComplete={autoComplete}
         aria-invalid={error !== undefined}
         aria-describedby={describedBy === '' ? undefined : describedBy}
+        // `aria-required` rather than `required`: the form is `noValidate` so
+        // that every message is ours and translated, but assistive technology
+        // still has to know the field is mandatory.
+        aria-required={required}
         className={`tap rounded-sm border bg-raised px-3 text-body text-ink placeholder:text-muted ${
           error === undefined ? 'border-line' : 'border-danger'
         }`}

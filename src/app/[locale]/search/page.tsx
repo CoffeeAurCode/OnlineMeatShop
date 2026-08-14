@@ -8,7 +8,7 @@ import {
   localisedName,
   prepsForProducts,
 } from '@/db/repositories/catalog';
-import { isLocale, t, type Locale } from '@/i18n';
+import { isLocale, t } from '@/i18n';
 
 import { ProductGrid } from '../_components/product-grid';
 import { SearchField } from '../_components/search-field';

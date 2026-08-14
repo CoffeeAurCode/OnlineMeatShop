@@ -5,7 +5,6 @@ import { notFound } from 'next/navigation';
 import { currentBusinessDay } from '@/db/repositories/availability';
 import { listCatalog, listCategories, prepsForProducts } from '@/db/repositories/catalog';
 import { isLocale, t } from '@/i18n';
-import { shopName, siteOrigin } from '@/ui/shop-config';
 
 import { CategoryRail } from './_components/category-nav';
 import { ProductGrid } from './_components/product-grid';
@@ -42,18 +41,8 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   const featured = catalog.filter((c) => c.availableG === null || c.availableG > 0).slice(0, 8);
   const preps = await prepsForProducts(featured.map((f) => f.id));
 
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Store',
-    '@id': `${siteOrigin()}/#shop`,
-    name: shopName(),
-    url: `${siteOrigin()}/${locale}`,
-  };
-
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-
       {/*
         Asymmetric split, not a centred hero. `min-h` rather than a fixed
         height, and `100dvh` is deliberately NOT used here: a hero pinned to
