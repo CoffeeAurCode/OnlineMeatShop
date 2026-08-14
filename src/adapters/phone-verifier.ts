@@ -60,10 +60,12 @@ export class StubPhoneVerifier implements PhoneVerifier {
  * ⭐ THE STUB MUST BE IMPOSSIBLE TO ENABLE IN PRODUCTION.
  *
  * A development backdoor that survives to production is the single most common
- * way this class of prototype becomes an incident, so this refuses at STARTUP
- * rather than at the first request. Same fail-closed shape as the admin guard
- * and the payment adapter, for the same reason: an application that cannot
- * verify must not boot pretending it can.
+ * way this class of prototype becomes an incident, so this refuses outright.
+ *
+ * ⚠ Like the payment adapter, this function alone only fires when something
+ * CALLS it. `src/instrumentation.ts` is what refuses at actual startup: it
+ * throws if `DEV_VERIFICATION_CODE` is set in production at all, so the
+ * misconfiguration fails the deploy instead of waiting to be exercised.
  *
  * Note what is NOT offered: there is no `ALLOW_STUB_VERIFIER` escape hatch to
  * match the payments one. A no-money demo deployment is a coherent thing to

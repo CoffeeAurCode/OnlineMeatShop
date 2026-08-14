@@ -142,3 +142,79 @@ describe('the stub phone verifier', () => {
     expect(phoneVerifier().name).toBe('stub');
   });
 });
+
+/**
+ * ⭐ THE STARTUP GUARD, which is what makes the two refusals above actually
+ * mean "in production" rather than "at the first checkout".
+ *
+ * Both adapters are constructed inside route handlers, so on their own a
+ * misconfigured deployment starts happily and fails at the worst possible
+ * moment: a real customer, mid-checkout. `src/instrumentation.ts` runs once
+ * before the server accepts a request, so the deploy fails its health check
+ * and the previous version keeps serving instead.
+ */
+describe('the startup guard', () => {
+  async function register(env: Record<string, string | undefined>) {
+    setNodeEnv(env.NODE_ENV ?? 'production');
+    process.env.NEXT_RUNTIME = 'nodejs';
+    for (const [k, v] of Object.entries(env)) {
+      if (k === 'NODE_ENV') continue;
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    const mod = await import('@/instrumentation');
+    return mod.register();
+  }
+
+  const GOOD = {
+    ALLOW_STUB_PAYMENTS: 'true',
+    STAFF_SESSION_SECRET: 'a-secret-that-is-at-least-32-characters-long',
+    DEV_VERIFICATION_CODE: undefined,
+  };
+
+  it('⭐ REFUSES TO START with no payment adapter configured', async () => {
+    await expect(register({ ...GOOD, ALLOW_STUB_PAYMENTS: undefined })).rejects.toThrow(
+      /No real payment adapter is configured/,
+    );
+  });
+
+  it('⭐ REFUSES TO START with no staff session secret', async () => {
+    // Safe but silently useless: the console fails closed and the owner finds
+    // out at 6am on the first trading day.
+    await expect(register({ ...GOOD, STAFF_SESSION_SECRET: undefined })).rejects.toThrow(
+      /STAFF_SESSION_SECRET is missing/,
+    );
+  });
+
+  it('refuses a session secret that is too short to be one', async () => {
+    await expect(register({ ...GOOD, STAFF_SESSION_SECRET: 'short' })).rejects.toThrow(
+      /STAFF_SESSION_SECRET is missing or shorter/,
+    );
+  });
+
+  it('⭐ REFUSES TO START with the dev verification code set', async () => {
+    // The one that is a security problem rather than an availability one.
+    await expect(register({ ...GOOD, DEV_VERIFICATION_CODE: '424242' })).rejects.toThrow(
+      /would expose order history/,
+    );
+  });
+
+  it('reports EVERY problem at once, not just the first', async () => {
+    // An operator fixing these one deploy at a time is an operator doing four
+    // deploys to find four variables.
+    await expect(
+      register({ ALLOW_STUB_PAYMENTS: undefined, STAFF_SESSION_SECRET: undefined }),
+    ).rejects.toThrow(/2 configuration problem/);
+  });
+
+  it('starts when the deployment is configured deliberately', async () => {
+    await expect(register(GOOD)).resolves.toBeUndefined();
+  });
+
+  it('does not interfere outside production', async () => {
+    // Development has none of these set and must not be blocked by any of it.
+    await expect(
+      register({ NODE_ENV: 'development', ALLOW_STUB_PAYMENTS: undefined, STAFF_SESSION_SECRET: undefined }),
+    ).resolves.toBeUndefined();
+  });
+});

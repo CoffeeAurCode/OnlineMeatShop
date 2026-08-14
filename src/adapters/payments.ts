@@ -215,12 +215,17 @@ export class StubPaymentAdapter implements PaymentAdapter {
  * ⭐ THE FAIL-CLOSED CHOICE.
  *
  * A stub payment adapter reaching production would take orders and move no
- * money, which is the most expensive possible failure for a shop. So this
- * refuses at STARTUP rather than at the first checkout: an application that
- * cannot pay is one that must not boot, not one that discovers the problem on
- * a Saturday.
+ * money, which is the most expensive possible failure for a shop.
  *
- * The same shape as the admin guard, for the same reason.
+ * ⚠ THIS FUNCTION IS THE SECOND LINE, NOT THE FIRST. It is called inside route
+ * handlers, so on its own it would only fail at the first CHECKOUT -- the
+ * worst possible moment, costing a real customer a real order. The comment
+ * here used to claim it refused "at startup", which was simply false.
+ *
+ * `src/instrumentation.ts` now makes that true: it runs once before the server
+ * accepts any request and throws on the same condition, so a misconfigured
+ * deploy fails its health check and the previous version keeps serving. This
+ * check stays as the backstop for anything that bypasses startup.
  */
 export function paymentAdapter(): PaymentAdapter {
   if (process.env.NODE_ENV === 'production' && process.env.ALLOW_STUB_PAYMENTS !== 'true') {
