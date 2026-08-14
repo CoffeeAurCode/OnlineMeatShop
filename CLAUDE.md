@@ -89,7 +89,7 @@ specific, expensive ways.
 
 ### Domain purity
 - **`src/domain/**` imports nothing that performs I/O.** No framework, no
-  database, no Stripe, no `fetch`, no clock. Time is passed in as a parameter.
+  database, no payment processor, no `fetch`, no clock. Time is passed in as a parameter.
 - This is enforced by `eslint.config.mjs`. If you want to disable one of those
   rules, you are about to make a mistake.
 - Two reasons: it makes the domain cheaply and exhaustively testable, and it
@@ -104,7 +104,8 @@ specific, expensive ways.
   several lines — cut preferences do not create separate products — so
   checking each line separately oversells.
 - Every failure path leaves reserved stock and slot bookings **byte-identical**.
-- **Never call Stripe, email, SMS or any HTTP inside a database transaction.**
+- **Never call a payment processor, email, SMS or any HTTP inside a database
+  transaction.**
 
 ### Connecting to the database
 - Three endpoints exist and they are not interchangeable:
@@ -130,7 +131,14 @@ specific, expensive ways.
   failed transaction, not silently selling stock that does not exist.
 
 ### Payments
-- Authorise a **ceiling**, capture the **exact** final amount.
+
+> The processor is **Clover**. Nothing below depends on the vendor: every rule
+> here is about the SHAPE of the flow, and everything goes through
+> `PaymentAdapter` in `src/adapters/payments.ts` rather than talking to a
+> processor directly.
+
+- Authorise a **ceiling**, capture the **exact** final amount. Authorising the
+  estimate itself fails whenever a cut comes in heavy, which is normal here.
 - **Exactly one capture per authorisation.** A partial capture automatically
   releases the remainder; you cannot capture again for a difference.
 - Checkout has a **durable idempotency boundary** created before any payment
@@ -139,8 +147,21 @@ specific, expensive ways.
 - Every webhook handler is **idempotent** and processes the event, its effects
   and its completion marker in **one transaction**. Otherwise a crash mid-handler
   loses the event permanently and silently.
+- **The capture happens AFTER the transaction commits, never inside it.** A
+  capture that succeeded inside a transaction which then rolled back is money
+  taken for an order that does not exist in that state, and it cannot be
+  un-taken. A crash between the two is the recoverable direction, and only
+  because `captureExact` is idempotent on the authorisation.
+- **A second capture is a REPLAY, not an error.** It is what a retry after that
+  crash looks like; the right answer is the amount actually taken.
 - Order status and payment status are **separate state machines** joined by an
   ID. Never derive one from the other.
+- ⚠ **`pay_mode` selects a CODE PATH, it does not describe whether money
+  moved.** `COD` skips authorisation and settlement entirely, so a stub-adapter
+  order marked `COD` would never exercise the path worth testing. Prototype
+  orders are `PREPAID`, which means **nothing in the data distinguishes them
+  from real prepaid orders except `payment.provider`.** Anything that reads
+  takings must filter on `provider <> 'stub'`.
 
 ### Security
 - The service-role key is **server-only**. Never in a `NEXT_PUBLIC_*` variable,
