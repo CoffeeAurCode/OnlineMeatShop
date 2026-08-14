@@ -112,7 +112,24 @@ export async function transitionOrder(
 // ── Finalise, written ────────────────────────────────────────────────────
 
 export type FinaliseOutcome =
-  | { ok: true; finalTotalCents: Cents; captureKey: string; captureCents: Cents | null }
+  | {
+      ok: true;
+      finalTotalCents: Cents;
+      captureKey: string;
+      captureCents: Cents | null;
+      /**
+       * Why there is nothing to capture, when there is nothing to capture.
+       *
+       * ⚠ `captureCents === null` has TWO causes that mean completely
+       * different things, and collapsing them is how a prepaid order that was
+       * never authorised gets quietly reported as "settled at the door":
+       *
+       *   `cod`             the order settles on delivery. Correct and final.
+       *   `noAuthorisation` a PREPAID order with no hold to draw on. A state
+       *                     somebody has to look at.
+       */
+      noCaptureReason: 'cod' | 'noAuthorisation' | null;
+    }
   | { ok: false; reason: 'notFound' | 'notInPreparation' | 'weighingIncomplete'; unweighed?: readonly string[] };
 
 /**
@@ -195,6 +212,12 @@ export async function finaliseOrder(orderId: string): Promise<FinaliseOutcome> {
       finalTotalCents: result.finalTotalCents,
       captureKey,
       captureCents: path?.kind === 'capture' ? path.captureCents : null,
+      noCaptureReason:
+        path?.kind === 'capture'
+          ? null
+          : o.payMode === 'COD'
+            ? ('cod' as const)
+            : ('noAuthorisation' as const),
     };
   });
 }
@@ -246,4 +269,23 @@ export async function enqueueNotification(
       dedupeKey: n.dedupeKey,
     })
     .onConflictDoNothing({ target: notificationOutbox.dedupeKey });
+}
+
+/**
+ * The authorisation id to capture against, or `null` when no hold exists.
+ *
+ * Separate from `finaliseOrder` on purpose: that runs inside the transaction
+ * and must not know about the processor at all, while this is read afterwards,
+ * by the caller that is about to make the network call.
+ */
+export async function authIdForOrder(
+  orderId: string,
+  tx: Tx | typeof db = db,
+): Promise<string | null> {
+  const rows = await tx
+    .select({ paymentIntentId: payment.paymentIntentId })
+    .from(payment)
+    .where(eq(payment.orderId, orderId))
+    .limit(1);
+  return rows[0]?.paymentIntentId ?? null;
 }

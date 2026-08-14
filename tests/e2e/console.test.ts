@@ -23,11 +23,14 @@ import { asStaff, asStranger, signInAsStaff, startServer, stopServer } from './h
  * real PostgreSQL, so what is under test is the routing, the guard, the Zod
  * boundary, the repositories, the domain and the SQL together.
  *
- * The one step that is NOT driven through the UI is placing the order:
- * checkout needs a Stripe authorisation and the payments adapter does not
- * exist yet, so the order is created through the placement repository with a
- * pre-authorised attempt. That is a real gap and it is named here rather than
- * papered over.
+ * The one step NOT driven through the UI is placing the order: this suite
+ * creates it through the placement repository with a pre-authorised attempt,
+ * so it can exercise the checkout-attempt path that the storefront does not
+ * use. The consequence is that the order has NO payment row, which is why
+ * finalise reports `noAuthorisation` here rather than capturing.
+ *
+ * The full browse-to-capture-to-tracking path, with a real hold, is
+ * `full-path.test.ts`.
  *
  * ⚠ Fixtures are fictional. This repository is public. See CLAUDE.md §1.
  */
@@ -244,12 +247,26 @@ describe('the console runs a trading day', () => {
     // ── 6. The exact total ───────────────────────────────────────────────
     const finalised = await asStaff('/api/admin/finalise', { json: { orderId } });
     expect(finalised.status).toBe(200);
-    const settled = (await finalised.json()) as { finalTotalCents: number; capturePending: boolean };
+    const settled = (await finalised.json()) as {
+      finalTotalCents: number;
+      captured: boolean;
+      reason: string | null;
+    };
 
     // 1988 (weighed lamb) + 950 (pack, never re-priced) + 500 (delivery).
     expect(settled.finalTotalCents).toBe(1988 + PACK_PRICE + DELIVERY_FEE);
-    // The money has NOT moved: there is no payments adapter yet.
-    expect(settled.capturePending).toBe(true);
+    /*
+     * ⚠ NO HOLD EXISTS ON THIS ORDER, because it was placed directly through
+     * the repository rather than through `/api/checkout`, which is what
+     * authorises. Finalise therefore reports `noAuthorisation` rather than
+     * crashing or silently claiming to have taken money.
+     *
+     * That is a real state somebody has to look at, not a transient failure,
+     * and the order itself is priced correctly either way. The happy path with
+     * a real hold is covered end to end in `full-path.test.ts`.
+     */
+    expect(settled.captured).toBe(false);
+    expect(settled.reason).toBe('noAuthorisation');
 
     // ── 7. The order screen shows the final amount, not the estimate ─────
     const detail = await asStaff(`/admin/orders/${orderId}`);
