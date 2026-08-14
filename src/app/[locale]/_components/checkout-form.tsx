@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { isValidPostalCode, normalisePostalCode } from '@/domain/serviceability';
 import { quoteProblemMessage, t, type Locale } from '@/i18n';
 import { clearCart, lineKey, useCart } from '@/ui/cart';
 import { money, weight } from '@/ui/format';
@@ -124,6 +125,29 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
   // before or after typing an address.
   const hasProblem = quote?.lines.some((l) => l.problem !== null) ?? false;
 
+  /*
+   * ⚠ TWO DIFFERENT FAILURES, TWO DIFFERENT SENTENCES. `fsaOf` returns null both
+   * for a postal code that is malformed and for one the shop does not serve, so
+   * `checkServiceability` collapses them into `outsideDeliveryArea` — right for
+   * a precondition, wrong for a person. Told "we do not deliver to that postal
+   * code yet", someone who typed `G0AJ9Z` goes looking for another shop instead
+   * of for their own typo. Decided here rather than server-side because whether
+   * a code is well-formed is knowable without asking anybody.
+   *
+   * ⚠ NOT UNTIL SIX CHARACTERS ARE IN. A field that says "that is not a postal
+   * code" on the first keystroke is telling the truth and is still worse than
+   * saying nothing: every correct entry passes through five invalid prefixes on
+   * its way in. `H2X 1Y4` is judged the moment it is complete, and `validate()`
+   * catches a short one on submit.
+   */
+  const typedPostalCode = normalisePostalCode(postalCode);
+  const postalCodeMessage =
+    typedPostalCode.length >= 6 && !isValidPostalCode(typedPostalCode)
+      ? t(locale, 'errors.invalidPostalCode')
+      : quote?.serviceable === false
+        ? t(locale, 'errors.outsideDeliveryArea')
+        : undefined;
+
   const hot = quote?.hasHotLine === true;
   const usable = slots.filter((s) => !s.cutoffPassed && (!hot || s.hotEligible));
 
@@ -135,6 +159,9 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
     if (line1.trim() === '') errors.line1 = t(locale, 'checkout.required');
     if (city.trim() === '') errors.city = t(locale, 'checkout.required');
     if (postalCode.trim() === '') errors.postalCode = t(locale, 'checkout.required');
+    else if (!isValidPostalCode(postalCode)) {
+      errors.postalCode = t(locale, 'errors.invalidPostalCode');
+    }
     if (slotId === '') errors.slotId = t(locale, 'checkout.required');
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -298,10 +325,7 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
           id="postalCode"
           label={t(locale, 'checkout.postalLabel')}
           help={t(locale, 'checkout.postalHelp')}
-          error={
-            fieldErrors.postalCode ??
-            (quote?.serviceable === false ? t(locale, 'errors.outsideDeliveryArea') : undefined)
-          }
+          error={fieldErrors.postalCode ?? postalCodeMessage}
           value={postalCode}
           onChange={setPostalCode}
           autoComplete="postal-code"

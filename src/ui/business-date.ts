@@ -19,6 +19,26 @@ export function businessDateIn(timeZone: string, now: Date): string {
 }
 
 /**
+ * `businessDateIn`, shifted by whole days on the CALENDAR.
+ *
+ * ⚠ NOT `now.getTime() + days * 86_400_000`. That adds a DURATION, and a
+ * duration is not a day: on the night the clocks go forward, 23:30 local plus
+ * twenty-four real hours formats as 00:30 two dates later, so a three-day
+ * horizon silently becomes four — once a year, at night. Resolve the local date
+ * first, then count in the calendar, where a day is a day by definition.
+ *
+ * `Date.UTC` is used purely as a calendar here: it is what rolls `2026-01-30 +
+ * 3` into February and gets leap years right. No instant in it means anything.
+ */
+export function businessDatePlus(timeZone: string, now: Date, days: number): string {
+  const today = businessDateIn(timeZone, now);
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7));
+  const d = Number(today.slice(8, 10));
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/**
  * The configured shop timezone.
  *
  * Falls back to `America/Toronto` rather than to the host's zone: a server in

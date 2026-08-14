@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { currentBusinessDay } from '@/db/repositories/availability';
 import { slotsFrom } from '@/db/repositories/fulfilment';
 import { isLocale, t, type Locale } from '@/i18n';
-import { businessDateIn, shopTimeZone, slotWindow } from '@/ui/business-date';
+import { businessDateIn, businessDatePlus, shopTimeZone, slotWindow } from '@/ui/business-date';
 
 import { CheckoutForm } from '../_components/checkout-form';
 
@@ -29,17 +29,28 @@ export const dynamic = 'force-dynamic';
  * cut-off has passed is a fact about the moment the data was fetched rather
  * than about the moment React happens to render it.
  */
+/**
+ * How many days ahead a window may be chosen, counting today.
+ *
+ * DTM §19 DQ-9, an assumption rather than a client answer: three days keeps
+ * every booked slot well inside the life of a card authorisation, since the
+ * money is only captured once the fish has been weighed. The seed deliberately
+ * creates more days than this — see `slotsFrom`.
+ */
+const BOOKING_HORIZON_DAYS = 3;
+
 async function loadSlots(tz: string, locale: Locale) {
-  const today = businessDateIn(tz, new Date());
-  const slots = await slotsFrom(today);
-  const now = Date.now();
+  const now = new Date();
+  const today = businessDateIn(tz, now);
+  const slots = await slotsFrom(today, businessDatePlus(tz, now, BOOKING_HORIZON_DAYS - 1));
+  const nowMs = now.getTime();
 
   return slots.map((s) => ({
     id: s.id,
     label: slotWindow(tz, new Date(s.startsAtMs), new Date(s.endsAtMs), locale),
     hotEligible: s.hotEligible,
     full: s.bookedCount >= s.capacity,
-    cutoffPassed: s.cutoffAtMs <= now,
+    cutoffPassed: s.cutoffAtMs <= nowMs,
   }));
 }
 

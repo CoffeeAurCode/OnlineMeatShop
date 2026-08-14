@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, lte, sql } from 'drizzle-orm';
 
 import { db, type Tx } from '@/db/client';
 import { serviceableFsa, slot, zone } from '@/db/schema';
@@ -101,19 +101,37 @@ const SLOT_COLUMNS = {
 } as const;
 
 /**
- * Slots on or after a date, for the picker. **Read-only, no locks** — the
- * storefront must never block a placement.
+ * Slots between two business dates, inclusive, for the picker. **Read-only, no
+ * locks** — the storefront must never block a placement.
  *
  * The cutoff filter is NOT applied here. The picker needs to show a closed
  * slot as closed rather than silently omit it, or the customer refreshes and
  * wonders where the 5pm delivery went. `evaluateSlot` decides; this returns
  * the raw rows.
+ *
+ * ⚠ `throughDate` IS THE BOOKING HORIZON AND IT IS NOT COSMETIC. How far ahead
+ * slot rows EXIST and how far ahead a customer may BOOK are two numbers, and
+ * collapsing them breaks one of the two:
+ *
+ * 1. A card authorisation does not live forever, and the capture only happens
+ *    once the fish is weighed. A window three weeks out is a hold that has
+ *    expired by settlement (DTM §19 DQ-9 caps booking at three days).
+ * 2. The seed creates far more runway than that on purpose, so that a prototype
+ *    nobody re-seeds keeps working. Unbounded, all of it reaches the picker:
+ *    four windows a day over fourteen days is fifty-six radio buttons on a
+ *    phone, which is not a delivery-time chooser.
  */
-export async function slotsFrom(fromDate: string, tx: Tx | typeof db = db): Promise<readonly SlotView[]> {
+export async function slotsFrom(
+  fromDate: string,
+  throughDate: string,
+  tx: Tx | typeof db = db,
+): Promise<readonly SlotView[]> {
   const rows = await tx
     .select(SLOT_COLUMNS)
     .from(slot)
-    .where(and(gte(slot.serviceDate, fromDate), eq(slot.active, true)))
+    .where(
+      and(gte(slot.serviceDate, fromDate), lte(slot.serviceDate, throughDate), eq(slot.active, true)),
+    )
     .orderBy(slot.startsAt);
   return rows.map(toView);
 }

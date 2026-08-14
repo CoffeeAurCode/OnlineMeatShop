@@ -180,6 +180,7 @@
     "devNotice": "Mode développement. Les numéros ne sont pas vérifiés et le code n'est pas envoyé par texto."
   },
   "errors": {
+    "invalidPostalCode": "Cela ne ressemble pas à un code postal canadien. Exemple : H2X 1Y4.",
     "outsideDeliveryArea": "Nous ne livrons pas encore à ce code postal.",
     "insufficientStock": "Il ne reste pas assez de {name} aujourd'hui.",
     "insufficientStockGeneric": "Il ne reste pas assez d'un de ces articles aujourd'hui.",

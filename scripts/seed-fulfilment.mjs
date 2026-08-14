@@ -24,10 +24,13 @@
  *   DIRECT_DATABASE_URL=postgres://... node scripts/seed-fulfilment.mjs
  *
  * Optional:
- *   SEED_FSA_PREFIXES=H,M   first letters of the FSAs to serve (default H,M)
- *   SEED_SLOT_DAYS=4        today plus the next three (DTM §19 DQ-9: cap
- *                           booking at 3 days out, well inside the card
- *                           authorisation window)
+ *   SEED_FSA_PREFIXES=H,M   first letters of the FSAs to serve. THE DEFAULT IS
+ *                           EVERY LETTER CANADA POST USES — see below.
+ *   SEED_SLOT_DAYS=14       how many days of windows to CREATE. The picker only
+ *                           offers the first three (DTM §19 DQ-9, bounded in
+ *                           `slotsFrom`); the rest is runway, so that a
+ *                           prototype nobody re-seeds runs out of windows in a
+ *                           fortnight rather than in two days.
  *   SHOP_TIMEZONE=America/Toronto
  */
 
@@ -47,8 +50,27 @@ if (!url) {
 }
 
 const tz = process.env.SHOP_TIMEZONE ?? 'America/Toronto';
-const days = Number(process.env.SEED_SLOT_DAYS ?? 4);
-const prefixes = (process.env.SEED_FSA_PREFIXES ?? 'H,M')
+const days = Number(process.env.SEED_SLOT_DAYS ?? 14);
+/**
+ * ⚠ THE DEFAULT SERVES ALL OF CANADA, AND IT IS DELIBERATELY WRONG.
+ *
+ * The real radius is DQ-3, still with the client, and one storefront will never
+ * deliver outside its own city. This says yes to every Canadian postal code
+ * because what is being tested right now is the CUSTOMER FLOW — browse, order,
+ * track — and an `outsideDeliveryArea` refusal at step three ends that for
+ * everyone whose address is not in Montreal or Toronto, testers included.
+ *
+ * It is also NOT the shape the real answer will have: the plan is a GPS fix plus
+ * the address line, so serviceability becomes a distance rather than a table of
+ * three-character prefixes. Curating this list would be building the wrong
+ * mechanism more carefully. Pass SEED_FSA_PREFIXES to narrow it for a demo.
+ *
+ * Every first letter Canada Post issues: D, F, I, O, Q and U appear nowhere, W
+ * and Z never lead, and the count stays honest by leaving them out.
+ */
+const ALL_CANADA = 'A,B,C,E,G,H,J,K,L,M,N,P,R,S,T,V,X,Y';
+
+const prefixes = (process.env.SEED_FSA_PREFIXES ?? ALL_CANADA)
   .split(',')
   .map((p) => p.trim().toUpperCase())
   .filter((p) => /^[A-Z]$/.test(p));
@@ -115,8 +137,8 @@ try {
   );
   const zoneId = rows[0].id;
 
-  // `unnest` rather than a loop: 520 round trips to a pooler in another region
-  // is a minute of waiting for no reason.
+  // `unnest` rather than a loop: a few thousand round trips to a pooler in
+  // another region is minutes of waiting for no reason.
   await client.query(
     `INSERT INTO serviceable_fsa (fsa, zone_id)
        SELECT f, $2 FROM unnest($1::text[]) AS f
@@ -159,3 +181,7 @@ console.log(
     `and ${slotsInserted} new slots across ${days} day(s) in ${tz}.`,
 );
 console.log('⚠ Placeholder fulfilment data. Replace it with the real zone and windows (DQ-3, DQ-4).');
+if (prefixes.length > 3) {
+  console.log('⚠ This deployment now says YES to every Canadian postal code. That is a prototype');
+  console.log('  setting for testing the customer flow, not a delivery area.');
+}

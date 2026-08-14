@@ -118,3 +118,45 @@ describe('serviceability lookup', () => {
     expect(map.get('A1B')?.freeAboveCents).toBeNull();
   });
 });
+
+/**
+ * The booking horizon. The seed deliberately creates more days of windows than
+ * a customer may book, so that a prototype nobody re-seeds keeps working — which
+ * means the bound here is the ONLY thing keeping a fortnight of runway out of
+ * the checkout picker, and an off-by-one either way is invisible in a screenshot.
+ */
+describe('slotsFrom — the booking horizon', () => {
+  it('includes both ends of the range and excludes the day after it', async () => {
+    await seedSlot(pool, { serviceDate: '2026-08-14', startOffsetHours: 6 });
+    await seedSlot(pool, { serviceDate: '2026-08-16', startOffsetHours: 54 });
+    const beyond = await seedSlot(pool, { serviceDate: '2026-08-17', startOffsetHours: 78 });
+
+    const rows = await repo.slotsFrom('2026-08-14', '2026-08-16');
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.id)).not.toContain(beyond);
+  });
+
+  it('excludes days before the range', async () => {
+    await seedSlot(pool, { serviceDate: '2026-08-13' });
+    await seedSlot(pool, { serviceDate: '2026-08-14', startOffsetHours: 6 });
+
+    expect(await repo.slotsFrom('2026-08-14', '2026-08-16')).toHaveLength(1);
+  });
+
+  it('excludes an inactive slot, and returns one whose cutoff has passed', async () => {
+    await seedSlot(pool, { serviceDate: '2026-08-14', active: false });
+    // A closed window must still come back: the picker shows it as closed
+    // rather than silently dropping it. `evaluateSlot` decides, not this query.
+    const closed = await seedSlot(pool, {
+      serviceDate: '2026-08-14',
+      startOffsetHours: 1,
+      cutoffOffsetHours: -2,
+    });
+
+    const rows = await repo.slotsFrom('2026-08-14', '2026-08-16');
+
+    expect(rows.map((r) => r.id)).toEqual([closed]);
+    expect(rows[0]!.cutoffAtMs).toBeLessThan(Date.now());
+  });
+});

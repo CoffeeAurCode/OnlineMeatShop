@@ -180,6 +180,7 @@
     "devNotice": "Development mode. Phone numbers are not verified and the code is not sent by text."
   },
   "errors": {
+    "invalidPostalCode": "That does not look like a Canadian postal code. Example: H2X 1Y4.",
     "outsideDeliveryArea": "We do not deliver to that postal code yet.",
     "insufficientStock": "There is not enough of {name} left today.",
     "insufficientStockGeneric": "There is not enough of one of these left today.",

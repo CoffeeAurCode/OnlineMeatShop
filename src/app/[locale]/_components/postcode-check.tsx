@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { isValidPostalCode } from '@/domain/serviceability';
 import { t, type Locale } from '@/i18n';
 import { money } from '@/ui/format';
 
@@ -32,9 +33,18 @@ export function PostcodeCheck({ locale }: { locale: Locale }) {
   async function check(e: React.FormEvent) {
     e.preventDefault();
     if (value.trim() === '') return;
-    setBusy(true);
     setError(null);
     setResult(null);
+
+    // The server answers a malformed code with `served: false`, which is
+    // indistinguishable from a real address outside the radius. Say which of the
+    // two it is, and do not spend a round trip finding out.
+    if (!isValidPostalCode(value)) {
+      setError(t(locale, 'errors.invalidPostalCode'));
+      return;
+    }
+
+    setBusy(true);
 
     try {
       const res = await fetch('/api/serviceable', {
@@ -43,7 +53,7 @@ export function PostcodeCheck({ locale }: { locale: Locale }) {
         body: JSON.stringify({ postalCode: value }),
       });
       if (!res.ok) {
-        setError(t(locale, 'checkout.postalHelp'));
+        setError(t(locale, 'errors.generic'));
         setBusy(false);
         return;
       }
