@@ -13,7 +13,7 @@ import {
 } from '../integration/helpers/fixtures';
 import { grams } from '@/domain/types';
 
-import { asStaff, asStranger, startServer, stopServer } from './helpers/server';
+import { asStaff, asStranger, signInAsStaff, startServer, stopServer } from './helpers/server';
 
 /**
  * ⭐ A WHOLE TRADING DAY, END TO END, THROUGH THE CONSOLE.
@@ -45,6 +45,7 @@ beforeAll(async () => {
   pool = testPool();
   await truncateAll(pool);
   await startServer();
+  await signInAsStaff();
 }, 240_000);
 
 afterAll(async () => {
@@ -70,11 +71,18 @@ describe('the console runs a trading day', () => {
     expect(await res.text()).toContain('Sample Canary Cut');
   });
 
-  it('refuses the console and every admin write to a caller with no token', async () => {
+  it('refuses the console and every admin write to a caller with no session', async () => {
     const page = await asStranger('/admin');
     expect(page.status).toBe(200);
-    // The refusal is a rendered explanation, not the console.
-    expect(await page.text()).toContain('Console unavailable');
+
+    // A stranger gets the SIGN-IN FORM, not the console and not an error page.
+    // Checked by looking for the form rather than for prose, so rewording the
+    // page does not silently turn this assertion into a tautology.
+    const html = await page.text();
+    expect(html).toContain('name="password"');
+    expect(html).toContain('Sign in');
+    // And none of the console's actual content leaked into the refused page.
+    expect(html).not.toContain('Sample Canary Cut');
 
     // 404 rather than 403: answering "forbidden" confirms the route exists.
     const write = await asStranger('/api/admin/day', {

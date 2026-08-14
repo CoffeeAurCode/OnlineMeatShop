@@ -29,7 +29,20 @@ import { TEST_DATABASE_URL } from '../../integration/helpers/db';
 
 export const E2E_PORT = 3987;
 export const E2E_ORIGIN = `http://127.0.0.1:${E2E_PORT}`;
-export const E2E_TOKEN = 'e2e-console-token';
+export const E2E_STAFF_USER = 'e2e-owner';
+export const E2E_STAFF_PASSWORD = 'e2e-console-password';
+/** At least 32 characters, or the guard fails closed and every admin test 404s. */
+export const E2E_SESSION_SECRET = 'e2e-staff-session-secret-of-sufficient-length';
+
+/**
+ * The signed session cookie, obtained ONCE by actually signing in.
+ *
+ * Deliberately not forged locally. Going through `/api/admin/login` means the
+ * console suite exercises the real door -- password verification, session
+ * issuing, and the cookie attributes -- rather than a test-only shortcut that
+ * could keep passing after the real login broke.
+ */
+let staffCookie: string | null = null;
 
 let server: ChildProcess | null = null;
 
@@ -43,7 +56,7 @@ export async function startServer(): Promise<void> {
       env: {
         ...process.env,
         DATABASE_URL: TEST_DATABASE_URL,
-        ADMIN_PREVIEW_TOKEN: E2E_TOKEN,
+        STAFF_SESSION_SECRET: E2E_SESSION_SECRET,
         SHOP_TIMEZONE: 'America/Toronto',
         NODE_ENV: 'development',
         // Fictional, per CLAUDE.md §1. These make the sitemap, the canonical
@@ -115,9 +128,36 @@ function request(path: string, json: unknown, cookie: string | null): Promise<Re
   return fetch(`${E2E_ORIGIN}${path}`, init);
 }
 
+/**
+ * Create the staff account and sign in, once per suite.
+ *
+ * Called by `startServer`, so no test has to remember to do it. The account is
+ * created directly in the database because there is deliberately no sign-up
+ * route -- see `scripts/create-staff.mjs`.
+ */
+export async function signInAsStaff(): Promise<void> {
+  const { upsertStaff } = await import('@/db/repositories/staff');
+  await upsertStaff(E2E_STAFF_USER, E2E_STAFF_PASSWORD);
+
+  const res = await fetch(`${E2E_ORIGIN}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: E2E_STAFF_USER, password: E2E_STAFF_PASSWORD }),
+  });
+  if (!res.ok) throw new Error(`console sign-in failed: ${res.status} ${await res.text()}`);
+
+  const setCookie = res.headers.get('set-cookie');
+  if (setCookie === null) throw new Error('sign-in returned no session cookie');
+  staffCookie = setCookie.split(';')[0] ?? null;
+  if (staffCookie === null) throw new Error('could not read the session cookie');
+}
+
 /** A request as the signed-in owner. */
 export function asStaff(path: string, init: { json?: unknown } = {}): Promise<Response> {
-  return request(path, init.json, `admin_preview=${E2E_TOKEN}`);
+  if (staffCookie === null) {
+    throw new Error('call signInAsStaff() before asStaff()');
+  }
+  return request(path, init.json, staffCookie);
 }
 
 /** The same request with no console cookie at all. */

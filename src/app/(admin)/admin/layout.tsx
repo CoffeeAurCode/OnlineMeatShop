@@ -1,23 +1,38 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { GeistMono } from 'geist/font/mono';
 
 import { checkStaff, type StaffRefusal } from '@/app/admin-guard';
 
+import '../../globals.css';
 import { OfflineBar } from './_components/offline-bar';
+import { LoginForm } from './_components/login-form';
 
 /**
- * The console shell.
+ * The console shell, and THE SECOND ROOT LAYOUT.
  *
- * Deliberately not a dashboard. `04-PLAN` §11: this is a stack of
- * single-purpose screens operated one-handed at 6am, so the chrome is a title,
- * a way back, and nothing else. No sidebar, no tab bar, no breadcrumb trail —
- * every pixel of chrome is a pixel not showing a number the owner needs.
+ * It renders `<html>` because the storefront's root layout lives inside
+ * `[locale]` and this half of the app has no locale: the console is English
+ * only and always will be. It is one operator using a tool, not a shopfront.
+ *
+ * Deliberately not a dashboard. `04-PLAN` §11: a stack of single-purpose
+ * screens operated one-handed at 6am, so the chrome is a title, a way back,
+ * and nothing else. No sidebar, no tab bar, no breadcrumb trail. Every pixel
+ * of chrome is a pixel not showing a number the owner needs.
  */
 
 export const metadata: Metadata = {
   title: 'Console',
   // Belt and braces: next.config.ts already sends X-Robots-Tag for /admin/*.
-  robots: { index: false, follow: false },
+  robots: { index: false, follow: false, nocache: true },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f4f7f5' },
+    { media: '(prefers-color-scheme: dark)', color: '#031923' },
+  ],
 };
 
 // Stock and order figures are point-in-time. Rendering them from a cache is
@@ -25,40 +40,55 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const REFUSAL_COPY: Record<StaffRefusal, string> = {
-  productionDisabled:
-    'The console is disabled in production because staff sign-in has not been built yet. Nobody can reach it, including you.',
-  notConfigured: 'No ADMIN_PREVIEW_TOKEN is set, so there is no way to sign in.',
-  noToken: 'This browser has no console token. Set the admin_preview cookie to the configured value.',
-  badToken: 'That token does not match. Nothing has been unlocked.',
+/**
+ * What the operator is told, per refusal.
+ *
+ * ⚠ Only `notConfigured` gets a real explanation. Every other refusal is a
+ * failed sign-in, and the login form says so without distinguishing "no
+ * session" from "bad signature" from "deactivated" -- those differences are
+ * useful to somebody probing the door and to nobody else.
+ */
+const NEEDS_SETUP: Partial<Record<StaffRefusal, string>> = {
+  notConfigured:
+    'STAFF_SESSION_SECRET is not set, so no session can be signed and nobody can sign in. ' +
+    'Set it to at least 32 random characters, then create a staff account with scripts/create-staff.mjs.',
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const gate = await checkStaff();
 
   if (!gate.ok) {
+    const setupProblem = NEEDS_SETUP[gate.reason];
+
     return (
-      <main className={`${GeistMono.variable} mx-auto max-w-[38rem] px-4 py-16`}>
-        <h1 className="text-display font-semibold tracking-tight">Console unavailable</h1>
-        <p className="mt-4 max-w-[65ch] text-lead text-muted">{REFUSAL_COPY[gate.reason]}</p>
-        <p className="mt-6 max-w-[65ch] text-body text-muted">
-          The designed sign-in is Supabase Auth with the staff role re-checked against the database
-          on every write. Until that exists this guard fails closed, because an unauthenticated
-          console that edits stock and money is worse than one nobody can open.
-        </p>
-      </main>
+      <html lang="en-CA">
+        <body className={GeistMono.variable}>
+          <main className="mx-auto grid min-h-[100dvh] max-w-[26rem] content-center gap-6 px-4 py-16">
+            {setupProblem === undefined ? (
+              <LoginForm expired={gate.reason === 'expired'} />
+            ) : (
+              <>
+                <h1 className="!text-display">Console unavailable</h1>
+                <p className="max-w-[60ch] text-body text-muted">{setupProblem}</p>
+              </>
+            )}
+          </main>
+        </body>
+      </html>
     );
   }
 
   return (
-    <>
-      <OfflineBar />
-      {/*
-        `min-h-[100dvh]`, never `h-screen`. On iOS the address bar changes the
-        viewport height as it hides, and `100vh` makes the page jump under a
-        thumb that is already moving toward a button.
-      */}
-      <div className={`${GeistMono.variable} min-h-[100dvh] pb-28`}>{children}</div>
-    </>
+    <html lang="en-CA">
+      <body className={GeistMono.variable}>
+        <OfflineBar />
+        {/*
+          `min-h-[100dvh]`, never `h-screen`. On iOS the address bar changes the
+          viewport height as it hides, and `100vh` makes the page jump under a
+          thumb that is already moving toward a button.
+        */}
+        <div className="min-h-[100dvh] pb-28">{children}</div>
+      </body>
+    </html>
   );
 }

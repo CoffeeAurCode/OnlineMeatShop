@@ -2,65 +2,80 @@ import 'server-only';
 
 import { cookies } from 'next/headers';
 
+import { activeStaffById } from '@/db/repositories/staff';
+import { SESSION_COOKIE, readSession, sessionsConfigured } from '@/auth/session';
+
 /**
- * 🔴 THE CONSOLE'S ONLY DOOR — AND IT IS NOT THE REAL ONE YET.
+ * ⭐ THE CONSOLE'S ONLY DOOR, and it is now the real one.
  *
- * The designed authorisation model is Supabase Auth plus a `staff(user_id,
- * role, active)` table, with the role re-checked server-side against that
- * table on every admin mutation — never from a JWT claim, because a claim can
- * outlive the staff member it describes.
+ * This replaced a placeholder that compared a preview token and refused
+ * outright in production. The property that mattered about the placeholder is
+ * kept exactly: IT FAILS CLOSED. A missing signing secret, an unknown staff
+ * id, a deactivated account, a bad signature or an expired token all refuse.
+ * Nothing here has a fallback that lets somebody in.
  *
- * NONE OF THAT EXISTS YET. There is no `staff` table, no session, and no login
- * route, and the table cannot be added right now because the migration journal
- * carries a defect that makes the next migration silently no-op.
+ * ══ THE RULE THAT IS NOT NEGOTIABLE ═══════════════════════════════════════
  *
- * So this guard is a placeholder with one property that matters: **it fails
- * closed in production.** With no `ADMIN_PREVIEW_TOKEN` set, or with
- * `NODE_ENV=production`, every admin route and every admin mutation is refused.
- * The console is reachable only in development and test, against a token the
- * operator sets themselves.
+ * ⚠ THE COOKIE SAYS WHO, THE DATABASE SAYS WHETHER.
  *
- * ⚠ DO NOT relax this into "check a cookie and trust it" and call it done. The
- * replacement is: read the Supabase session, look the user up in `staff`,
- * require `active`, and cache nothing. Until then an unauthenticated console is
- * a worse outcome than an unavailable one — it edits stock and money.
+ * `activeStaffById` runs on EVERY call, and its result is not cached. A signed
+ * cookie describes what was true when it was signed; deactivating a staff
+ * member has to take effect now, not when a twelve hour token expires. Caching
+ * this "for performance" would reintroduce exactly the gap the check exists to
+ * close, and the cost is one indexed primary-key lookup.
+ *
+ * ⚠ Do not add a `role` field to the cookie and read it from there. The role
+ * is read from the row, for the same reason.
  */
 
-export type StaffRefusal = 'notConfigured' | 'productionDisabled' | 'noToken' | 'badToken';
-
-export const ADMIN_COOKIE = 'admin_preview';
+export type StaffRefusal =
+  | 'notConfigured'
+  | 'noSession'
+  | 'badSession'
+  | 'expired'
+  | 'unknownStaff'
+  | 'deactivated';
 
 export interface StaffContext {
-  /** Always `operator` today. Becomes the real role once `staff` exists. */
-  readonly role: 'operator' | 'admin';
-  /** True while this guard is the placeholder rather than the designed one. */
-  readonly provisional: true;
+  readonly id: string;
+  readonly username: string;
+  readonly role: 'OWNER' | 'STAFF';
 }
 
 /**
- * Non-throwing form, for layouts that want to render an explanation rather
- * than a stack trace.
+ * Non-throwing form, for layouts that want to render an explanation or a login
+ * form rather than a stack trace.
  */
 export async function checkStaff(): Promise<
   { readonly ok: true; readonly staff: StaffContext } | { readonly ok: false; readonly reason: StaffRefusal }
 > {
-  // Production is refused before anything else is even read, so that a
-  // mis-set environment variable cannot open the console by accident.
-  if (process.env.NODE_ENV === 'production') {
-    return { ok: false, reason: 'productionDisabled' };
-  }
-
-  const expected = process.env.ADMIN_PREVIEW_TOKEN;
-  if (expected === undefined || expected === '') {
-    return { ok: false, reason: 'notConfigured' };
-  }
+  // Checked first so a deployment with no secret refuses everything, rather
+  // than refusing for some subtler reason further down that reads like a bug.
+  if (!sessionsConfigured()) return { ok: false, reason: 'notConfigured' };
 
   const jar = await cookies();
-  const presented = jar.get(ADMIN_COOKIE)?.value;
-  if (presented === undefined || presented === '') return { ok: false, reason: 'noToken' };
-  if (!timingSafeEqual(presented, expected)) return { ok: false, reason: 'badToken' };
+  const token = jar.get(SESSION_COOKIE)?.value;
 
-  return { ok: true, staff: { role: 'operator', provisional: true } };
+  const session = readSession(token, Date.now());
+  if (!session.ok) {
+    return {
+      ok: false,
+      reason:
+        session.reason === 'expired'
+          ? 'expired'
+          : session.reason === 'notConfigured'
+            ? 'notConfigured'
+            : token === undefined || token === ''
+              ? 'noSession'
+              : 'badSession',
+    };
+  }
+
+  // ⭐ The database has the final word. See the header.
+  const row = await activeStaffById(session.payload.sub);
+  if (row === null) return { ok: false, reason: 'unknownStaff' };
+
+  return { ok: true, staff: { id: row.id, username: row.username, role: row.role } };
 }
 
 /** Throwing form, for route handlers. Every admin mutation calls this first. */
@@ -75,21 +90,4 @@ export class StaffRefused extends Error {
     super(`admin refused: ${reason}`);
     this.name = 'StaffRefused';
   }
-}
-
-/**
- * Length-independent comparison.
- *
- * `node:crypto`'s `timingSafeEqual` throws on a length mismatch, which leaks
- * the length through the error path. Comparing every byte of the longer of the
- * two and folding the length difference in avoids both problems without
- * needing the import.
- */
-function timingSafeEqual(a: string, b: string): boolean {
-  let diff = a.length ^ b.length;
-  const n = Math.max(a.length, b.length);
-  for (let i = 0; i < n; i += 1) {
-    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
-  }
-  return diff === 0;
 }
