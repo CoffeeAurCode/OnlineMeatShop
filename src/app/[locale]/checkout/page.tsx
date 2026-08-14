@@ -29,14 +29,14 @@ export const dynamic = 'force-dynamic';
  * cut-off has passed is a fact about the moment the data was fetched rather
  * than about the moment React happens to render it.
  */
-async function loadSlots(tz: string) {
+async function loadSlots(tz: string, locale: Locale) {
   const today = businessDateIn(tz, new Date());
   const slots = await slotsFrom(today);
   const now = Date.now();
 
   return slots.map((s) => ({
     id: s.id,
-    label: slotWindow(tz, new Date(s.startsAtMs), new Date(s.endsAtMs)),
+    label: slotWindow(tz, new Date(s.startsAtMs), new Date(s.endsAtMs), locale),
     hotEligible: s.hotEligible,
     full: s.bookedCount >= s.capacity,
     cutoffPassed: s.cutoffAtMs <= now,
@@ -53,7 +53,7 @@ export default async function CheckoutPage({
 
   const tz = shopTimeZone();
   const day = await currentBusinessDay();
-  const slots = await loadSlots(tz);
+  const slots = await loadSlots(tz, locale);
 
   return (
     <div className="mx-auto max-w-[36rem] px-4 py-10 sm:px-6 sm:py-14">

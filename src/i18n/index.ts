@@ -103,6 +103,31 @@ export function translator(locale: Locale): Translator {
   return (path, vars) => t(locale, path, vars);
 }
 
+/**
+ * The sentence for a basket line the server refused to price.
+ *
+ * ⚠ A LINE WITH A PROBLEM IS PRICED BUT NOT SUMMED — `quoteBasket` leaves it
+ * out of `lineSubtotalCents`. A screen that renders the amount and swallows
+ * the problem therefore shows priced lines above a subtotal that does not add
+ * up, which is precisely what the live basket looked like with no trading day
+ * open. Lives here rather than in either component because the basket drawer
+ * and the checkout summary must not word the same refusal differently.
+ */
+export function quoteProblemMessage(
+  locale: Locale,
+  problem: 'productUnavailable' | 'invalidQuantity' | 'insufficientStock',
+  name: string,
+): string {
+  switch (problem) {
+    case 'productUnavailable':
+      return t(locale, 'errors.productUnavailable', { name });
+    case 'invalidQuantity':
+      return t(locale, 'errors.illegalQuantity');
+    case 'insufficientStock':
+      return t(locale, 'errors.insufficientStock', { name });
+  }
+}
+
 /** The other locale. Used by the language toggle, which has exactly one job. */
 export function otherLocale(locale: Locale): Locale {
   return locale === 'fr' ? 'en' : 'fr';

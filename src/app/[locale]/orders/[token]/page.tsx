@@ -66,7 +66,7 @@ export default async function TrackOrderPage({
       <Timeline status={order.status} locale={locale} />
 
       <section className="grid gap-3 rounded-md border border-line bg-raised p-5">
-        <Row label={t(locale, 'order.slot')} value={slotWindow(tz, new Date(order.slotStartsAtMs), new Date(order.slotEndsAtMs))} />
+        <Row label={t(locale, 'order.slot')} value={slotWindow(tz, new Date(order.slotStartsAtMs), new Date(order.slotEndsAtMs), locale)} />
         <Row
           label={t(locale, 'order.deliverTo')}
           value={[order.addressLine1, order.addressLine2, order.city, order.province, order.postalCode]

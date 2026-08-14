@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { TrashIcon, XIcon } from '@phosphor-icons/react/dist/ssr';
 
 import type { Locale } from '@/i18n';
-import { t } from '@/i18n';
+import { quoteProblemMessage, t } from '@/i18n';
 import { lineKey, removeLine, useCart, type CartLine } from '@/ui/cart';
 import { money, weight } from '@/ui/format';
 
@@ -30,7 +30,7 @@ interface QuoteLine {
   name: string;
   amountCents: number;
   isEstimate: boolean;
-  problem: string | null;
+  problem: 'productUnavailable' | 'invalidQuantity' | 'insufficientStock' | null;
 }
 
 interface QuoteResponse {
@@ -38,6 +38,8 @@ interface QuoteResponse {
   lineSubtotalCents: number;
   estTotalCents: number | null;
   hasEstimate: boolean;
+  /** `null` when the owner has not opened a trading day. Nothing is orderable. */
+  businessDayId: string | null;
 }
 
 export function CartDrawer({ locale }: { locale: Locale }) {
@@ -109,6 +111,13 @@ export function CartDrawer({ locale }: { locale: Locale }) {
   // Derived, so removing the last line cannot leave a stale subtotal on screen.
   const quote = empty ? null : fetchedQuote;
 
+  // The shop is shut, rather than short of one fish. Every line comes back
+  // unpriceable in that state, so the reason is said ONCE in the footer
+  // instead of four times as "not enough of this left today", which would be
+  // both wrong and alarming.
+  const closed = quote !== null && quote.businessDayId === null;
+  const blocked = closed || (quote?.lines.some((l) => l.problem !== null) ?? false);
+
   return (
     <div className="fixed inset-0 z-50">
       <button
@@ -162,12 +171,13 @@ export function CartDrawer({ locale }: { locale: Locale }) {
                   key={lineKey(line)}
                   line={line}
                   locale={locale}
-                  amountCents={
+                  quoted={
                     quote?.lines.find(
                       (q) =>
                         q.productId === line.productId && q.prepOptionId === line.prepOptionId,
-                    )?.amountCents ?? null
+                    ) ?? null
                   }
+                  shopClosed={closed}
                 />
               ))}
             </ul>
@@ -182,6 +192,10 @@ export function CartDrawer({ locale }: { locale: Locale }) {
                 <p className="mb-3 rounded-sm bg-danger-wash px-3 py-2 text-meta text-danger">
                   {t(locale, 'errors.generic')}
                 </p>
+              ) : closed ? (
+                <p className="mb-3 rounded-sm bg-danger-wash px-3 py-2 text-meta text-danger">
+                  {t(locale, 'errors.shopClosed')}
+                </p>
               ) : (
                 <div className="mb-3 flex items-baseline justify-between">
                   <span className="text-body font-semibold">{t(locale, 'basket.subtotal')}</span>
@@ -195,13 +209,29 @@ export function CartDrawer({ locale }: { locale: Locale }) {
                 </div>
               )}
               <p className="mb-4 text-meta text-muted">{t(locale, 'basket.estimateNote')}</p>
-              <Link
-                href={`/${locale}/checkout`}
-                onClick={closeCart}
-                className="tap-lg flex items-center justify-center rounded-sm bg-accent text-lead font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover active:scale-[0.99]"
-              >
-                {t(locale, 'basket.checkout')}
-              </Link>
+              {/*
+                A basket the server will refuse does not get a button to the
+                checkout. The refusal would be identical either way — P1…P8 do
+                not care what the drawer rendered — but finding out after
+                typing an address is the version that wastes the customer's
+                evening.
+              */}
+              {blocked ? (
+                <span
+                  aria-disabled="true"
+                  className="tap-lg flex items-center justify-center rounded-sm bg-accent text-lead font-semibold text-accent-ink opacity-60"
+                >
+                  {t(locale, 'basket.checkout')}
+                </span>
+              ) : (
+                <Link
+                  href={`/${locale}/checkout`}
+                  onClick={closeCart}
+                  className="tap-lg flex items-center justify-center rounded-sm bg-accent text-lead font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover active:scale-[0.99]"
+                >
+                  {t(locale, 'basket.checkout')}
+                </Link>
+              )}
             </footer>
           </>
         )}
@@ -213,26 +243,42 @@ export function CartDrawer({ locale }: { locale: Locale }) {
 function DrawerLine({
   line,
   locale,
-  amountCents,
+  quoted,
+  shopClosed,
 }: {
   line: CartLine;
   locale: Locale;
-  amountCents: number | null;
+  quoted: QuoteLine | null;
+  shopClosed: boolean;
 }) {
   const key = lineKey(line);
+  // Said once in the footer when the whole shop is shut; per line only when
+  // this line is the thing that is wrong.
+  const problem = shopClosed ? null : quoted?.problem ?? null;
   return (
     <li className="flex gap-3 py-4">
       <div className="min-w-0 flex-1">
         <p className="truncate text-body font-semibold">{line.name}</p>
         {line.prepLabel !== null && <p className="text-meta text-muted">{line.prepLabel}</p>}
         <p className="tnum mt-1 text-meta text-muted">{weight(line.requestedG, locale)}</p>
+        {problem !== null && (
+          <p className="mt-1 text-meta text-danger">
+            {quoteProblemMessage(locale, problem, quoted?.name ?? line.name)}
+          </p>
+        )}
       </div>
       <div className="flex flex-col items-end gap-2">
-        <span className="tnum text-body font-semibold">
-          {amountCents === null ? (
+        <span
+          className={
+            problem === null
+              ? 'tnum text-body font-semibold'
+              : 'tnum text-body font-semibold text-muted line-through'
+          }
+        >
+          {quoted === null ? (
             <span className="inline-block h-4 w-14 animate-pulse rounded-sm bg-soft motion-reduce:animate-none" />
           ) : (
-            money(amountCents, locale)
+            money(quoted.amountCents, locale)
           )}
         </span>
         <button

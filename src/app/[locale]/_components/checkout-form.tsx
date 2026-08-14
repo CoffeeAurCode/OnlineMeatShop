@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { t, type Locale } from '@/i18n';
+import { quoteProblemMessage, t, type Locale } from '@/i18n';
 import { clearCart, lineKey, useCart } from '@/ui/cart';
 import { money, weight } from '@/ui/format';
 
@@ -32,7 +32,18 @@ export interface SlotOption {
 }
 
 interface Quote {
-  lines: { productId: string; prepOptionId: string | null; name: string; amountCents: number }[];
+  lines: {
+    productId: string;
+    prepOptionId: string | null;
+    name: string;
+    amountCents: number;
+    /**
+     * ⚠ A LINE WITH A PROBLEM IS PRICED BUT NOT SUMMED. `quoteBasket` leaves
+     * it out of `lineSubtotalCents`, so rendering the amount without the
+     * problem shows a list of prices above a subtotal that does not add up.
+     */
+    problem: 'productUnavailable' | 'invalidQuantity' | 'insufficientStock' | null;
+  }[];
   lineSubtotalCents: number;
   deliveryFeeCents: number | null;
   estTotalCents: number | null;
@@ -107,6 +118,11 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
    * during the render where the basket changed.
    */
   const quote = cart.lines.length === 0 ? null : fetchedQuote;
+
+  // A basket the server will refuse does not get an enabled button. P1…P8
+  // reject it either way; the only question is whether the customer finds out
+  // before or after typing an address.
+  const hasProblem = quote?.lines.some((l) => l.problem !== null) ?? false;
 
   const hot = quote?.hasHotLine === true;
   const usable = slots.filter((s) => !s.cutoffPassed && (!hot || s.hotEligible));
@@ -352,8 +368,17 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
                 <span className="min-w-0">
                   <span className="font-semibold">{q?.name ?? l.name}</span>{' '}
                   <span className="tnum text-muted">{weight(l.requestedG, locale)}</span>
+                  {q?.problem != null && (
+                    <span className="block text-meta text-danger">
+                      {quoteProblemMessage(locale, q.problem, q.name)}
+                    </span>
+                  )}
                 </span>
-                <span className="tnum shrink-0">
+                <span
+                  className={
+                    q?.problem == null ? 'tnum shrink-0' : 'tnum shrink-0 text-muted line-through'
+                  }
+                >
                   {q === undefined ? '' : money(q.amountCents, locale)}
                 </span>
               </li>
@@ -406,7 +431,7 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
         )}
         <button
           type="submit"
-          disabled={submitting || quote?.estTotalCents == null}
+          disabled={submitting || hasProblem || quote?.estTotalCents == null}
           className="tap-lg inline-flex items-center justify-center rounded-sm bg-accent px-6 text-lead font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover disabled:opacity-60 active:scale-[0.99]"
         >
           {submitting ? t(locale, 'checkout.placing') : t(locale, 'checkout.place')}
