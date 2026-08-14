@@ -24,7 +24,27 @@ import { ProductGrid } from './_components/product-grid';
  * intensity.
  */
 
-export const revalidate = 300;
+/**
+ * ⚠ NOT PRERENDERED, AND NOT CACHED. This page shows TODAY'S STOCK.
+ *
+ * It was `revalidate = 300`, which meant two things that are both wrong here.
+ * The five minute window is a stock figure that can be five minutes stale on
+ * the page a customer lands on first. Worse, `/fr` and `/en` are known paths
+ * from the layout's `generateStaticParams`, so the page was PRERENDERED AT
+ * BUILD -- baking whatever the counter held on the day of the deploy into
+ * static HTML and serving it until the first revalidation.
+ *
+ * "Nothing rolls over" is the rule this whole application is built around. A
+ * cached home page quietly breaks it.
+ *
+ * The cost is three queries per request. At this shop's volume that is
+ * nothing, and it is server-rendered either way, so SEO is unaffected: a
+ * crawler sees the same complete HTML.
+ *
+ * It also means the BUILD no longer needs a database, which is what CI's
+ * canary build requires. See `src/db/build-time.ts`.
+ */
+export const dynamic = 'force-dynamic';
 
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;

@@ -9,6 +9,7 @@ import {
   prepsForProducts,
 } from '@/db/repositories/catalog';
 import type { Handling } from '@/domain/types';
+import { staticParamsOr } from '@/db/build-time';
 import { LOCALES, isLocale, t, type Locale } from '@/i18n';
 
 import { CategoryTabs, FilterBar } from '../../_components/category-nav';
@@ -24,7 +25,9 @@ const HANDLINGS = new Set<string>(['RAW', 'MARINATED', 'COOKED_CHILLED', 'COOKED
  * revalidate on the ordinary schedule.
  */
 export async function generateStaticParams() {
-  const categories = await listCategories('en');
+  // Guarded: a build must not require a reachable, migrated database. See
+  // `src/db/build-time.ts` for why an empty list is correct rather than fatal.
+  const categories = await staticParamsOr('the categories', () => listCategories('en'));
   return LOCALES.flatMap((locale) => categories.map((c) => ({ locale, category: c.slug })));
 }
 

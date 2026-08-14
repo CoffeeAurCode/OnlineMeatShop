@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { currentBusinessDay } from '@/db/repositories/availability';
 import { listCatalog } from '@/db/repositories/catalog';
-import { LOCALES, isLocale, t, type Locale } from '@/i18n';
+import { isLocale, t, type Locale } from '@/i18n';
 import { deliveryTowns, shopName } from '@/ui/shop-config';
 
 import { PostcodeCheck } from '../../_components/postcode-check';
@@ -29,10 +29,6 @@ import { PostcodeCheck } from '../../_components/postcode-check';
  * the real per-town copy exists** (blocked on DQ-1 and DQ-3).
  */
 
-export async function generateStaticParams() {
-  return LOCALES.flatMap((locale) => deliveryTowns().map((town) => ({ locale, town: town.slug })));
-}
-
 export async function generateMetadata({
   params,
 }: {
@@ -55,7 +51,17 @@ export async function generateMetadata({
   };
 }
 
-export const revalidate = 60;
+/**
+ * ⚠ NOT PRERENDERED. Same reason as the home page: this shows how many items
+ * are on the counter today, and a build-time snapshot of that is a lie by the
+ * next morning.
+ *
+ * `generateStaticParams` was removed rather than guarded. The town list comes
+ * from an environment variable and would have survived a database outage
+ * happily, which is exactly the trap: the paths would have been generated and
+ * then failed to render.
+ */
+export const dynamic = 'force-dynamic';
 
 export default async function TownPage({
   params,

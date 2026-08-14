@@ -11,6 +11,7 @@ import {
   prepsForProducts,
   productBySlug,
 } from '@/db/repositories/catalog';
+import { staticParamsOr } from '@/db/build-time';
 import { LOCALES, htmlLang, isLocale, t, type Locale } from '@/i18n';
 import { decimalString, money, ratePerKg, weight } from '@/ui/format';
 import { siteOrigin } from '@/ui/shop-config';
@@ -33,8 +34,9 @@ export const revalidate = 60;
 
 export async function generateStaticParams() {
   // Slugs only. Prices and quantities are re-read at request time; prerendering
-  // the paths just avoids a cold render.
-  const catalog = await listCatalog(null);
+  // the paths just avoids a cold render, which is exactly why it is safe to
+  // skip when the catalog cannot be read. See `src/db/build-time.ts`.
+  const catalog = await staticParamsOr('the catalog', () => listCatalog(null));
   return LOCALES.flatMap((locale) => catalog.map((c) => ({ locale, slug: c.slug })));
 }
 

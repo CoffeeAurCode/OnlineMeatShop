@@ -129,9 +129,29 @@ describe('the storefront is server rendered', () => {
     }
 
     const sitemap = await (await asStranger('/sitemap.xml')).text();
-    expect(sitemap).toContain('/p/sample-lamb-shoulder');
+
+    /*
+     * ⚠ ASSERTED WITH THE LOCALE, not as a bare substring.
+     *
+     * This check used to be `toContain('/p/sample-lamb-shoulder')`, which kept
+     * passing after the move to `/[locale]` while the sitemap was emitting
+     * unlocalised paths that now only REDIRECT. A sitemap full of redirects
+     * with no canonical URL for either language is exactly the kind of SEO
+     * defect nobody notices for a quarter.
+     */
+    expect(sitemap).toContain('https://shop.example.invalid/fr/p/sample-lamb-shoulder');
+    expect(sitemap).toContain('https://shop.example.invalid/en/p/sample-lamb-shoulder');
+    // Each entry names its translation, or the two locales compete with each other.
+    expect(sitemap).toContain('hreflang="fr-CA"');
+    expect(sitemap).toContain('hreflang="en-CA"');
+    // And nothing unlocalised, which is what the old assertion missed.
+    expect(sitemap).not.toMatch(/<loc>https:\/\/shop\.example\.invalid\/(?!fr\/|en\/|fr<|en<)/);
+
     expect(sitemap).not.toContain('/admin');
     expect(sitemap).not.toContain('/checkout');
+    // Tracking URLs are secret. A crawler that indexed one would publish an
+    // address.
+    expect(sitemap).not.toContain('/orders');
   });
 
   it('renders the shop index with today’s quantities', async () => {
