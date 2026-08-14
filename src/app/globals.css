@@ -106,6 +106,21 @@
    * crimson, which leaves coral alone in its hue.
    */
   --focus: var(--coral);
+  /*
+   * ⚠ THE COMPANION RING, AND WHY THE FOCUS INDICATOR IS TWO COLOURS.
+   *
+   * Coral on ice measures 2.94:1. WCAG wants 3:1 for a non-text indicator, so
+   * brand coral ALONE is a hair under, on the shop's own background. Measured,
+   * not estimated, by `tests/domain/palette-contrast.test.ts`.
+   *
+   * Darkening the coral would fix the number and cost the brand, and it would
+   * also close the lightness gap that currently separates the focus ring from
+   * `--danger`. So the coral is kept exactly as the brand specifies and a thin
+   * high-contrast ring is drawn against it. A two-part indicator is the
+   * standard answer here: the composite is unmistakable on any ground, and
+   * coral is still the colour a customer sees.
+   */
+  --focus-contrast: var(--ink);
 
   /*
    * ⚠ `--hot` IS NO LONGER A COLOUR-CODING. Hot cooked-to-order food is a
@@ -122,9 +137,15 @@
   /*
    * A COOL crimson, deliberately, and it has to stay distinguishable from
    * coral now that coral sits on every focus ring: an error message beside a
-   * focused input must still read as an error. Different hue, much darker.
+   * focused input must still read as an error.
+   *
+   * ⚠ IT WAS `#a81244` AND THAT WAS 29.7 DEGREES FROM CORAL, a hair inside the
+   * 30 the design notes call unreadable. The large lightness difference was
+   * carrying it, which is real but is only one axis. Moved a few degrees
+   * cooler to 38 degrees, at no cost: it still reads 7.46:1 on ice. Measured
+   * by the palette test, which is what noticed.
    */
-  --danger: #a81244;
+  --danger: #9c1052;
   --danger-ink: var(--ice);
   --danger-wash: #fdeef3;
 }
@@ -155,9 +176,24 @@
     --hot: var(--brand);
     --hot-ink: var(--midnight);
 
-    /* Flipped, because the fill lightens: dark ink on a light rose. White on
-       #ff7a9c is 2.1:1 and unreadable. */
-    --danger: #ff7a9c;
+    /* Flipped with everything else: the companion ring is light on midnight. */
+    --focus-contrast: var(--ice);
+
+    /*
+     * ⚠ PINKER THAN THE OBVIOUS CHOICE, ON PURPOSE.
+     *
+     * The first attempt here was `#ff7a9c`, a straight lightening of the
+     * crimson. On midnight it reads at a comfortable 7.3:1, so it looked fine
+     * -- and it sat only 25 degrees of hue from the coral focus ring, with
+     * almost no lightness between them. In dark mode BOTH have to be light to
+     * be readable, so the separation that carries in light mode is simply not
+     * available, and an error message beside a focused input would have read
+     * as more focus decoration.
+     *
+     * This one is 38 degrees away and 0.22 apart in luminance. Caught by the
+     * palette test, not by looking at it.
+     */
+    --danger: #ff9ecb;
     --danger-ink: #2a1119;
     --danger-wash: #2a1119;
   }
@@ -258,9 +294,16 @@
    * Coral, inherited from the brand, which gives it exactly this job and the
    * focus ring below. It appears nowhere else in the system.
    */
+  /*
+   * ⚠ MIDNIGHT ON CORAL, NOT WHITE.
+   *
+   * White on coral is 3.17:1, which fails AA for body text, and selected text
+   * is still text. Midnight is 5.68:1 on the same fill. The brand's own
+   * selection colour is preserved; only the ink on it changed.
+   */
   ::selection {
     background: var(--coral);
-    color: #ffffff;
+    color: var(--midnight);
   }
 
   /*
@@ -312,6 +355,12 @@
     outline: 2px solid var(--focus);
     outline-offset: 3px;
     border-radius: 2px;
+    /*
+     * The companion ring. It sits in the 3px gap the offset leaves, so the
+     * indicator reads as one object rather than two, and it guarantees the
+     * 3:1 that coral alone misses by 0.06 on this background.
+     */
+    box-shadow: 0 0 0 1px var(--focus-contrast);
   }
 
   /* Motion is progressive enhancement. Every animated surface becomes static

@@ -58,7 +58,16 @@ export default async function ShopPage({
 
   return (
     <div className="mx-auto max-w-[76rem] px-4 py-10 sm:px-6 sm:py-14">
-      <header className="grid gap-6">
+      {/*
+        ⚠ `grid-cols-[minmax(0,1fr)]`, not a bare `grid`.
+        A grid item's default `min-width: auto` means it CANNOT shrink below
+        its content, so the horizontally-scrolling tab strip below expands the
+        track instead of scrolling inside it, and the whole page gains a
+        horizontal scrollbar at phone widths. Measured at 360 and 390: the
+        document went to 1133px wide. An explicit `minmax(0, 1fr)` track is
+        what lets the child be narrower than its contents.
+      */}
+      <header className="grid grid-cols-[minmax(0,1fr)] gap-6">
         <h1 className="!text-display-lg">{t(locale, 'shop.title')}</h1>
         <CategoryTabs categories={categories} locale={locale} activeSlug={null} />
         <FilterBar locale={locale} basePath={`/${locale}/shop`} active={active} />

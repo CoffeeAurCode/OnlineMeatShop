@@ -26,7 +26,7 @@ export function CategoryRail({
   return (
     <ul
       className="
-        -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2
+        -mx-4 flex min-w-0 snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2
         [scrollbar-width:none] [&::-webkit-scrollbar]:hidden
         sm:mx-0 sm:px-0
         lg:grid lg:grid-cols-4 lg:overflow-visible
@@ -86,8 +86,10 @@ export function CategoryTabs({
   );
 
   return (
-    <nav aria-label={t(locale, 'shop.title')}>
-      <div className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden">
+    // `min-w-0` on both: a scroll container has to be allowed to be narrower
+    // than what it scrolls, or it is not a scroll container.
+    <nav aria-label={t(locale, 'shop.title')} className="min-w-0">
+      <div className="-mx-4 flex min-w-0 snap-x gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden">
         {tab(`/${locale}/shop`, t(locale, 'shop.allCategories'), activeSlug === null)}
         {categories.map((c) => tab(`/${locale}/shop/${c.slug}`, c.name, c.slug === activeSlug))}
       </div>
@@ -129,7 +131,7 @@ export function FilterBar({
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
       <span className="text-meta font-semibold uppercase tracking-[0.12em] text-muted">
         {t(locale, 'shop.filterHeading')}
       </span>
