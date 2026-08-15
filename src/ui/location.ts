@@ -177,23 +177,30 @@ export function locationLabel(l: DeliveryLocation): string | null {
  * and a page served over plain HTTP gets no geolocation at all, which is a
  * developer's problem and not the customer's.
  *
- * `enableHighAccuracy` is on: this is a street address, and the coarse
- * network-based fix can be a kilometre out in a city, which is several
- * delivery zones wide. The 15 second timeout is generous because a cold GPS
- * fix indoors genuinely takes that long, and the alternative is a spurious
- * failure that sends the customer to type an address they did not need to.
+ * ⭐ TWO ATTEMPTS, precise then coarse. High accuracy first, because this is a
+ * street address and the network-based fix can be a kilometre out in a city,
+ * which is several delivery zones wide. But a desktop has no GPS radio, and
+ * Chrome answers a high-accuracy request there with POSITION_UNAVAILABLE
+ * rather than quietly falling back — observed on the deployed site, where the
+ * same browser returned a 98 m network fix the moment `enableHighAccuracy` was
+ * turned off. So a failure that is not a refusal is retried coarse. A fix a
+ * block wide plus the typed door lines still finds the building; no fix at all
+ * sends a customer away to type an address they did not need to.
+ *
+ * A REFUSAL IS NEVER RETRIED. Asking twice cannot change the answer, and on a
+ * browser that shows a prompt per call it asks the customer twice.
+ *
+ * The 15 second timeout is generous because a cold GPS fix indoors genuinely
+ * takes that long; the coarse retry gets 8, because a network lookup that has
+ * not answered by then is not going to.
  */
 export type LocationError = 'denied' | 'unavailable' | 'timeout' | 'unsupported';
 
-export function requestDeviceLocation(): Promise<
-  { ok: true; lat: number; lng: number; accuracyM: number } | { ok: false; error: LocationError }
-> {
-  return new Promise((resolve) => {
-    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
-      resolve({ ok: false, error: 'unsupported' });
-      return;
-    }
+export type LocationFix = { ok: true; lat: number; lng: number; accuracyM: number };
+export type LocationFailure = { ok: false; error: LocationError };
 
+function getPosition(options: PositionOptions): Promise<LocationFix | LocationFailure> {
+  return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       (pos) =>
         resolve({
@@ -212,9 +219,32 @@ export function requestDeviceLocation(): Promise<
                 ? 'timeout'
                 : 'unavailable',
         }),
-      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 },
+      options,
     );
   });
+}
+
+export async function requestDeviceLocation(): Promise<LocationFix | LocationFailure> {
+  if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+    return { ok: false, error: 'unsupported' };
+  }
+
+  const precise = await getPosition({
+    enableHighAccuracy: true,
+    timeout: 15_000,
+    maximumAge: 60_000,
+  });
+  if (precise.ok || precise.error === 'denied') return precise;
+
+  const coarse = await getPosition({
+    enableHighAccuracy: false,
+    timeout: 8_000,
+    maximumAge: 60_000,
+  });
+  // The precise attempt's error is the more informative of the two when both
+  // fail — a GPS timeout followed by a network timeout is still a timeout, but
+  // a genuine "no provider at all" should not be reported as one.
+  return coarse.ok ? coarse : precise;
 }
 
 /**
