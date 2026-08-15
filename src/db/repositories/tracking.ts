@@ -44,7 +44,15 @@ export interface TrackedOrder {
   readonly addressLine2: string | null;
   readonly city: string;
   readonly province: string;
-  readonly postalCode: string;
+  /** Null for an order located by coordinates. Both cannot be absent. */
+  readonly postalCode: string | null;
+  /**
+   * Where the customer's device said they were, if it said. Six decimals,
+   * carried as strings all the way to the view for the reason the repository
+   * writes strings: a `numeric` is not a double and is not treated as one.
+   */
+  readonly lat: string | null;
+  readonly lng: string | null;
   readonly deliveryNotes: string | null;
   readonly estLineTotalCents: number;
   readonly deliveryFeeCents: number;
@@ -73,6 +81,8 @@ export async function orderByPublicToken(
       city: order.city,
       province: order.province,
       postalCode: order.postalCode,
+      lat: order.lat,
+      lng: order.lng,
       deliveryNotes: order.deliveryNotes,
       estLineTotalCents: order.estLineTotalCents,
       deliveryFeeCents: order.deliveryFeeCents,
@@ -126,6 +136,8 @@ export async function orderByPublicToken(
     city: row.city,
     province: row.province,
     postalCode: row.postalCode,
+    lat: row.lat,
+    lng: row.lng,
     deliveryNotes: row.deliveryNotes,
     estLineTotalCents: row.estLineTotalCents,
     deliveryFeeCents: row.deliveryFeeCents,

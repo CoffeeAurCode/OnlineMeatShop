@@ -35,12 +35,27 @@ export interface QueueLine {
 export interface QueueOrder {
   readonly id: string;
   readonly status: OrderStatus;
-  readonly postalCode: string;
+  /** Null for an order located by coordinates. See `order_is_locatable`. */
+  readonly postalCode: string | null;
   readonly estTotalCents: Cents;
   readonly finalTotalCents: Cents | null;
   readonly deliveryFeeCents: Cents;
   readonly hasHotLine: boolean;
   readonly lines: readonly QueueLine[];
+}
+
+/**
+ * What the console calls an order at the top of a screen.
+ *
+ * ⚠ IT USED TO BE THE POSTAL CODE, FULL STOP, and that stopped being possible
+ * when an order could be located by coordinates instead. The postal code is
+ * still preferred where there is one: the owner recognises `H2X 1Y4` and does
+ * not recognise a UUID. Where there is not, the first eight characters of the
+ * id are enough to tell two orders apart on one morning's queue, and they are
+ * what the URL already shows.
+ */
+export function orderRef(o: { id: string; postalCode: string | null }): string {
+  return o.postalCode ?? `#${o.id.slice(0, 8)}`;
 }
 
 export interface QueueSlot {

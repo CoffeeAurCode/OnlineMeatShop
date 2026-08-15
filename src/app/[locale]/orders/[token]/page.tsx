@@ -1,14 +1,21 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { CheckCircleIcon, CircleIcon } from '@phosphor-icons/react/dist/ssr';
+import {
+  CheckCircleIcon,
+  CircleIcon,
+  MapPinIcon,
+  NavigationArrowIcon,
+} from '@phosphor-icons/react/dist/ssr';
 
 import { orderByPublicToken, type TrackedOrder } from '@/db/repositories/tracking';
 import { LIFECYCLE_ORDER } from '@/domain/lifecycle';
 import { isLocale, t, type Locale } from '@/i18n';
 import { shopTimeZone, slotWindow } from '@/ui/business-date';
 import { money, weight } from '@/ui/format';
+import { mapsPinUrl } from '@/ui/location';
 
 import { TestOrderBanner } from '../../_components/money-sentence';
+import { TrackRefresh } from '../../_components/track-refresh';
 
 /**
  * Tracking. No login, no account, no session.
@@ -18,7 +25,19 @@ import { TestOrderBanner } from '../../_components/money-sentence';
  *
  * ⚠ `noindex`, and it matters more here than on the other private pages. These
  * URLs are genuinely secret, and a crawler that reached one and indexed it
- * would publish a customer's address.
+ * would publish a customer's address and their coordinates.
+ *
+ * ── THE STATUS LINE IS THE PRODUCT ────────────────────────────────────────
+ *
+ * ⭐ EVERY STEP ON IT IS DRIVEN BY THE OWNER'S CONSOLE. There is no courier
+ * telemetry, no map with a van moving on it, and none is planned: this shop has
+ * one van and the owner advances the order from a phone. The line is therefore
+ * exactly as truthful as the console, which is a stronger guarantee than an
+ * interpolated marker that keeps moving after the driver has stopped for lunch.
+ *
+ * The page is a delivery-app tracking screen in every other respect: a status
+ * hero that states the one thing the customer wants to know, the milestone
+ * line under it, the window, the address with a map link, and the receipt.
  */
 
 export const metadata: Metadata = {
@@ -50,30 +69,55 @@ export default async function TrackOrderPage({
   }
 
   const tz = shopTimeZone();
+  const window = slotWindow(
+    tz,
+    new Date(order.slotStartsAtMs),
+    new Date(order.slotEndsAtMs),
+    locale,
+  );
+  const settled = order.status === 'DELIVERED' || order.status === 'CANCELLED';
 
   return (
-    <div className="mx-auto grid max-w-[42rem] gap-8 px-4 py-10 sm:px-6 sm:py-14">
-      <header className="grid gap-3">
-        <h1 className="!text-display-lg">
-          {placed === '1' ? t(locale, 'order.confirmedTitle') : t(locale, 'order.statusHeading')}
-        </h1>
-        {placed === '1' && <p className="text-lead text-muted">{t(locale, 'order.confirmedBody')}</p>}
-      </header>
+    <div className="mx-auto grid max-w-[42rem] gap-6 px-4 py-8 sm:px-6 sm:py-12">
+      {/*
+        Polls while the order is live, stops once it is not. See the component
+        for why this is 30 seconds of polling rather than a socket.
+      */}
+      {!settled && <TrackRefresh seconds={30} />}
+
+      {placed === '1' && (
+        <p className="rounded-md border border-accent bg-soft px-4 py-3 text-body">
+          <strong className="font-semibold">{t(locale, 'order.confirmedTitle')}.</strong>{' '}
+          {t(locale, 'order.confirmedBody')}
+        </p>
+      )}
 
       {/* Unmissable, on every payment surface, including this one. */}
       {order.paymentProvider === 'stub' && <TestOrderBanner locale={locale} />}
 
+      {/*
+        ⭐ THE STATUS HERO. One sentence, large, answering the only question the
+        customer opened this page to ask. Everything else on the screen is
+        detail they may or may not want.
+      */}
+      <header className="grid gap-2 rounded-md bg-accent-solid px-5 py-6 text-accent-solid-ink">
+        <p className="text-meta uppercase tracking-[0.1em] text-white/70">
+          {t(locale, 'order.statusHeading')}
+        </p>
+        <h1 className="!text-display-lg !pb-0">{t(locale, `status.${order.status}`)}</h1>
+        <p className="max-w-[44ch] text-body text-white/80">
+          {t(locale, `status.${order.status}Body`)}
+        </p>
+        {order.status !== 'CANCELLED' && (
+          <p className="tnum mt-2 text-body font-semibold">
+            {t(locale, 'order.arriving', { window })}
+          </p>
+        )}
+      </header>
+
       <Timeline status={order.status} locale={locale} />
 
-      <section className="grid gap-3 rounded-md border border-line bg-raised p-5">
-        <Row label={t(locale, 'order.slot')} value={slotWindow(tz, new Date(order.slotStartsAtMs), new Date(order.slotEndsAtMs), locale)} />
-        <Row
-          label={t(locale, 'order.deliverTo')}
-          value={[order.addressLine1, order.addressLine2, order.city, order.province, order.postalCode]
-            .filter((x) => x !== null && x !== '')
-            .join(', ')}
-        />
-      </section>
+      <DeliverySection order={order} locale={locale} />
 
       <section className="grid gap-4">
         <h2 className="!font-sans !text-section !pb-0 !tracking-normal font-semibold">
@@ -112,12 +156,62 @@ export default async function TrackOrderPage({
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+/**
+ * Where it is going, and how to look at that on a map.
+ *
+ * ⚠ THE MAP IS A LINK, NOT AN EMBED, and that is a decision. An embedded map
+ * means a third-party script and an API key on a page that displays a
+ * customer's home address, plus a tile request from that customer's browser to
+ * a company that is not this shop, on a page they opened to check on some
+ * fish. A link costs one tap and leaks nothing until it is taken.
+ *
+ * ⭐ THE DELIVERY-PARTNER BLOCK IS BUILT AND CURRENTLY NEVER RENDERS, because
+ * nothing assigns a partner yet. It is here rather than added later so that
+ * the shape of the data the backend has to produce is written down where it
+ * will be read: a name and a phone number on the order, set from the console.
+ * See the backend plan, part 4.
+ */
+function DeliverySection({ order, locale }: { order: TrackedOrder; locale: Locale }) {
+  const address = [
+    order.addressLine1,
+    order.addressLine2,
+    order.city,
+    order.province,
+    order.postalCode,
+  ]
+    .filter((x) => x !== null && x !== '' && x !== '-')
+    .join(', ');
+
+  const hasPin = order.lat !== null && order.lng !== null;
+
   return (
-    <div className="grid gap-0.5 sm:grid-cols-[10rem_1fr] sm:gap-4">
-      <dt className="text-meta font-semibold uppercase tracking-[0.1em] text-muted">{label}</dt>
-      <dd className="text-body">{value}</dd>
-    </div>
+    <section className="grid gap-3 rounded-md border border-line bg-raised p-5">
+      <h2 className="!font-sans !text-body !pb-0 !tracking-normal font-semibold uppercase tracking-[0.1em] text-muted">
+        {t(locale, 'order.deliverTo')}
+      </h2>
+
+      <div className="flex items-start gap-3">
+        <MapPinIcon size={18} weight="fill" aria-hidden className="mt-0.5 shrink-0 text-accent" />
+        <div className="min-w-0 flex-1">
+          <p className="text-body">{address}</p>
+          {order.deliveryNotes !== null && (
+            <p className="mt-1 text-meta text-muted">{order.deliveryNotes}</p>
+          )}
+        </div>
+      </div>
+
+      {hasPin && (
+        <a
+          href={mapsPinUrl(Number(order.lat), Number(order.lng))}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="tap inline-flex w-fit items-center gap-2 rounded-sm border border-line px-3 text-meta font-semibold transition-colors hover:border-accent"
+        >
+          <NavigationArrowIcon size={14} weight="fill" aria-hidden />
+          {t(locale, 'order.viewOnMap')}
+        </a>
+      )}
+    </section>
   );
 }
 
@@ -157,8 +251,16 @@ function Totals({ order, locale }: { order: TrackedOrder; locale: Locale }) {
 }
 
 /**
- * The status walk. Cancelled is shown on its own rather than as a step,
- * because it is not a point on the line, it is the line ending.
+ * The status walk.
+ *
+ * Cancelled is shown on its own rather than as a step, because it is not a
+ * point on the line: it is the line ending.
+ *
+ * ⚠ HORIZONTAL ABOVE `sm`, VERTICAL BELOW IT. Six steps laid out horizontally
+ * on a 360px phone give each label 55px, which wraps "Out for delivery" onto
+ * three lines and makes the whole thing unreadable. The vertical form has room
+ * for the body copy under the current step, which is where the useful sentence
+ * lives.
  */
 function Timeline({ status, locale }: { status: string; locale: Locale }) {
   if (status === 'CANCELLED') {
@@ -172,31 +274,67 @@ function Timeline({ status, locale }: { status: string; locale: Locale }) {
   const reached = LIFECYCLE_ORDER.indexOf(status as never);
 
   return (
-    <ol className="grid gap-0">
-      {LIFECYCLE_ORDER.map((step, i) => {
-        const done = i <= reached;
-        const current = i === reached;
-        return (
-          <li key={step} className="flex gap-3">
-            <div className="flex flex-col items-center">
-              {done ? (
-                <CheckCircleIcon size={22} weight="fill" aria-hidden className="text-accent" />
-              ) : (
-                <CircleIcon size={22} aria-hidden className="text-line" />
-              )}
-              {i < LIFECYCLE_ORDER.length - 1 && (
-                <span className={`w-px flex-1 ${done ? 'bg-accent' : 'bg-line'}`} />
-              )}
-            </div>
-            <div className={`pb-6 ${done ? '' : 'opacity-50'}`}>
-              <p className="text-body font-semibold">{t(locale, `status.${step}`)}</p>
-              {current && (
-                <p className="text-meta text-muted">{t(locale, `status.${step}Body`)}</p>
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+    <>
+      {/* Phone: vertical, with the current step's explanation under it. */}
+      <ol className="grid gap-0 sm:hidden">
+        {LIFECYCLE_ORDER.map((step, i) => {
+          const done = i <= reached;
+          const current = i === reached;
+          return (
+            <li key={step} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <Dot done={done} />
+                {i < LIFECYCLE_ORDER.length - 1 && (
+                  <span className={`w-px flex-1 ${done ? 'bg-accent' : 'bg-line'}`} />
+                )}
+              </div>
+              <div className={`pb-5 ${done ? '' : 'opacity-45'}`}>
+                <p className="text-body font-semibold">{t(locale, `status.${step}`)}</p>
+                {current && (
+                  <p className="text-meta text-muted">{t(locale, `status.${step}Body`)}</p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      {/* Laptop: horizontal, the shape a delivery app uses. */}
+      <ol className="hidden sm:grid sm:grid-cols-6 sm:gap-0">
+        {LIFECYCLE_ORDER.map((step, i) => {
+          const done = i <= reached;
+          return (
+            <li key={step} className="grid justify-items-center gap-2 text-center">
+              <div className="flex w-full items-center">
+                <span
+                  className={`h-px flex-1 ${i === 0 ? 'bg-transparent' : done ? 'bg-accent' : 'bg-line'}`}
+                />
+                <Dot done={done} />
+                <span
+                  className={`h-px flex-1 ${
+                    i === LIFECYCLE_ORDER.length - 1
+                      ? 'bg-transparent'
+                      : i < reached
+                        ? 'bg-accent'
+                        : 'bg-line'
+                  }`}
+                />
+              </div>
+              <p className={`text-meta font-semibold ${done ? '' : 'text-muted opacity-60'}`}>
+                {t(locale, `status.${step}`)}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </>
+  );
+}
+
+function Dot({ done }: { done: boolean }) {
+  return done ? (
+    <CheckCircleIcon size={22} weight="fill" aria-hidden className="shrink-0 text-accent" />
+  ) : (
+    <CircleIcon size={22} aria-hidden className="shrink-0 text-line" />
   );
 }

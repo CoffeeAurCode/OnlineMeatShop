@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { orderForWeighing } from '@/db/repositories/orders';
+import { orderForWeighing, orderRef } from '@/db/repositories/orders';
 import { ADMIN_LOCALE, money, weight } from '@/ui/format';
 
 import { Screen } from '../../_components/shell';
@@ -28,7 +28,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   );
 
   return (
-    <Screen title={order.postalCode} back={{ href: '/admin/orders', label: 'Orders' }}>
+    <Screen title={orderRef(order)} back={{ href: '/admin/orders', label: 'Orders' }}>
       <p className="mt-1 text-body text-muted">
         {order.status.toLowerCase()}
         {order.hasHotLine ? ' · hot food' : ''}

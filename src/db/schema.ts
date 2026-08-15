@@ -382,10 +382,49 @@ export const zone = pgTable(
      * Those two are one typo apart and the difference is the whole margin.
      */
     freeAboveCents: integer('free_above_cents'),
+
+    /**
+     * ⭐ THE ZONE AS A CIRCLE, which is what a delivery area actually is.
+     *
+     * All three are NULL for a zone defined the old way, by the FSA prefixes
+     * pointing at it in `serviceable_fsa`. A zone may be defined either way or
+     * both ways; the CHECK below only insists that a circle is whole.
+     *
+     * Overlapping circles are LEGAL and useful: an inner ring at a lower fee
+     * inside an outer ring is the normal arrangement for a shop with one van.
+     * `checkServiceabilityAt` resolves a point to the SMALLEST circle
+     * containing it, so the tighter zone wins without the seed having to order
+     * anything.
+     *
+     * `numeric`, not `real`, for the reason the money rule gives: a coordinate
+     * that is compared in a test must not depend on the last bits of a double.
+     */
+    centreLat: numeric('centre_lat', { precision: 9, scale: 6 }),
+    centreLng: numeric('centre_lng', { precision: 9, scale: 6 }),
+    /** Whole metres. Integer against integer, so a boundary is decidable. */
+    radiusM: integer('radius_m'),
   },
   (t) => [
     check('zone_fee_non_negative', sql`${t.feeCents} >= 0`),
     check('zone_free_above_positive', sql`${t.freeAboveCents} IS NULL OR ${t.freeAboveCents} > 0`),
+
+    /**
+     * A circle is all three columns or none of them. Half a circle silently
+     * means "this zone covers nothing", which looks like a delivery outage and
+     * reads like a working configuration.
+     */
+    check(
+      'zone_circle_whole',
+      sql`(${t.centreLat} IS NULL AND ${t.centreLng} IS NULL AND ${t.radiusM} IS NULL)
+          OR (${t.centreLat} IS NOT NULL AND ${t.centreLng} IS NOT NULL AND ${t.radiusM} IS NOT NULL)`,
+    ),
+
+    check(
+      'zone_circle_on_earth',
+      sql`(${t.centreLat} IS NULL
+           OR (${t.centreLat} BETWEEN -90 AND 90 AND ${t.centreLng} BETWEEN -180 AND 180))
+          AND (${t.radiusM} IS NULL OR ${t.radiusM} > 0)`,
+    ),
   ],
 );
 
@@ -590,9 +629,20 @@ export const order = pgTable(
       .notNull()
       .references(() => customer.id, { onDelete: 'restrict' }),
 
-    /** Normalised: uppercase, no space. `fsa` is denormalised for reporting. */
-    postalCode: text('postal_code').notNull(),
-    fsa: text('fsa').notNull(),
+    /**
+     * Normalised: uppercase, no space. `fsa` is denormalised for reporting.
+     *
+     * ⚠ BOTH ARE NULLABLE SINCE THE ADDRESS BECAME A COORDINATE. An order
+     * placed from a phone that shared its location has no postal code, and it
+     * has a better answer than one. Writing a made-up code to keep the column
+     * NOT NULL would put fiction on a real order and quietly corrupt every
+     * report that groups by FSA.
+     *
+     * `order_is_locatable` below is what replaces the NOT NULL: an order still
+     * cannot exist without SOME way of finding the door.
+     */
+    postalCode: text('postal_code'),
+    fsa: text('fsa'),
 
     /**
      * ⭐ THE STREET ADDRESS. Until migration 0006 this table stored a postal
@@ -611,9 +661,13 @@ export const order = pgTable(
     deliveryNotes: text('delivery_notes'),
 
     /**
-     * NULL for the whole prototype. Populated once address capture becomes a
-     * map pin (`05-PLAN` §9.2), at which point serviceability changes from an
-     * FSA lookup to a distance.
+     * ⭐ WHERE THE DOOR IS. Populated whenever the customer's device shared a
+     * location, which is the primary address mechanism now rather than the
+     * eventual one: serviceability resolves a coordinate against a zone
+     * CIRCLE, and the delivery partner's route link is built from this pair.
+     *
+     * Still NULL for an order placed by someone who declined the permission
+     * and typed a postal code instead. Both paths are supported.
      *
      * `numeric`, not `real`: these are coordinates, and the float that is fine
      * for a map pin is not fine for a value that gets compared for equality
@@ -691,6 +745,20 @@ export const order = pgTable(
       'order_final_total_iff_weighed',
       sql`(${t.finalTotalCents} IS NULL)
           = (${t.status} IN ('PLACED', 'PREPARING', 'CANCELLED'))`,
+    ),
+
+    /**
+     * ⭐ AN ORDER MUST BE LOCATABLE. This is what took over from
+     * `postal_code NOT NULL`, and it is the stronger statement: the old
+     * constraint was satisfied by any six characters, this one insists on
+     * either a real coordinate pair or a postal code.
+     *
+     * The coordinate half also refuses a lone latitude, which is the shape a
+     * half-finished write produces.
+     */
+    check(
+      'order_is_locatable',
+      sql`(${t.lat} IS NOT NULL AND ${t.lng} IS NOT NULL) OR ${t.postalCode} IS NOT NULL`,
     ),
 
     /** inv-O3, in the one form a CHECK can express it. */

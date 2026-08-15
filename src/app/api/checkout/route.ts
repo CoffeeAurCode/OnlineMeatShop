@@ -52,13 +52,32 @@ const schema = z.object({
     )
     .min(1)
     .max(100),
-  postalCode: z.string().min(3).max(20),
+  /**
+   * ⚠ NULLABLE, AND THAT IS THE POINT OF THIS SHAPE. An order located by GPS
+   * has no postal code and does not need one. The refinement below is what
+   * insists that SOMETHING locates the order.
+   */
+  postalCode: z.string().min(3).max(20).nullable().default(null),
+  lat: z.number().min(-90).max(90).nullable().default(null),
+  lng: z.number().min(-180).max(180).nullable().default(null),
 
   addressLine1: z.string().trim().min(1).max(200),
   addressLine2: z.string().trim().max(200).nullable(),
   city: z.string().trim().min(1).max(120),
-  province: z.string().trim().min(2).max(80),
+  /**
+   * Province, state, or whatever the region is called where the customer
+   * lives. Free text rather than an enum of the thirteen Canadian codes: the
+   * shop delivers inside one radius, but test orders are placed from
+   * everywhere, and a dropdown that cannot express the answer is worse than a
+   * field that can.
+   */
+  province: z.string().trim().min(1).max(80),
   deliveryNotes: z.string().trim().max(500).nullable(),
+  /**
+   * How the parcel should be handed over. Free text is deliberate: it is
+   * printed for a human to read and never branched on.
+   */
+  dropOff: z.string().trim().max(80).nullable().default(null),
 
   slotId: z.uuid(),
 
@@ -73,7 +92,10 @@ const schema = z.object({
 
   /** Echoed back from the quote so a moved catalog is detectable. */
   catalogVersion: z.number().int().positive(),
-});
+})
+  .refine((v) => v.postalCode !== null || (v.lat !== null && v.lng !== null), {
+    message: 'a postal code or a coordinate pair is required',
+  });
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -93,9 +115,11 @@ export async function POST(request: Request) {
   const day = await currentBusinessDay();
   if (day === null) return NextResponse.json({ reason: 'shopClosed' }, { status: 409 });
 
+  const point = input.lat !== null && input.lng !== null ? { lat: input.lat, lng: input.lng } : null;
+
   // Re-quoted so a catalog change between the screen and this call is caught
   // before an order is written and before a card is touched.
-  const quote = await quoteBasket(input.lines, input.postalCode);
+  const quote = await quoteBasket(input.lines, { point, postalCode: input.postalCode });
   if (quote.catalogVersion !== input.catalogVersion) {
     return NextResponse.json(
       {
@@ -116,12 +140,20 @@ export async function POST(request: Request) {
     attemptId: null,
     customerId,
     postalCode: input.postalCode,
+    point,
     address: {
       line1: input.addressLine1,
       line2: input.addressLine2,
       city: input.city,
       province: input.province,
-      notes: input.deliveryNotes,
+      /*
+       * The drop-off choice rides in the notes rather than in a column of its
+       * own. It is one short phrase, it is only ever read by the person
+       * carrying the box, and nothing branches on it — so a column would buy a
+       * migration and an enum to express a sentence.
+       */
+      notes: [input.dropOff, input.deliveryNotes].filter((x) => x !== null && x !== '').join(' · ')
+        || null,
     },
     slotId: input.slotId,
     businessDayId: day.id,

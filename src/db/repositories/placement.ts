@@ -12,7 +12,13 @@ import {
   slot,
 } from '@/db/schema';
 import { applyReservations, lockStockForUpdate, releaseReservations } from '@/db/repositories/availability';
-import { bookSlot, lockSlotForUpdate, unbookSlot, zoneFeesByFsa } from '@/db/repositories/fulfilment';
+import {
+  bookSlot,
+  geoZones,
+  lockSlotForUpdate,
+  unbookSlot,
+  zoneFeesByFsa,
+} from '@/db/repositories/fulfilment';
 import { demandByProduct } from '@/domain/availability';
 import {
   evaluatePlacement,
@@ -21,7 +27,7 @@ import {
   type RequestedLine,
   type StockView,
 } from '@/domain/placement';
-import { normalisePostalCode, fsaOf } from '@/domain/serviceability';
+import { fsaOf, isValidPoint, normalisePostalCode, type GeoPoint } from '@/domain/serviceability';
 import { cents, grams, type Cents, type PayMode, type Pricing } from '@/domain/types';
 
 /**
@@ -73,7 +79,10 @@ export interface DeliveryAddress {
 export interface PlaceOrderInput {
   readonly attemptId: string | null;
   readonly customerId: string;
-  readonly postalCode: string;
+  /** `null` when the customer's device supplied a coordinate instead. */
+  readonly postalCode: string | null;
+  /** Where the phone says the door is. Wins over the postal code (P1). */
+  readonly point: GeoPoint | null;
   readonly address: DeliveryAddress;
   readonly slotId: string;
   readonly businessDayId: string;
@@ -136,9 +145,22 @@ function toProductView(r: {
 }
 
 export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResult> {
-  const postalCode = normalisePostalCode(input.postalCode);
-  const fsa = fsaOf(postalCode);
-  if (fsa === null) return { ok: false, reason: 'outsideDeliveryArea' };
+  /*
+   * ⚠ THE EARLY REFUSAL IS NOW "NO DESTINATION AT ALL", not "no FSA".
+   *
+   * It used to reject anything `fsaOf` could not parse, which was correct
+   * while a postal code was the only address there was. A GPS order has no
+   * postal code and must not be refused before the transaction opens; whether
+   * its coordinate falls in a zone is P1's business, decided inside, against
+   * rows read inside.
+   *
+   * A malformed postal code with no coordinate still dies here rather than
+   * costing a transaction, which is what this check is for.
+   */
+  const point = input.point !== null && isValidPoint(input.point) ? input.point : null;
+  const postalCode = input.postalCode === null ? null : normalisePostalCode(input.postalCode);
+  const fsa = postalCode === null ? null : fsaOf(postalCode);
+  if (point === null && fsa === null) return { ok: false, reason: 'outsideDeliveryArea' };
 
   // Sorted, de-duplicated, ascending. This is the list every lock below is
   // taken against, and computing it once is what guarantees the slot, product
@@ -233,7 +255,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     // Zones are read without a lock: they change roughly never, and locking
     // the whole delivery area on every checkout would serialise every order in
     // the shop against every other one.
-    const zones = await zoneFeesByFsa(tx);
+    const [zones, geo] = await Promise.all([zoneFeesByFsa(tx), geoZones(tx)]);
 
     // The catalog version is read AFTER the product rows are share-locked, so
     // an admin cannot have repriced anything in this basket without waiting.
@@ -250,12 +272,13 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     const decision = evaluatePlacement(
       {
         postalCode,
+        point,
         lines: input.lines,
         nowMs: input.nowMs,
         catalogVersion: version,
         quote,
       },
-      { slot: slotView, zones, products, stock },
+      { slot: slotView, zones, geoZones: geo, products, stock },
     );
 
     if (!decision.ok) {
@@ -293,6 +316,14 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
         customerId: input.customerId,
         postalCode,
         fsa,
+        /*
+         * ⚠ STRINGS, not numbers. Drizzle types a `numeric` column as a string
+         * both ways, for the same reason `pg` returns one: a numeric can hold
+         * values a double cannot, and the driver will not lose them quietly.
+         * Six decimals is about 11 cm, which is finer than any consumer GPS.
+         */
+        lat: point === null ? null : point.lat.toFixed(6),
+        lng: point === null ? null : point.lng.toFixed(6),
         addressLine1: input.address.line1,
         addressLine2: input.address.line2 ?? null,
         city: input.address.city,

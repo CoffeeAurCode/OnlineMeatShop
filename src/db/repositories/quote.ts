@@ -8,10 +8,15 @@ import {
   currentCatalogVersion,
   type CatalogItem,
 } from '@/db/repositories/catalog';
-import { zoneFeesByFsa } from '@/db/repositories/fulfilment';
+import { geoZones, zoneFeesByFsa } from '@/db/repositories/fulfilment';
 import { demandByProduct } from '@/domain/availability';
 import { isLegalQuantity, lineEst, sumCents } from '@/domain/pricing';
-import { checkServiceability, deliveryFee, amountToFreeDelivery } from '@/domain/serviceability';
+import {
+  amountToFreeDelivery,
+  deliveryFee,
+  resolveDestinationZone,
+  type Destination,
+} from '@/domain/serviceability';
 import { cents, grams, type Cents } from '@/domain/types';
 import type { Locale } from '@/ui/format';
 
@@ -70,6 +75,11 @@ export interface Quote {
 /**
  * Price a basket, server-side, in one locale.
  *
+ * `destination` is a coordinate, a postal code, or neither. Neither is the
+ * ordinary case while someone is still shopping, and it is why the delivery
+ * fee and the total are nullable: a fee that assumed a zone before the
+ * customer said where they were would be a guess presented as a price.
+ *
  * The locale reaches this far down for exactly one reason: the quote carries
  * the product NAMES that the basket drawer and the checkout summary render,
  * and a French basket listing English fish is the most visible possible way to
@@ -79,7 +89,7 @@ export interface Quote {
  */
 export async function quoteBasket(
   request: readonly QuoteRequestLine[],
-  postalCode: string | null,
+  destination: Destination,
   locale: Locale = 'en',
   tx: Tx | typeof db = db,
 ): Promise<Quote> {
@@ -150,9 +160,19 @@ export async function quoteBasket(
   let fee: Cents | null = null;
   let toFree: Cents | null = null;
 
-  if (postalCode !== null && postalCode.trim() !== '') {
-    const zones = await zoneFeesByFsa(tx);
-    const check = checkServiceability(postalCode, zones);
+  /*
+   * ⚠ `serviceable` STAYS NULL WHEN NOTHING WAS ASKED. Three states, not two:
+   * served, not served, and "the customer has not told us where they are".
+   * Collapsing the third into `false` is what makes an empty basket page
+   * announce that the shop does not deliver to an address nobody typed.
+   */
+  const askedWhere =
+    destination.point !== null ||
+    (destination.postalCode !== null && destination.postalCode.trim() !== '');
+
+  if (askedWhere) {
+    const [byFsa, geo] = await Promise.all([zoneFeesByFsa(tx), geoZones(tx)]);
+    const check = resolveDestinationZone(destination, { byFsa, geo });
     serviceable = check.ok;
     if (check.ok) {
       fee = deliveryFee(check.zone, lineSubtotal);

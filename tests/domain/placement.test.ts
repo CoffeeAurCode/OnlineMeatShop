@@ -60,6 +60,9 @@ function ctx(over: Partial<PlacementContext> = {}): PlacementContext {
   return {
     slot: SLOT,
     zones: ZONES,
+    // No circles by default. The postal path is still the default path, so
+    // every existing case here goes through it unchanged.
+    geoZones: [],
     products: new Map([
       [CHICKEN.id, CHICKEN],
       [HOT_CURRY.id, HOT_CURRY],
@@ -75,6 +78,7 @@ function ctx(over: Partial<PlacementContext> = {}): PlacementContext {
 function input(over: Partial<PlacementInput> = {}): PlacementInput {
   return {
     postalCode: 'A1A 1A1',
+    point: null,
     lines: [{ productId: CHICKEN.id, prepOptionId: null, requestedG: grams(1000) }],
     nowMs: NOW,
     catalogVersion: 7,
@@ -327,6 +331,7 @@ describe('P8 — priceChanged (DTM §7.3)', () => {
 
 describe('cartFingerprint', () => {
   const base = {
+    point: null,
     postalCode: 'A1A 1A1',
     slotId: 's1',
     payMode: 'PREPAID',

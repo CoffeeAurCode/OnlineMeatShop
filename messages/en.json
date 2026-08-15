@@ -12,7 +12,7 @@
     "basket": "Basket",
     "openBasket": "Open basket",
     "search": "Search",
-    "searchPlaceholder": "Search fish, lobster, oysters",
+    "searchPlaceholder": "Search the counter",
     "menu": "Menu",
     "close": "Close",
     "skipToContent": "Skip to content",
@@ -24,12 +24,27 @@
     "heroCta": "Shop today's counter",
     "heroSecondary": "How weighing works",
     "categoriesHeading": "Shop by counter",
-    "categoriesBody": "Eight counters, restocked each trading morning.",
+    "categoriesBody": "Restocked every trading morning.",
     "viewAll": "View everything",
     "weighingHeading": "You pay for what you get",
     "weighingBody": "Fish is cut to order, so the weight is never exact until it is on the scale. We show an estimate while you shop and charge the weight we actually cut.",
     "deliveryHeading": "Delivered across the island",
-    "deliveryBody": "Home delivery only, within our local radius. Choose the window that suits you at checkout."
+    "deliveryBody": "Home delivery only, within our local radius. Choose the window that suits you at checkout.",
+    "todayHeading": "On the counter today",
+    "promise": {
+      "weighed": {
+        "title": "Billed on actual weight",
+        "body": "You see an estimate, we charge what the scale says."
+      },
+      "sameDay": {
+        "title": "Choose your window",
+        "body": "Two-hour delivery windows, booked at checkout."
+      },
+      "radius": {
+        "title": "Delivered from our door",
+        "body": "One shop, one van, a local radius."
+      }
+    }
   },
   "shop": {
     "title": "The counter",
@@ -45,7 +60,20 @@
     "leftToday": "{amount} left today",
     "unitsLeftToday": "{count} left today",
     "shopClosed": "The shop has not opened today yet",
-    "shopClosedBody": "Stock is declared each trading morning. You can browse, but ordering opens when the counter does."
+    "shopClosedBody": "Stock is declared each trading morning. You can browse, but ordering opens when the counter does.",
+    "nearlyGone": "Nearly gone",
+    "inStockOnly": "In stock",
+    "savedOnly": "Saved",
+    "noSaved": "Nothing saved yet",
+    "noSavedBody": "Tap the heart on anything you buy often and it will be waiting here.",
+    "favourite": "Save {name}",
+    "unfavourite": "Remove {name} from saved",
+    "sort": {
+      "default": "Sort",
+      "priceAsc": "Price: low first",
+      "priceDesc": "Price: high first",
+      "name": "A to Z"
+    }
   },
   "handling": {
     "RAW": "Raw",
@@ -73,7 +101,8 @@
     "backToShop": "Back to the counter",
     "relatedHeading": "Also on this counter",
     "minimumOrder": "Minimum {amount}",
-    "stepNote": "In steps of {amount}"
+    "stepNote": "In steps of {amount}",
+    "aboutAmount": "about {amount}"
   },
   "basket": {
     "title": "Your basket",
@@ -90,14 +119,18 @@
     "continue": "Keep shopping",
     "estimateNote": "Per-kilogram items stay estimated until your order is cut and weighed.",
     "itemCount": "{count} items",
-    "itemCountOne": "1 item"
+    "itemCountOne": "1 item",
+    "hotNotice": "Your basket has hot kitchen food, so only a window that carries it can be chosen.",
+    "deliveryUnknown": "Add your address",
+    "deliveryUnserved": "Outside our area",
+    "toFreeDelivery": "Add {amount} more for free delivery."
   },
   "checkout": {
     "title": "Checkout",
     "contactHeading": "Who is this for?",
     "phoneLabel": "Mobile number",
-    "phoneHelp": "So the shop can reach you about your order.",
-    "phoneInvalid": "Enter a 10 digit Canadian mobile number.",
+    "phoneHelp": "The shop and the driver use this. Nothing else.",
+    "phoneInvalid": "Enter a phone number the shop can reach you on.",
     "nameLabel": "Name",
     "emailLabel": "Email",
     "emailOptional": "Optional",
@@ -118,7 +151,11 @@
     "hotWarning": "Your basket has hot kitchen food, so only windows that carry it are shown.",
     "place": "Place order",
     "placing": "Placing your order",
-    "required": "Required"
+    "required": "Required",
+    "regionLabel": "Province or state",
+    "editAddress": "Edit",
+    "noAddressYet": "No delivery address yet.",
+    "addressIncomplete": "We need a street address and a city before we can deliver."
   },
   "payment": {
     "testBannerTitle": "Test order. No payment has been taken.",
@@ -151,7 +188,10 @@
     "historyEmptyBody": "Once you place an order it will appear here.",
     "reorder": "Order this again",
     "reorderPartial": "Some items are not on the counter today and were left out.",
-    "viewOrder": "View order"
+    "viewOrder": "View order",
+    "arriving": "Arriving {window}",
+    "viewOnMap": "View on the map",
+    "partnerHeading": "Your driver"
   },
   "status": {
     "PLACED": "Placed",
@@ -194,7 +234,8 @@
     "checkoutAttemptNotOpen": "This order was already placed.",
     "malformedBody": "Something went wrong. Try again.",
     "generic": "Something went wrong. Try again.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "outsideDeliveryAreaGps": "We do not deliver that far yet."
   },
   "delivery": {
     "title": "Delivery",
@@ -227,5 +268,42 @@
     "optional": "Optional",
     "yes": "Yes",
     "no": "No"
+  },
+  "location": {
+    "title": "Where should we deliver?",
+    "subtitle": "Share your location and add the door details. Both go to the driver.",
+    "useDevice": "Use my current location",
+    "locating": "Finding you",
+    "accuracy": "accurate to about {m} m",
+    "clearPin": "Clear pin",
+    "pinnedAt": "Pinned at {lat}, {lng}",
+    "postalFallback": "Optional. Useful if you would rather not share your location.",
+    "postalRedundant": "Optional. We already have your exact position.",
+    "dropOffLabel": "How should we hand it over?",
+    "dropOffColdWarning": "Raw fish should not be left unattended. Choose this only if you are home.",
+    "save": "Save this address",
+    "needOne": "Share your location or enter a postal code so we can check we deliver there.",
+    "forget": "Forget this address",
+    "setAddress": "Set your address",
+    "changeFrom": "Change delivery address, currently {address}",
+    "change": "Change",
+    "heroPrompt": "Enter your delivery address",
+    "heroCta": "Start",
+    "served": "We deliver to you. Delivery is {fee}.",
+    "servedFree": "We deliver to you, and delivery is free.",
+    "freeAbove": "Free over {amount}.",
+    "distance": "About {km} km from the shop.",
+    "stripUnknown": "We deliver within a local radius.",
+    "dropOff": {
+      "HAND_TO_ME": "Hand it to me",
+      "MEET_OUTSIDE": "Meet me outside",
+      "LEAVE_AT_DOOR": "Leave it at the door"
+    },
+    "error": {
+      "denied": "Your browser is blocking location for this site. Allow it in the address bar, or type your address below.",
+      "unavailable": "Your device could not get a position. Try again, or type your address below.",
+      "timeout": "That took too long. Try again, or type your address below.",
+      "unsupported": "This browser cannot share a location. Type your address below."
+    }
   }
 }

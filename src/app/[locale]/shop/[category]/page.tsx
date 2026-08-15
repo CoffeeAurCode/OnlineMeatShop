@@ -8,16 +8,22 @@ import {
   listCategories,
   prepsForProducts,
 } from '@/db/repositories/catalog';
-import type { Handling } from '@/domain/types';
 import { staticParamsOr } from '@/db/build-time';
 import { LOCALES, isLocale, t, type Locale } from '@/i18n';
 
-import { CategoryTabs, FilterBar } from '../../_components/category-nav';
+import { applyFilters } from '../../_components/apply-filters';
+import { CategoryTabs, FilterBar, parseFilters } from '../../_components/category-nav';
+import { DeliveryStrip } from '../../_components/delivery-strip';
 import { ProductGrid } from '../../_components/product-grid';
 
-/** One counter. Same grid, same filter, narrowed to a category. */
-
-const HANDLINGS = new Set<string>(['RAW', 'MARINATED', 'COOKED_CHILLED', 'COOKED_HOT']);
+/**
+ * One counter. The same feed as `/shop`, narrowed to a category.
+ *
+ * The two pages share their chrome, their facets and their grid, and differ in
+ * one filter and a heading. Keeping them as two files rather than one page
+ * with an optional segment is what keeps the category page STATIC and
+ * crawlable with its own metadata, which is the entire reason it exists.
+ */
 
 /**
  * Both locales times every category, prerendered. Categories change when the
@@ -57,14 +63,12 @@ export default async function CategoryPage({
   searchParams,
 }: {
   params: Promise<{ locale: string; category: string }>;
-  searchParams: Promise<{ handling?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale, category } = await params;
   if (!isLocale(locale)) notFound();
-  const { handling } = await searchParams;
 
-  const active: Handling | null =
-    handling !== undefined && HANDLINGS.has(handling) ? (handling as Handling) : null;
+  const filters = parseFilters(await searchParams);
 
   const day = await currentBusinessDay();
   const [categories, found, catalog] = await Promise.all([
@@ -76,11 +80,11 @@ export default async function CategoryPage({
   if (found === null) notFound();
 
   const inCategory = catalog.filter((i) => i.categoryId === found.id);
-  const items = active === null ? inCategory : inCategory.filter((i) => i.handling === active);
+  const items = applyFilters(inCategory, filters, locale);
   const preps = await prepsForProducts(items.map((i) => i.id));
 
   return (
-    <div className="mx-auto max-w-[76rem] px-4 py-10 sm:px-6 sm:py-14">
+    <div className="mx-auto max-w-[80rem] px-4 pb-14 sm:px-6">
       {/*
         ⚠ `grid-cols-[minmax(0,1fr)]`, not a bare `grid`.
         A grid item's default `min-width: auto` means it CANNOT shrink below
@@ -90,25 +94,35 @@ export default async function CategoryPage({
         document went to 1133px wide. An explicit `minmax(0, 1fr)` track is
         what lets the child be narrower than its contents.
       */}
-      <header className="grid grid-cols-[minmax(0,1fr)] gap-6">
-        <div className="grid gap-3">
-          <h1 className="!text-display-lg">{found.name}</h1>
-          {found.blurb !== null && (
-            <p className="max-w-[56ch] text-lead text-muted">{found.blurb}</p>
-          )}
+      <header className="grid grid-cols-[minmax(0,1fr)] gap-4 pt-6 sm:pt-10">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+          <div className="grid gap-2">
+            <h1 className="!text-display-lg">{found.name}</h1>
+            {found.blurb !== null && (
+              <p className="max-w-[56ch] text-body text-muted">{found.blurb}</p>
+            )}
+          </div>
+          <p className="tnum pb-1 text-meta text-muted" aria-live="polite">
+            {t(locale, items.length === 1 ? 'shop.resultCountOne' : 'shop.resultCount', {
+              count: items.length,
+            })}
+          </p>
         </div>
-        <CategoryTabs categories={categories} locale={locale} activeSlug={found.slug} />
-        <FilterBar locale={locale} basePath={`/${locale}/shop/${found.slug}`} active={active} />
+        <DeliveryStrip locale={locale} />
       </header>
 
-      <p className="mt-8 text-meta text-muted" aria-live="polite">
-        {t(locale, items.length === 1 ? 'shop.resultCountOne' : 'shop.resultCount', {
-          count: items.length,
-        })}
-      </p>
+      <div className="sticky top-[6.5rem] z-30 -mx-4 mt-4 grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-line bg-surface/95 px-4 py-3 backdrop-blur-sm sm:top-[4.5rem] sm:mx-0 sm:rounded-md sm:border sm:px-4">
+        <CategoryTabs categories={categories} locale={locale} activeSlug={found.slug} />
+        <FilterBar locale={locale} basePath={`/${locale}/shop/${found.slug}`} filters={filters} />
+      </div>
 
-      <div className="mt-4">
-        <ProductGrid items={items} locale={locale} prepsByProduct={preps} />
+      <div className="mt-6">
+        <ProductGrid
+          items={items}
+          locale={locale}
+          prepsByProduct={preps}
+          savedOnly={filters.saved}
+        />
       </div>
     </div>
   );

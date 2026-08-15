@@ -50,6 +50,13 @@
       "when": 1786550182974,
       "tag": "0006_prototype_foundations",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786816878817,
+      "tag": "0007_geo_delivery_zones",
+      "breakpoints": true
     }
   ]
 }

@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { FlameIcon, MapPinIcon, PencilSimpleIcon } from '@phosphor-icons/react/dist/ssr';
 
-import { isValidPostalCode, normalisePostalCode } from '@/domain/serviceability';
 import { quoteProblemMessage, t, type Locale } from '@/i18n';
 import { clearCart, lineKey, useCart } from '@/ui/cart';
 import { money, weight } from '@/ui/format';
+import { isDeliverable, useDeliveryLocation } from '@/ui/location';
 
+import { openLocationSheet } from './drawer-state';
 import { MoneySentence, TestOrderBanner } from './money-sentence';
 
 /**
@@ -22,6 +24,18 @@ import { MoneySentence, TestOrderBanner } from './money-sentence';
  * ⚠ THE BROWSER DECIDES NOTHING. Every amount on this screen came from
  * `/api/quote`, and the amount actually charged is recomputed inside the
  * placement transaction. The fields below are intent.
+ *
+ * ── WHAT THE REDESIGN CHANGED ─────────────────────────────────────────────
+ *
+ * ⭐ THE ADDRESS IS NO LONGER TYPED HERE. It was captured in the header, in
+ * the hero, or in the basket, and this screen SHOWS it with an edit control.
+ * That is worth stating as a principle rather than a layout: an address typed
+ * at the last step is an address the shop could not have validated earlier, so
+ * the customer learns they are outside the radius after filling in a form.
+ * Capturing it first turns eight fields into a review card.
+ *
+ * What remains here is genuinely per-order: who to phone, which window, and
+ * the confirmation itself.
  */
 
 export interface SlotOption {
@@ -53,21 +67,14 @@ interface Quote {
   serviceable: boolean | null;
 }
 
-const PROVINCES = ['QC', 'ON', 'NB', 'NS', 'PE', 'NL', 'MB', 'SK', 'AB', 'BC', 'YT', 'NT', 'NU'];
-
 export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: Locale }) {
   const router = useRouter();
   const cart = useCart();
+  const { location, ready } = useDeliveryLocation();
 
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [line1, setLine1] = useState('');
-  const [line2, setLine2] = useState('');
-  const [city, setCity] = useState('');
-  const [province, setProvince] = useState('QC');
-  const [postalCode, setPostalCode] = useState('');
-  const [notes, setNotes] = useState('');
   const [slotId, setSlotId] = useState('');
 
   const [fetchedQuote, setQuote] = useState<Quote | null>(null);
@@ -76,8 +83,12 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const signature = cart.lines.map((l) => `${lineKey(l)}@${l.requestedG}`).join('|');
+  const destinationKey =
+    location.lat !== null && location.lng !== null
+      ? `${location.lat},${location.lng}`
+      : location.postalCode.trim().toUpperCase();
 
-  // Re-quoted whenever the basket or the postal code changes, because the
+  // Re-quoted whenever the basket or the destination changes, because the
   // delivery fee depends on the second and every amount depends on the first.
   useEffect(() => {
     // No `setQuote(null)` here for the empty basket. Calling setState in an
@@ -95,7 +106,9 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
           requestedG: l.requestedG,
           prepOptionId: l.prepOptionId,
         })),
-        postalCode: postalCode.trim() === '' ? null : postalCode,
+        lat: location.lat,
+        lng: location.lng,
+        postalCode: location.postalCode.trim() === '' ? null : location.postalCode,
         locale,
       }),
     })
@@ -105,14 +118,8 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
         if (e instanceof Error && e.name === 'AbortError') return;
       });
     return () => controller.abort();
-  }, [signature, postalCode, locale, cart.lines]);
+  }, [signature, destinationKey, locale, cart.lines, location]);
 
-  /*
-   * ⭐ THE HOT-FOOD SLOT RULE, SHOWN. Hiding the windows that cannot carry hot
-   * food is a COURTESY, not the guarantee: precondition P7 refuses the order
-   * server-side regardless, because this is a food-safety rule and a filtered
-   * dropdown is not an enforcement mechanism. Both exist on purpose.
-   */
   /*
    * Derived, not stored. An emptied basket must not keep showing the totals of
    * what used to be in it, and deriving that is both simpler and correct
@@ -122,46 +129,32 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
 
   // A basket the server will refuse does not get an enabled button. P1…P8
   // reject it either way; the only question is whether the customer finds out
-  // before or after typing an address.
+  // before or after typing a phone number.
   const hasProblem = quote?.lines.some((l) => l.problem !== null) ?? false;
 
   /*
-   * ⚠ TWO DIFFERENT FAILURES, TWO DIFFERENT SENTENCES. `fsaOf` returns null both
-   * for a postal code that is malformed and for one the shop does not serve, so
-   * `checkServiceability` collapses them into `outsideDeliveryArea` — right for
-   * a precondition, wrong for a person. Told "we do not deliver to that postal
-   * code yet", someone who typed `G0AJ9Z` goes looking for another shop instead
-   * of for their own typo. Decided here rather than server-side because whether
-   * a code is well-formed is knowable without asking anybody.
-   *
-   * ⚠ NOT UNTIL SIX CHARACTERS ARE IN. A field that says "that is not a postal
-   * code" on the first keystroke is telling the truth and is still worse than
-   * saying nothing: every correct entry passes through five invalid prefixes on
-   * its way in. `H2X 1Y4` is judged the moment it is complete, and `validate()`
-   * catches a short one on submit.
+   * ⭐ THE HOT-FOOD SLOT RULE, SHOWN. Hiding the windows that cannot carry hot
+   * food is a COURTESY, not the guarantee: precondition P7 refuses the order
+   * server-side regardless, because this is a food-safety rule and a filtered
+   * list is not an enforcement mechanism. Both exist on purpose.
    */
-  const typedPostalCode = normalisePostalCode(postalCode);
-  const postalCodeMessage =
-    typedPostalCode.length >= 6 && !isValidPostalCode(typedPostalCode)
-      ? t(locale, 'errors.invalidPostalCode')
-      : quote?.serviceable === false
-        ? t(locale, 'errors.outsideDeliveryArea')
-        : undefined;
-
   const hot = quote?.hasHotLine === true;
   const usable = slots.filter((s) => !s.cutoffPassed && (!hot || s.hotEligible));
 
   function validate(): boolean {
     const errors: Record<string, string> = {};
-    if (!/^\+?1?[\s\-().]*(\d[\s\-().]*){10}$/.test(phone)) {
+    /*
+     * ⚠ THE PHONE RULE IS DELIBERATELY LOOSE NOW. It used to demand exactly
+     * ten digits, which is right for Canada and refuses every number a test
+     * order from anywhere else would use. Seven to fifteen digits is the E.164
+     * range; `normalisePhone` on the server is what decides the canonical
+     * form, and it is the only opinion that has to be right.
+     */
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 7 || digits.length > 15) {
       errors.phone = t(locale, 'checkout.phoneInvalid');
     }
-    if (line1.trim() === '') errors.line1 = t(locale, 'checkout.required');
-    if (city.trim() === '') errors.city = t(locale, 'checkout.required');
-    if (postalCode.trim() === '') errors.postalCode = t(locale, 'checkout.required');
-    else if (!isValidPostalCode(postalCode)) {
-      errors.postalCode = t(locale, 'errors.invalidPostalCode');
-    }
+    if (!isDeliverable(location)) errors.address = t(locale, 'checkout.addressIncomplete');
     if (slotId === '') errors.slotId = t(locale, 'checkout.required');
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -185,12 +178,15 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
             requestedG: l.requestedG,
             prepOptionId: l.prepOptionId,
           })),
-          postalCode,
-          addressLine1: line1,
-          addressLine2: line2.trim() === '' ? null : line2,
-          city,
-          province,
-          deliveryNotes: notes.trim() === '' ? null : notes,
+          lat: location.lat,
+          lng: location.lng,
+          postalCode: location.postalCode.trim() === '' ? null : location.postalCode,
+          addressLine1: location.line1,
+          addressLine2: location.line2.trim() === '' ? null : location.line2,
+          city: location.city,
+          province: location.region.trim() === '' ? '-' : location.region,
+          deliveryNotes: location.notes.trim() === '' ? null : location.notes,
+          dropOff: t(locale, `location.dropOff.${location.dropOff}`),
           slotId,
           phone,
           name: name.trim() === '' ? null : name,
@@ -214,9 +210,9 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
         return;
       }
 
-      // The nine failure codes each have their own sentence. A generic
-      // "something went wrong" on a checkout is what makes a customer try
-      // again and place two orders.
+      // Each failure code has its own sentence. A generic "something went
+      // wrong" on a checkout is what makes a customer try again and place two
+      // orders.
       const reason = body.reason ?? 'generic';
       setFailure(
         body.detail?.productName !== undefined
@@ -243,6 +239,15 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
   return (
     <form onSubmit={submit} noValidate className="mt-8 grid gap-10">
       <TestOrderBanner locale={locale} />
+
+      <Section heading={t(locale, 'checkout.addressHeading')}>
+        <AddressCard locale={locale} ready={ready} error={fieldErrors.address} />
+        {quote?.serviceable === false && (
+          <p role="alert" className="text-meta font-semibold text-danger">
+            {t(locale, 'errors.outsideDeliveryAreaGps')}
+          </p>
+        )}
+      </Section>
 
       <Section heading={t(locale, 'checkout.contactHeading')}>
         <Field
@@ -274,80 +279,15 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
         />
       </Section>
 
-      <Section heading={t(locale, 'checkout.addressHeading')}>
-        <Field
-          id="line1"
-          label={t(locale, 'checkout.line1Label')}
-          error={fieldErrors.line1}
-          value={line1}
-          onChange={setLine1}
-          autoComplete="address-line1"
-          required
-        />
-        <Field
-          id="line2"
-          label={t(locale, 'checkout.line2Label')}
-          help={t(locale, 'checkout.line2Optional')}
-          value={line2}
-          onChange={setLine2}
-          autoComplete="address-line2"
-        />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            id="city"
-            label={t(locale, 'checkout.cityLabel')}
-            error={fieldErrors.city}
-            value={city}
-            onChange={setCity}
-            autoComplete="address-level2"
-            required
-          />
-          <div className="grid gap-2">
-            <label htmlFor="province" className="text-body font-semibold">
-              {t(locale, 'checkout.provinceLabel')}
-            </label>
-            <select
-              id="province"
-              value={province}
-              onChange={(e) => setProvince(e.target.value)}
-              autoComplete="address-level1"
-              className="tap rounded-sm border border-line bg-raised px-3 text-body text-ink"
-            >
-              {PROVINCES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <Field
-          id="postalCode"
-          label={t(locale, 'checkout.postalLabel')}
-          help={t(locale, 'checkout.postalHelp')}
-          error={fieldErrors.postalCode ?? postalCodeMessage}
-          value={postalCode}
-          onChange={setPostalCode}
-          autoComplete="postal-code"
-          required
-        />
-        <Field
-          id="notes"
-          label={t(locale, 'checkout.notesLabel')}
-          help={t(locale, 'checkout.notesHelp')}
-          value={notes}
-          onChange={setNotes}
-        />
-      </Section>
-
       <Section heading={t(locale, 'checkout.slotHeading')}>
         {hot && (
-          <p className="rounded-sm border border-line bg-soft px-3 py-2 text-body">
-            {t(locale, 'checkout.hotWarning')}
+          <p className="flex items-start gap-2 rounded-sm border border-line bg-soft px-3 py-2 text-body">
+            <FlameIcon size={16} weight="fill" aria-hidden className="mt-1 shrink-0 text-hot" />
+            <span>{t(locale, 'checkout.hotWarning')}</span>
           </p>
         )}
         {fieldErrors.slotId !== undefined && (
-          <p className="text-meta text-danger">{fieldErrors.slotId}</p>
+          <p className="text-meta font-semibold text-danger">{fieldErrors.slotId}</p>
         )}
         <div className="grid gap-2">
           {usable.length === 0 && (
@@ -370,9 +310,12 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
                 className="size-5 accent-[var(--accent)]"
               />
               <span className="tnum text-body font-semibold">{s.label}</span>
-              {s.full && <span className="text-meta text-muted">{t(locale, 'checkout.slotFull')}</span>}
+              {s.full && (
+                <span className="text-meta text-muted">{t(locale, 'checkout.slotFull')}</span>
+              )}
               {s.hotEligible && (
-                <span className="ml-auto text-meta text-muted">
+                <span className="ml-auto inline-flex items-center gap-1 text-meta text-muted">
+                  <FlameIcon size={12} weight="fill" aria-hidden />
                   {t(locale, 'checkout.slotHotOnly')}
                 </span>
               )}
@@ -392,6 +335,9 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
                 <span className="min-w-0">
                   <span className="font-semibold">{q?.name ?? l.name}</span>{' '}
                   <span className="tnum text-muted">{weight(l.requestedG, locale)}</span>
+                  {l.prepLabel !== null && (
+                    <span className="block text-meta text-muted">{l.prepLabel}</span>
+                  )}
                   {q?.problem != null && (
                     <span className="block text-meta text-danger">
                       {quoteProblemMessage(locale, q.problem, q.name)}
@@ -413,9 +359,7 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
         <dl className="grid gap-1 border-t border-line pt-4 text-body">
           <div className="flex justify-between">
             <dt>{t(locale, 'basket.subtotal')}</dt>
-            <dd className="tnum">
-              {quote === null ? '' : money(quote.lineSubtotalCents, locale)}
-            </dd>
+            <dd className="tnum">{quote === null ? '' : money(quote.lineSubtotalCents, locale)}</dd>
           </div>
           <div className="flex justify-between">
             <dt>{t(locale, 'basket.delivery')}</dt>
@@ -465,6 +409,91 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
   );
 }
 
+/**
+ * The address, as a review card rather than eight inputs.
+ *
+ * ⚠ IT SHOWS THE COORDINATE ALONGSIDE THE LINES, and that is not a debugging
+ * leftover. It is the one number the customer can check against their own
+ * knowledge of where they are, and getting it wrong is the failure mode that
+ * costs the shop a delivery. A pin captured in a car park, on a phone that
+ * decided it was 400 m away, looks exactly like a correct one until somebody
+ * reads it back.
+ */
+function AddressCard({
+  locale,
+  ready,
+  error,
+}: {
+  locale: Locale;
+  ready: boolean;
+  error?: string | undefined;
+}) {
+  const { location } = useDeliveryLocation();
+
+  if (!ready) {
+    return <div className="h-28 animate-pulse rounded-md bg-soft motion-reduce:animate-none" />;
+  }
+
+  const lines = [
+    location.line1,
+    location.line2,
+    [location.city, location.region].filter((x) => x.trim() !== '').join(', '),
+    location.postalCode,
+  ].filter((x) => x.trim() !== '');
+
+  return (
+    <div
+      className={`grid gap-3 rounded-md border bg-raised p-4 ${
+        error === undefined ? 'border-line' : 'border-danger'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <MapPinIcon size={18} weight="fill" aria-hidden className="mt-0.5 shrink-0 text-accent" />
+        <div className="min-w-0 flex-1">
+          {lines.length === 0 ? (
+            <p className="text-body text-muted">{t(locale, 'checkout.noAddressYet')}</p>
+          ) : (
+            <address className="grid not-italic">
+              {lines.map((line) => (
+                <span key={line} className="text-body">
+                  {line}
+                </span>
+              ))}
+            </address>
+          )}
+
+          {location.lat !== null && location.lng !== null && (
+            <p className="tnum mt-2 text-meta text-muted">
+              {t(locale, 'location.pinnedAt', {
+                lat: location.lat.toFixed(5),
+                lng: location.lng.toFixed(5),
+              })}
+              {location.accuracyM !== null &&
+                ` · ${t(locale, 'location.accuracy', { m: location.accuracyM })}`}
+            </p>
+          )}
+
+          <p className="mt-2 text-meta text-muted">
+            {t(locale, `location.dropOff.${location.dropOff}`)}
+            {location.notes.trim() !== '' && ` · ${location.notes}`}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={openLocationSheet}
+          className="tap inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-line px-3 text-meta font-semibold transition-colors hover:border-accent"
+        >
+          <PencilSimpleIcon size={14} aria-hidden />
+          {t(locale, 'checkout.editAddress')}
+        </button>
+      </div>
+
+      {error !== undefined && <p className="text-meta font-semibold text-danger">{error}</p>}
+    </div>
+  );
+}
+
 function Section({ heading, children }: { heading: string; children: React.ReactNode }) {
   return (
     <section className="grid gap-4">
@@ -505,7 +534,10 @@ function Field({
   autoComplete?: string | undefined;
   required?: boolean | undefined;
 }) {
-  const describedBy = [help !== undefined ? `${id}-help` : null, error !== undefined ? `${id}-error` : null]
+  const describedBy = [
+    help !== undefined ? `${id}-help` : null,
+    error !== undefined ? `${id}-error` : null,
+  ]
     .filter((x) => x !== null)
     .join(' ');
 

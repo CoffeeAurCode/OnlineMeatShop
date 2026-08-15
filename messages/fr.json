@@ -12,7 +12,7 @@
     "basket": "Panier",
     "openBasket": "Ouvrir le panier",
     "search": "Rechercher",
-    "searchPlaceholder": "Poisson, homard, huîtres",
+    "searchPlaceholder": "Rechercher au comptoir",
     "menu": "Menu",
     "close": "Fermer",
     "skipToContent": "Aller au contenu",
@@ -24,12 +24,27 @@
     "heroCta": "Voir le comptoir du jour",
     "heroSecondary": "Comment se fait la pesée",
     "categoriesHeading": "Nos comptoirs",
-    "categoriesBody": "Huit comptoirs, réapprovisionnés chaque matin d'ouverture.",
+    "categoriesBody": "Réapprovisionné chaque matin d’ouverture.",
     "viewAll": "Tout voir",
     "weighingHeading": "Vous payez ce que vous recevez",
     "weighingBody": "Le poisson est coupé sur commande, donc le poids n'est jamais exact avant la balance. Nous affichons une estimation pendant vos achats et facturons le poids réellement coupé.",
     "deliveryHeading": "Livré partout sur l'île",
-    "deliveryBody": "Livraison à domicile seulement, dans notre rayon local. Choisissez la plage horaire qui vous convient au paiement."
+    "deliveryBody": "Livraison à domicile seulement, dans notre rayon local. Choisissez la plage horaire qui vous convient au paiement.",
+    "todayHeading": "Au comptoir aujourd’hui",
+    "promise": {
+      "weighed": {
+        "title": "Facturé au poids réel",
+        "body": "Vous voyez une estimation, nous facturons ce que dit la balance."
+      },
+      "sameDay": {
+        "title": "Choisissez votre plage",
+        "body": "Des plages de livraison de deux heures, réservées à la commande."
+      },
+      "radius": {
+        "title": "Livré depuis notre porte",
+        "body": "Une boutique, une camionnette, un rayon local."
+      }
+    }
   },
   "shop": {
     "title": "Le comptoir",
@@ -45,7 +60,20 @@
     "leftToday": "Il reste {amount} aujourd'hui",
     "unitsLeftToday": "Il en reste {count} aujourd'hui",
     "shopClosed": "La boutique n'a pas encore ouvert aujourd'hui",
-    "shopClosedBody": "Les stocks sont déclarés chaque matin d'ouverture. Vous pouvez naviguer, mais les commandes ouvrent avec le comptoir."
+    "shopClosedBody": "Les stocks sont déclarés chaque matin d'ouverture. Vous pouvez naviguer, mais les commandes ouvrent avec le comptoir.",
+    "nearlyGone": "Presque épuisé",
+    "inStockOnly": "En stock",
+    "savedOnly": "Favoris",
+    "noSaved": "Aucun favori pour l’instant",
+    "noSavedBody": "Touchez le cœur sur ce que vous achetez souvent et vous le retrouverez ici.",
+    "favourite": "Ajouter {name} aux favoris",
+    "unfavourite": "Retirer {name} des favoris",
+    "sort": {
+      "default": "Trier",
+      "priceAsc": "Prix : croissant",
+      "priceDesc": "Prix : décroissant",
+      "name": "De A à Z"
+    }
   },
   "handling": {
     "RAW": "Cru",
@@ -73,7 +101,8 @@
     "backToShop": "Retour au comptoir",
     "relatedHeading": "Aussi sur ce comptoir",
     "minimumOrder": "Minimum {amount}",
-    "stepNote": "Par tranches de {amount}"
+    "stepNote": "Par tranches de {amount}",
+    "aboutAmount": "environ {amount}"
   },
   "basket": {
     "title": "Votre panier",
@@ -90,14 +119,18 @@
     "continue": "Continuer mes achats",
     "estimateNote": "Les articles au kilogramme restent estimés jusqu'à la coupe et la pesée.",
     "itemCount": "{count} articles",
-    "itemCountOne": "1 article"
+    "itemCountOne": "1 article",
+    "hotNotice": "Votre panier contient un plat chaud : seule une plage qui le transporte peut être choisie.",
+    "deliveryUnknown": "Ajoutez votre adresse",
+    "deliveryUnserved": "Hors de notre zone",
+    "toFreeDelivery": "Ajoutez {amount} pour la livraison gratuite."
   },
   "checkout": {
     "title": "Paiement",
     "contactHeading": "Pour qui est cette commande ?",
     "phoneLabel": "Numéro de mobile",
-    "phoneHelp": "Pour que la poissonnerie puisse vous joindre au sujet de votre commande.",
-    "phoneInvalid": "Entrez un numéro de mobile canadien à 10 chiffres.",
+    "phoneHelp": "La boutique et le livreur l’utilisent. Rien d’autre.",
+    "phoneInvalid": "Entrez un numéro de téléphone où la boutique peut vous joindre.",
     "nameLabel": "Nom",
     "emailLabel": "Courriel",
     "emailOptional": "Facultatif",
@@ -118,7 +151,11 @@
     "hotWarning": "Votre panier contient un plat de cuisine chaude, donc seules les plages horaires capables de le transporter sont affichées.",
     "place": "Passer la commande",
     "placing": "Enregistrement de votre commande",
-    "required": "Obligatoire"
+    "required": "Obligatoire",
+    "regionLabel": "Province ou état",
+    "editAddress": "Modifier",
+    "noAddressYet": "Aucune adresse de livraison pour l’instant.",
+    "addressIncomplete": "Il nous faut une adresse et une ville avant de pouvoir livrer."
   },
   "payment": {
     "testBannerTitle": "Commande test. Aucun paiement n'a été pris.",
@@ -151,7 +188,10 @@
     "historyEmptyBody": "Vos commandes apparaîtront ici.",
     "reorder": "Commander de nouveau",
     "reorderPartial": "Certains articles ne sont pas au comptoir aujourd'hui et ont été retirés.",
-    "viewOrder": "Voir la commande"
+    "viewOrder": "Voir la commande",
+    "arriving": "Arrive {window}",
+    "viewOnMap": "Voir sur la carte",
+    "partnerHeading": "Votre livreur"
   },
   "status": {
     "PLACED": "Enregistrée",
@@ -194,7 +234,8 @@
     "checkoutAttemptNotOpen": "Cette commande a déjà été passée.",
     "malformedBody": "Une erreur est survenue. Réessayez.",
     "generic": "Une erreur est survenue. Réessayez.",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "outsideDeliveryAreaGps": "Nous ne livrons pas encore aussi loin."
   },
   "delivery": {
     "title": "Livraison",
@@ -227,5 +268,42 @@
     "optional": "Facultatif",
     "yes": "Oui",
     "no": "Non"
+  },
+  "location": {
+    "title": "Où devons-nous livrer ?",
+    "subtitle": "Partagez votre position et précisez la porte. Les deux vont au livreur.",
+    "useDevice": "Utiliser ma position actuelle",
+    "locating": "Localisation en cours",
+    "accuracy": "précision d’environ {m} m",
+    "clearPin": "Effacer le point",
+    "pinnedAt": "Point à {lat}, {lng}",
+    "postalFallback": "Facultatif. Utile si vous préférez ne pas partager votre position.",
+    "postalRedundant": "Facultatif. Nous avons déjà votre position exacte.",
+    "dropOffLabel": "Comment vous la remettre ?",
+    "dropOffColdWarning": "Le poisson cru ne doit pas rester sans surveillance. À choisir seulement si vous êtes là.",
+    "save": "Enregistrer cette adresse",
+    "needOne": "Partagez votre position ou entrez un code postal pour que nous vérifiions la livraison.",
+    "forget": "Oublier cette adresse",
+    "setAddress": "Indiquez votre adresse",
+    "changeFrom": "Changer l’adresse de livraison, actuellement {address}",
+    "change": "Modifier",
+    "heroPrompt": "Entrez votre adresse de livraison",
+    "heroCta": "Commencer",
+    "served": "Nous livrons chez vous. La livraison est de {fee}.",
+    "servedFree": "Nous livrons chez vous, et la livraison est gratuite.",
+    "freeAbove": "Gratuite au-delà de {amount}.",
+    "distance": "À environ {km} km de la boutique.",
+    "stripUnknown": "Nous livrons dans un rayon local.",
+    "dropOff": {
+      "HAND_TO_ME": "Me la remettre en main propre",
+      "MEET_OUTSIDE": "Me retrouver dehors",
+      "LEAVE_AT_DOOR": "La laisser à la porte"
+    },
+    "error": {
+      "denied": "Votre navigateur bloque la localisation pour ce site. Autorisez-la dans la barre d’adresse, ou saisissez votre adresse ci-dessous.",
+      "unavailable": "Votre appareil n’a pas pu obtenir de position. Réessayez, ou saisissez votre adresse ci-dessous.",
+      "timeout": "Cela a pris trop de temps. Réessayez, ou saisissez votre adresse ci-dessous.",
+      "unsupported": "Ce navigateur ne peut pas partager de position. Saisissez votre adresse ci-dessous."
+    }
   }
 }

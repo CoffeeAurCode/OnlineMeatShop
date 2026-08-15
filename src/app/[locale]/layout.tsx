@@ -6,6 +6,7 @@ import { shopName, siteOrigin } from '@/ui/shop-config';
 
 import '../globals.css';
 import { CartDrawer } from './_components/cart-drawer';
+import { LocationSheet } from './_components/location-sheet';
 import { ShopFooter, ShopHeader } from './_components/shop-shell';
 
 /**
@@ -134,11 +135,13 @@ export default async function LocaleRootLayout({
           <ShopFooter locale={locale} />
         </div>
         {/*
-          Mounted once at the root rather than per page, so opening the basket
-          never unmounts the page behind it and a customer can keep browsing
-          with the drawer open. It renders nothing until it is opened.
+          Both overlays are mounted once at the root rather than per page, so
+          opening either never unmounts the page behind it and a customer can
+          keep browsing with one open. Each renders nothing until it is opened,
+          and `drawer-state` guarantees only one of them ever is.
         */}
         <CartDrawer locale={locale} />
+        <LocationSheet locale={locale} />
       </body>
     </html>
   );

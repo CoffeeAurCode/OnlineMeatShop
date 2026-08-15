@@ -17,7 +17,8 @@ import { decimalString, money, ratePerKg, weight } from '@/ui/format';
 import { siteOrigin } from '@/ui/shop-config';
 
 import { AddToBasket } from '../../_components/add-to-basket';
-import { HotPill, ProductCard } from '../../_components/product-card';
+import { ProductGrid } from '../../_components/product-grid';
+import { HotPill } from '../../_components/product-card';
 
 /**
  * One product. The deep dive, not the only way to buy: the grid's card can add
@@ -243,13 +244,14 @@ export default async function ProductPage({
       {related.length > 0 && (
         <section className="mt-20">
           <h2 className="!text-display">{t(locale, 'product.relatedHeading')}</h2>
-          <ul className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            {related.map((r) => (
-              <li key={r.id} className="relative">
-                <ProductCard item={r} locale={locale} preps={relatedPreps.get(r.id) ?? []} />
-              </li>
-            ))}
-          </ul>
+          <div className="mt-6">
+            {/*
+              The same grid component the feed uses, rather than a hand-rolled
+              row. Two implementations of a product card is how one of them
+              quietly stops showing the "sold out" badge.
+            */}
+            <ProductGrid items={related} locale={locale} prepsByProduct={relatedPreps} />
+          </div>
         </section>
       )}
     </div>

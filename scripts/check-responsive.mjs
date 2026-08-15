@@ -39,7 +39,22 @@ const VIEWPORTS = [
   { name: '2560 desktop', width: 2560, height: 1440, mobile: false },
 ];
 
-const PATHS = ['', '/shop', '/shop/lobster', '/p/atlantic-salmon-fillet', '/how-weighing-works', '/delivery'];
+/*
+ * ⚠ `/checkout` IS IN THIS LIST NOW, and it was the notable omission. It
+ * renders its empty-basket state here, since the sweep drives a fresh profile
+ * with no `localStorage`, which is a real layout with a real heading and is
+ * exactly the state a customer who taps the wrong thing sees. The filled state
+ * is not reachable without a scripted basket and is covered by the e2e suite.
+ */
+const PATHS = [
+  '',
+  '/shop',
+  '/shop/lobster',
+  '/p/atlantic-salmon-fillet',
+  '/how-weighing-works',
+  '/delivery',
+  '/checkout',
+];
 const LOCALES = ['fr', 'en'];
 const SCHEMES = ['light', 'dark'];
 

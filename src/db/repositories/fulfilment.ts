@@ -4,7 +4,7 @@ import { and, eq, gte, lte, sql } from 'drizzle-orm';
 
 import { db, type Tx } from '@/db/client';
 import { serviceableFsa, slot, zone } from '@/db/schema';
-import { fsaOf, type ZoneFee } from '@/domain/serviceability';
+import { fsaOf, type GeoZone, type ZoneFee } from '@/domain/serviceability';
 import type { SlotView } from '@/domain/slots';
 import { cents } from '@/domain/types';
 
@@ -37,6 +37,48 @@ export async function zoneFeesByFsa(tx: Tx | typeof db = db): Promise<ReadonlyMa
       },
     ]),
   );
+}
+
+/**
+ * Every zone that has a circle, for the distance path through P1.
+ *
+ * ⚠ READS THE WHOLE TABLE, deliberately. A shop has a handful of zones, and a
+ * `WHERE` clause doing spherical arithmetic in SQL would be both slower at
+ * this size and impossible to unit-test. The comparison lives in
+ * `checkServiceabilityAt`, which is pure and covered.
+ *
+ * `numeric` arrives from `pg` as a STRING, because a numeric can hold values a
+ * double cannot and the driver refuses to lose them silently. `Number()` here
+ * is the one conversion, and it is safe: these are six-decimal coordinates,
+ * far inside what a double represents exactly enough to compare.
+ */
+export async function geoZones(tx: Tx | typeof db = db): Promise<readonly GeoZone[]> {
+  const rows = await tx
+    .select({
+      zoneId: zone.id,
+      feeCents: zone.feeCents,
+      freeAboveCents: zone.freeAboveCents,
+      centreLat: zone.centreLat,
+      centreLng: zone.centreLng,
+      radiusM: zone.radiusM,
+    })
+    .from(zone)
+    .where(sql`${zone.radiusM} IS NOT NULL`);
+
+  return rows.flatMap((r) => {
+    // The CHECK guarantees all three or none, so this is belt and braces
+    // against a row written before the constraint existed.
+    if (r.centreLat === null || r.centreLng === null || r.radiusM === null) return [];
+    return [
+      {
+        zoneId: r.zoneId,
+        feeCents: cents(r.feeCents),
+        freeAboveCents: r.freeAboveCents === null ? null : cents(r.freeAboveCents),
+        centre: { lat: Number(r.centreLat), lng: Number(r.centreLng) },
+        radiusM: r.radiusM,
+      },
+    ];
+  });
 }
 
 /** The fee rule for one address, or `null` if it is outside the area (P1). */

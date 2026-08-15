@@ -31,6 +31,8 @@
  *                           `slotsFrom`); the rest is runway, so that a
  *                           prototype nobody re-seeds runs out of windows in a
  *                           fortnight rather than in two days.
+ *   SEED_ZONE_LAT / SEED_ZONE_LNG      the centre of the zone's circle.
+ *   SEED_ZONE_RADIUS_M=15000           ⚠ DEFAULTS TO HALF THE EARTH. See below.
  *   SHOP_TIMEZONE=America/Toronto
  */
 
@@ -97,6 +99,39 @@ function tls(connectionString) {
 
 const ZONE = { name: 'Local (placeholder)', feeCents: 599, freeAboveCents: 7500 };
 
+/**
+ * ⚠ THE ZONE'S CIRCLE, AND IT IS DELIBERATELY THE WHOLE PLANET.
+ *
+ * Serviceability now resolves a COORDINATE against a circle, and a shop with
+ * no circle refuses every customer whose phone shared its location, which is
+ * the majority of them. So the prototype gets one, and it is set wide for
+ * exactly the reason the FSA table was set wide: what is being tested is the
+ * customer flow, and test orders are placed from India and from Canada.
+ *
+ * 20,038 km is half the Earth's circumference. Every point on the planet is
+ * inside this circle no matter where the centre is, so this is the same
+ * statement as "4680 FSAs": the data says yes to everything, on purpose, and
+ * it is undone by narrowing one number.
+ *
+ * ⭐ NARROWING IT IS ONE UPDATE, AND THAT IS THE POINT OF THE SHAPE:
+ *
+ *     update zone set centre_lat = <shop lat>, centre_lng = <shop lng>,
+ *                     radius_m = 15000
+ *      where name = 'Local (placeholder)';
+ *
+ * The centre defaults to the shop's own coordinates so the DISTANCE reported
+ * back to the customer is meaningful even while the radius is not. Override
+ * both with SEED_ZONE_LAT / SEED_ZONE_LNG; they are read from the environment
+ * rather than written here because the shop's location is deployment
+ * configuration, like everything else in `shop-config.ts`.
+ */
+const HALF_EARTH_M = 20_038_000;
+const ZONE_CIRCLE = {
+  lat: Number(process.env.SEED_ZONE_LAT ?? 45.5019),
+  lng: Number(process.env.SEED_ZONE_LNG ?? -73.5674),
+  radiusM: Number(process.env.SEED_ZONE_RADIUS_M ?? HALF_EARTH_M),
+};
+
 // ── The windows ────────────────────────────────────────────────────────────
 // WALL CLOCK, converted to instants by Postgres against the shop's timezone,
 // which is what makes them survive DST. The database stores `timestamptz`; the
@@ -128,12 +163,21 @@ try {
   await client.query('BEGIN');
 
   const { rows } = await client.query(
-    `INSERT INTO zone (name, fee_cents, free_above_cents)
-       VALUES ($1, $2, $3)
+    `INSERT INTO zone (name, fee_cents, free_above_cents, centre_lat, centre_lng, radius_m)
+       VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (name) DO UPDATE SET
-       fee_cents = excluded.fee_cents, free_above_cents = excluded.free_above_cents
+       fee_cents = excluded.fee_cents, free_above_cents = excluded.free_above_cents,
+       centre_lat = excluded.centre_lat, centre_lng = excluded.centre_lng,
+       radius_m = excluded.radius_m
      RETURNING id`,
-    [ZONE.name, ZONE.feeCents, ZONE.freeAboveCents],
+    [
+      ZONE.name,
+      ZONE.feeCents,
+      ZONE.freeAboveCents,
+      ZONE_CIRCLE.lat,
+      ZONE_CIRCLE.lng,
+      ZONE_CIRCLE.radiusM,
+    ],
   );
   const zoneId = rows[0].id;
 
@@ -180,6 +224,19 @@ console.log(
   `Seeded zone "${ZONE.name}", ${fsas.length} serviceable FSAs (${prefixes.join(', ')}), ` +
     `and ${slotsInserted} new slots across ${days} day(s) in ${tz}.`,
 );
+if (ZONE_CIRCLE.radiusM >= HALF_EARTH_M) {
+  console.log(
+    `⚠ The zone's radius is ${(ZONE_CIRCLE.radiusM / 1000).toFixed(0)} km, which is EVERY ` +
+      'COORDINATE ON EARTH. That is a testing setting, not a delivery area. Narrow it with ' +
+      'SEED_ZONE_RADIUS_M, or one UPDATE, before the shop trades.',
+  );
+} else {
+  console.log(
+    `Zone circle: ${(ZONE_CIRCLE.radiusM / 1000).toFixed(1)} km around ` +
+      `${ZONE_CIRCLE.lat}, ${ZONE_CIRCLE.lng}.`,
+  );
+}
+
 console.log('⚠ Placeholder fulfilment data. Replace it with the real zone and windows (DQ-3, DQ-4).');
 if (prefixes.length > 3) {
   console.log('⚠ This deployment now says YES to every Canadian postal code. That is a prototype');

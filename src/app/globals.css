@@ -795,3 +795,24 @@
     transform: translateX(0);
   }
 }
+
+/*
+ * The bottom sheet's entrance, on a phone. The same pair of properties as the
+ * drawer above, for the same reason: transform and opacity run on the
+ * compositor, and the global reduce block collapses both to 0.01ms.
+ *
+ * Above `sm` the sheets become centred dialogs and use `fade-in` instead — a
+ * panel that slides up from the bottom of a 1440px display has travelled
+ * further than the eye can follow and lands nowhere near where it started.
+ */
+@keyframes slide-up {
+  from {
+    transform: translateY(6%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

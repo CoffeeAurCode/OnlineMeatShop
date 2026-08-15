@@ -16,7 +16,13 @@
 
 import { available, demandByProduct } from './availability';
 import { isLegalQuantity, lineEst, sumCents } from './pricing';
-import { checkServiceability, deliveryFee, type ZoneFee } from './serviceability';
+import {
+  deliveryFee,
+  resolveDestinationZone,
+  type GeoPoint,
+  type GeoZone,
+  type ZoneFee,
+} from './serviceability';
 import { evaluateSlot, type SlotView } from './slots';
 import { cents, grams, type Cents, type Grams, type Handling, type PlacementFailure, type Pricing } from './types';
 
@@ -58,7 +64,17 @@ export interface AuthorisedQuote {
 }
 
 export interface PlacementInput {
-  readonly postalCode: string;
+  /**
+   * ⚠ NULLABLE SINCE COORDINATES BECAME AN ADDRESS. An order located by GPS
+   * has no postal code to check, and inventing one to satisfy the old shape
+   * would put a fictional postal code on a real order row.
+   */
+  readonly postalCode: string | null;
+  /**
+   * Where the customer's device says they are. Takes precedence over the
+   * postal code when both are present — see `resolveDestinationZone`.
+   */
+  readonly point: GeoPoint | null;
   readonly lines: readonly RequestedLine[];
   readonly nowMs: number;
   readonly catalogVersion: number;
@@ -69,6 +85,8 @@ export interface PlacementContext {
   /** `null` when the slot ID did not resolve to a row. */
   readonly slot: SlotView | null;
   readonly zones: ReadonlyMap<string, ZoneFee>;
+  /** Zones expressed as circles. Empty until the shop declares one. */
+  readonly geoZones: readonly GeoZone[];
   readonly products: ReadonlyMap<string, ProductView>;
   readonly stock: ReadonlyMap<string, StockView>;
 }
@@ -144,7 +162,14 @@ export function evaluatePlacement(
   context: PlacementContext,
 ): PlacementDecision {
   // ── P1 — serviceable address ──────────────────────────────────────────
-  const serviceability = checkServiceability(input.postalCode, context.zones);
+  //
+  // A coordinate or a postal code, whichever the customer gave us. The choice
+  // between them, including which wins when both are present, is made once in
+  // `resolveDestinationZone` rather than branched here.
+  const serviceability = resolveDestinationZone(
+    { point: input.point, postalCode: input.postalCode },
+    { byFsa: context.zones, geo: context.geoZones },
+  );
   if (!serviceability.ok) return { ok: false, reason: 'outsideDeliveryArea' };
   const zone = serviceability.zone;
 
@@ -297,7 +322,8 @@ export function evaluatePlacement(
  * digests it. Keeping the canonicalisation here is what makes it testable.
  */
 export function cartFingerprint(input: {
-  readonly postalCode: string;
+  readonly postalCode: string | null;
+  readonly point: GeoPoint | null;
   readonly slotId: string;
   readonly payMode: string;
   readonly lines: readonly RequestedLine[];
@@ -305,8 +331,19 @@ export function cartFingerprint(input: {
   const lines = [...input.lines]
     .map((l) => `${l.productId}:${l.prepOptionId ?? '-'}:${l.requestedG}`)
     .sort();
+  /*
+   * ⚠ THE DESTINATION IS PART OF THE FINGERPRINT, so moving the pin has to
+   * change it. Coordinates are rounded to five decimals, about a metre: finer
+   * than that and GPS jitter alone would invalidate the attempt while the
+   * customer sat still, which is a re-authorisation for no reason.
+   */
+  const destination =
+    input.point !== null
+      ? `at=${input.point.lat.toFixed(5)},${input.point.lng.toFixed(5)}`
+      : `postal=${(input.postalCode ?? '').replace(/\s+/g, '').toUpperCase()}`;
+
   return [
-    `postal=${input.postalCode.replace(/\s+/g, '').toUpperCase()}`,
+    destination,
     `slot=${input.slotId}`,
     `pay=${input.payMode}`,
     `lines=${lines.join(',')}`,

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 
-import { orderForWeighing } from '@/db/repositories/orders';
+import { orderForWeighing, orderRef } from '@/db/repositories/orders';
 
 import { Screen } from '../../../../_components/shell';
 import { WeighForm } from '../../../../_components/weigh-form';
@@ -24,7 +24,7 @@ export default async function WeighPage({
   if (line === undefined || line.pricingMode !== 'perKg') notFound();
 
   return (
-    <Screen title={line.productName} back={{ href: `/admin/orders/${id}`, label: order.postalCode }}>
+    <Screen title={line.productName} back={{ href: `/admin/orders/${id}`, label: orderRef(order) }}>
       <WeighForm
         orderId={id}
         lineId={line.id}
