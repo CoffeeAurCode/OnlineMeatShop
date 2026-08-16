@@ -100,7 +100,14 @@ describe('findOrCreateCustomerByPhone — the prototype’s primary path', () =>
     expect(new Set(ids).size).toBe(1);
   });
 
-  it('leaves phone_verified_at NULL, because nothing verifies anything yet', async () => {
+  /**
+   * ⚠ STILL NULL, AND STILL ON PURPOSE. Verification is real now, but it
+   * happens in `/api/auth/verify` via `markPhoneVerified` — never in the
+   * checkout upsert. If this test ever starts failing, somebody has moved the
+   * stamp into `findOrCreateCustomerByPhone`, and every checkout is now
+   * marking its own unproven number as verified.
+   */
+  it('leaves phone_verified_at NULL, because the upsert never verifies', async () => {
     const id = await repo.findOrCreateCustomerByPhone('+15550333', null, null);
     const { rows } = await pool.query(`SELECT phone_verified_at FROM customer WHERE id = $1`, [id]);
     expect(rows[0].phone_verified_at).toBeNull();
@@ -114,11 +121,30 @@ describe('normalisePhone', () => {
     }
   });
 
+  /**
+   * ⭐ CHANGED 2026-08-16, DELIBERATELY. This case used to assert that
+   * `+44 20 7946 0958` returned null, on the reasoning that "`+44` is not `+1`
+   * and must not be coerced into it".
+   *
+   * The reasoning was right and the conclusion no longer follows. Nothing here
+   * ever coerced `+44` into `+1` — it REFUSED it, which was defensible while
+   * the number was a display field on an order and became a defect the moment
+   * it became a LOGIN. A normaliser that returns null for the user's own
+   * number does not make the shop stricter; it makes it impossible to sign in.
+   *
+   * What survives unchanged is the property the old comment was protecting: a
+   * number stored in two formats is two customers. `+44 20 7946 0958` and
+   * `+442079460958` still normalise to one value, and a BARE non-NANP number
+   * is still refused rather than guessed at — see below.
+   */
+  it('accepts an international number that says which country it is from', () => {
+    expect(repo.normalisePhone('+44 20 7946 0958')).toBe('+442079460958');
+    expect(repo.normalisePhone('+919876543210')).toBe('+919876543210');
+  });
+
   it('returns null rather than guessing at anything else', () => {
-    // A number stored in two formats is two customers, so refusing beats
-    // improvising. `+44` is not `+1` and must not be coerced into it.
-    for (const raw of ['', '12345', '+44 20 7946 0958', 'not a number']) {
-      expect(repo.normalisePhone(raw)).toBeNull();
+    for (const raw of ['', '12345', 'not a number', '919876543210']) {
+      expect(repo.normalisePhone(raw), raw).toBeNull();
     }
   });
 });

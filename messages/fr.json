@@ -191,7 +191,8 @@
     "viewOrder": "Voir la commande",
     "arriving": "Arrive {window}",
     "viewOnMap": "Voir sur la carte",
-    "partnerHeading": "Votre livreur"
+    "partnerHeading": "Votre livreur",
+    "partnerNamed": "{name} apporte votre commande."
   },
   "status": {
     "PLACED": "Enregistrée",
@@ -235,7 +236,9 @@
     "malformedBody": "Une erreur est survenue. Réessayez.",
     "generic": "Une erreur est survenue. Réessayez.",
     "retry": "Réessayer",
-    "outsideDeliveryAreaGps": "Nous ne livrons pas encore aussi loin."
+    "outsideDeliveryAreaGps": "Nous ne livrons pas encore aussi loin.",
+    "phoneMismatch": "Le numéro de cette page n'est pas celui de votre connexion. Rechargez et réessayez.",
+    "signInRequired": "Connectez-vous pour passer votre commande."
   },
   "delivery": {
     "title": "Livraison",
@@ -305,5 +308,32 @@
       "timeout": "Cela a pris trop de temps. Réessayez, ou saisissez votre adresse ci-dessous.",
       "unsupported": "Ce navigateur ne peut pas partager de position. Saisissez votre adresse ci-dessous."
     }
+  },
+  "auth": {
+    "title": "Connexion ou inscription",
+    "body": "Nous vous envoyons un code par texto. Il n'y a pas de mot de passe.",
+    "phoneLabel": "Numéro de mobile",
+    "phoneHelp": "Ajoutez l'indicatif du pays pour un numéro hors du Canada.",
+    "proceed": "Continuer par code",
+    "sending": "Envoi en cours",
+    "codeTitle": "Entrez le code",
+    "codeSentTo": "Nous avons envoyé un code au {phone}.",
+    "codeLabel": "Code de vérification",
+    "verify": "Vérifier et continuer",
+    "verifying": "Vérification",
+    "resend": "Renvoyer le code",
+    "resendIn": "Vous pourrez redemander dans {seconds} s",
+    "changeNumber": "Utiliser un autre numéro",
+    "terms": "En vous connectant, vous acceptez nos conditions d'utilisation.",
+    "wrongCode": "Ce code n'est pas le bon.",
+    "invalidPhone": "Entrez un numéro de téléphone avec son indicatif de pays.",
+    "tooSoon": "Un code vient d'être envoyé. Patientez un instant avant d'en redemander un.",
+    "unusableNumber": "Nous n'avons pas pu envoyer de texto à ce numéro.",
+    "notAvailable": "La connexion n'est pas disponible pour le moment.",
+    "devNotice": "Mode développement : aucun texto n'est envoyé. Utilisez le code de développement.",
+    "signedInAs": "Connecté au {phone}",
+    "signOut": "Se déconnecter",
+    "required": "Connectez-vous pour passer votre commande.",
+    "close": "Fermer"
   }
 }

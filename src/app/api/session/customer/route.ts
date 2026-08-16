@@ -1,56 +1,67 @@
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 
-import { phoneVerifier, verificationAvailable } from '@/adapters/phone-verifier';
-import { normalisePhone } from '@/db/repositories/customers';
+import {
+  CUSTOMER_SESSION_COOKIE,
+  customerCookieOptions,
+  readCustomerSession,
+} from '@/auth/customer-session';
 import { recentOrdersForPhone } from '@/db/repositories/tracking';
 
 /**
- * Unlock "my orders" for a phone number.
+ * Who is signed in, and what have they ordered.
  *
- * ⚠ THIS IS THE UNVERIFIED SEAM, and it is the reason `/orders` needs a code
- * while `/orders/[token]` does not. Tracking is gated on an unguessable token
- * that only the person who placed the order has; this endpoint is gated on
- * knowing a phone number, which is not a secret.
+ * ⚠ THE PHONE NUMBER COMES FROM THE SIGNED COOKIE, NEVER FROM THE REQUEST.
  *
- * ⭐ IT RETURNS THE ORDERS DIRECTLY RATHER THAN SETTING A SESSION COOKIE.
- * A cookie would be a durable credential minted from an unverified claim, and
- * it would outlive the page. Returning the list once, for this request only,
- * keeps the blast radius of the stub exactly as small as it can be: no
- * persistent identity is ever created from an unproven number.
+ * This is the whole security property of the endpoint and it is one line
+ * (`session.payload.phone`). The previous version took a phone number and a
+ * code in the body and looked up whatever number it was handed; it was safe
+ * only because the verifier refused to exist in production, which meant the
+ * feature did not exist either. Reading the number out of a token this server
+ * signed is what lets the feature exist and stay safe at the same time.
  *
- * `verificationAvailable()` is checked FIRST, so a deployment without a
- * verifier answers "not available" rather than reaching a stub that would
- * throw. The stub itself refuses to construct in production regardless.
+ * ⚠ NO PARAMETER SELECTS WHOSE ORDERS TO RETURN, and none may ever be added.
+ * The moment this accepts `?phone=`, it is an order-history lookup for anybody
+ * who knows a number.
+ *
+ * GET, not POST, because it changes nothing. The one exception is the expired
+ * case below, which clears a cookie that is already useless.
  */
-const schema = z.object({
-  phone: z.string().min(7).max(40),
-  code: z.string().min(1).max(12),
-});
 
-export async function POST(request: Request) {
-  if (!verificationAvailable()) {
-    return NextResponse.json({ reason: 'notAvailable' }, { status: 503 });
+export const dynamic = 'force-dynamic';
+
+export async function GET() {
+  const jar = await cookies();
+  const token = jar.get(CUSTOMER_SESSION_COOKIE)?.value;
+
+  const session = readCustomerSession(token, Date.now());
+  if (!session.ok) {
+    const response = NextResponse.json({ signedIn: false, reason: session.reason }, { status: 200 });
+    /*
+     * A stale or tampered cookie is cleared rather than left to be re-sent on
+     * every request for the next thirty days. `maxAge: 0` with the same
+     * attributes is the only reliable way to delete it — a `Set-Cookie` whose
+     * path or `secure` flag differs from the original creates a SECOND cookie
+     * and leaves the first exactly where it was.
+     */
+    if (session.reason !== 'notConfigured') {
+      response.cookies.set(CUSTOMER_SESSION_COOKIE, '', customerCookieOptions(0));
+    }
+    return response;
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ reason: 'malformedBody' }, { status: 400 });
-  }
+  const orders = await recentOrdersForPhone(session.payload.phone);
 
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ reason: 'invalidBody' }, { status: 400 });
+  return NextResponse.json({
+    signedIn: true,
+    phone: session.payload.phone,
+    orders,
+  });
+}
 
-  const phoneE164 = normalisePhone(parsed.data.phone);
-  // The same answer as a wrong code, so this cannot be used to probe which
-  // number shapes the shop accepts.
-  if (phoneE164 === null) return NextResponse.json({ reason: 'wrongCode' }, { status: 401 });
-
-  const ok = await phoneVerifier().check(phoneE164, parsed.data.code);
-  if (!ok) return NextResponse.json({ reason: 'wrongCode' }, { status: 401 });
-
-  const orders = await recentOrdersForPhone(phoneE164);
-  return NextResponse.json({ ok: true, orders });
+/** Sign out. Clears the cookie and nothing else — no server-side state exists. */
+export async function DELETE() {
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set(CUSTOMER_SESSION_COOKIE, '', customerCookieOptions(0));
+  return response;
 }

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  canAdvance,
+  canAssignPartner,
   canCancel,
   canDeliver,
   canTransition,
+  requiresAssignment,
   isTerminal,
   nextStatuses,
   notificationsFor,
@@ -143,6 +146,62 @@ describe('notifications (FR-24) — email only at launch', () => {
   it('is EMAIL only — SMS is cut at launch (D18)', () => {
     for (const s of ALL) {
       for (const n of notificationsFor('o1', s)) expect(n.channel).toBe('EMAIL');
+    }
+  });
+});
+
+/**
+ * Delivery assignment (07-PLAN Part 3).
+ *
+ * ⭐ THE RULE WORTH PROTECTING: an order cannot reach OUT with nobody
+ * carrying it. `OUT` is what starts the customer's "on its way" message, so an
+ * unassigned order that reaches it tells somebody their food is moving while
+ * it sits on the counter.
+ */
+describe('assignment', () => {
+  const ALL_STATUSES: OrderStatus[] = [
+    'PLACED',
+    'PREPARING',
+    'WEIGHED',
+    'READY',
+    'OUT',
+    'DELIVERED',
+    'CANCELLED',
+  ];
+
+  it('allows assigning to anything that is not finished', () => {
+    for (const s of ALL_STATUSES) {
+      expect(canAssignPartner(s), s).toBe(s !== 'DELIVERED' && s !== 'CANCELLED');
+    }
+  });
+
+  it('requires an assignment for OUT and for nothing else', () => {
+    for (const s of ALL_STATUSES) {
+      expect(requiresAssignment(s), s).toBe(s === 'OUT');
+    }
+  });
+
+  it('refuses READY -> OUT with nobody assigned and allows it with somebody', () => {
+    expect(canAdvance('READY', 'OUT', false)).toBe(false);
+    expect(canAdvance('READY', 'OUT', true)).toBe(true);
+  });
+
+  /**
+   * ⚠ THE ASSIGNMENT RULE MUST NOT LET AN ILLEGAL TRANSITION THROUGH. Having
+   * a driver does not make PLACED -> OUT legal; the graph still decides first.
+   */
+  it('does not let an assignment override the status graph', () => {
+    expect(canAdvance('PLACED', 'OUT', true)).toBe(false);
+    expect(canAdvance('DELIVERED', 'OUT', true)).toBe(false);
+  });
+
+  it('leaves every other transition exactly as canTransition says', () => {
+    for (const from of ALL_STATUSES) {
+      for (const to of ALL_STATUSES) {
+        if (to === 'OUT') continue;
+        expect(canAdvance(from, to, false), `${from}->${to}`).toBe(canTransition(from, to));
+        expect(canAdvance(from, to, true), `${from}->${to}`).toBe(canTransition(from, to));
+      }
     }
   });
 });

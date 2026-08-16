@@ -10,7 +10,15 @@ import {
   seedServedArea,
   seedSlot,
 } from '../integration/helpers/fixtures';
-import { asStaff, asStranger, signInAsStaff, startServer, stopServer } from './helpers/server';
+import {
+  asCustomer,
+  asStaff,
+  asStranger,
+  E2E_CUSTOMER_PHONE,
+  signInAsStaff,
+  startServer,
+  stopServer,
+} from './helpers/server';
 
 /**
  * ⭐⭐ THE WHOLE PATH, IN ONE TEST, THROUGH REAL HTTP.
@@ -114,7 +122,7 @@ describe('browse to order to console to tracking', () => {
      * order placed without a coordinate renders every other line of it and
      * proves nothing about the one that broke. See `src/ui/maps.ts`.
      */
-    const placed = await asStranger('/api/checkout', {
+    const placed = await asCustomer('/api/checkout', {
       json: {
         lines: [{ productId, requestedG: 750, prepOptionId: null }],
         postalCode: `${FSA_SERVED} 1A1`,
@@ -126,7 +134,7 @@ describe('browse to order to console to tracking', () => {
         province: 'QC',
         deliveryNotes: 'Buzz 302',
         slotId,
-        phone: '514-555-0188',
+        phone: E2E_CUSTOMER_PHONE,
         name: 'Sample Customer',
         email: null,
         catalogVersion: quote.catalogVersion,
@@ -210,14 +218,67 @@ describe('browse to order to console to tracking', () => {
       captured_cents: 3200 + FEE,
     });
 
-    // ── 8. On to the door. ───────────────────────────────────────────────
+    // ── 8. On to the door — which needs somebody to carry it. ────────────
+    expect((await asStaff('/api/admin/status', { json: { orderId, from: 'WEIGHED', to: 'READY' } })).status).toBe(200);
+
+    /*
+     * ⭐ AN ORDER CANNOT GO OUT WITH NOBODY CARRYING IT.
+     *
+     * Asserted as a REFUSAL FIRST, before the assignment exists, because that
+     * is the half of the rule a test can accidentally stop covering: assign
+     * early enough and the guard is never exercised, and the suite goes green
+     * while the rule has been deleted. `OUT` is what starts the customer's
+     * "on its way" message, so an unassigned order reaching it tells somebody
+     * their food is moving while it sits on the counter.
+     */
+    const tooEarly = await asStaff('/api/admin/status', {
+      json: { orderId, from: 'READY', to: 'OUT' },
+    });
+    expect(tooEarly.status).toBe(409);
+    expect((await tooEarly.json()).reason).toBe('notAssigned');
+
+    // Fictional, per CLAUDE.md §1 — reserved 555 range, so it is nobody.
+    const partner = await asStaff('/api/admin/partners', {
+      json: { name: 'Sample Driver', phone: '+15145550199', notes: 'van' },
+    });
+    expect(partner.status).toBe(200);
+    const partnerId = (await partner.json()).id as string;
+
+    expect(
+      (await asStaff('/api/admin/assign', { json: { orderId, partnerId } })).status,
+    ).toBe(200);
+
+    /*
+     * ⚠ THE DISPATCH MESSAGE IS NOT SENT HERE. `smsSender()` falls back to
+     * `LoggingSmsSender` with no Twilio credentials, so this would pass
+     * without proving anything about delivery — and WITH credentials in the
+     * environment it would send a real text on every test run. The message
+     * itself is covered exhaustively by `tests/domain/dispatch.test.ts`, which
+     * is pure and can assert on the content.
+     */
+
     for (const [from, to] of [
-      ['WEIGHED', 'READY'],
       ['READY', 'OUT'],
       ['OUT', 'DELIVERED'],
     ] as const) {
       expect((await asStaff('/api/admin/status', { json: { orderId, from, to } })).status).toBe(200);
     }
+
+    /*
+     * ⭐ THE SNAPSHOT OUTLIVES THE ROSTER. Deleting the partner nulls the FK
+     * (`on delete set null`) and must leave the order still saying who took
+     * it. This is the assertion that would have caught the 0008 defect, where
+     * `order_assignment_coherent` included the FK and turned this DELETE into
+     * a check violation — making `set null` behave as `restrict`.
+     */
+    await pool.query(`DELETE FROM delivery_partner WHERE id = $1`, [partnerId]);
+    const kept = await pool.query(
+      `SELECT delivery_partner_id, partner_name, partner_phone FROM "order" WHERE id = $1`,
+      [orderId],
+    );
+    expect(kept.rows[0].delivery_partner_id).toBeNull();
+    expect(kept.rows[0].partner_name).toBe('Sample Driver');
+    expect(kept.rows[0].partner_phone).toBe('+15145550199');
 
     // ── 9. ⭐ The customer sees estimate versus actual, and the exact total. ─
     const final = await (await asStranger(`/en/orders/${token}`)).text();

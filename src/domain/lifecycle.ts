@@ -118,6 +118,61 @@ export function canDeliver(
   return finalTotalCents !== null && cashCollectedCents === finalTotalCents;
 }
 
+// ── Delivery assignment (07-PLAN Part 3) ─────────────────────────────────
+
+/**
+ * Whether a delivery partner may be attached to, or changed on, an order.
+ *
+ * Anything that is not finished. Assigning early is harmless — the owner
+ * often knows who is driving before the fish is cut — and reassigning is the
+ * normal correction when somebody calls in sick.
+ *
+ * ⚠ REASSIGNMENT CLEARS `dispatched_at`, and that rule lives in the
+ * repository rather than here because it is a write, not a predicate. The
+ * reason is worth stating anyway: the NEW partner has not been told, and an
+ * order that still looks dispatched is one nobody sends a second message
+ * about.
+ */
+export function canAssignPartner(status: OrderStatus): boolean {
+  return status !== 'DELIVERED' && status !== 'CANCELLED';
+}
+
+/**
+ * ⭐ AN ORDER CANNOT GO OUT WITH NOBODY CARRYING IT.
+ *
+ * `07-PLAN` §3.2. Stated as a pure predicate, beside `canDeliver`, and called
+ * by the status route — rather than written inline in that route — for the
+ * same reason every other rule in this file is: a check that lives in a route
+ * handler is a check the next route handler does not have.
+ *
+ * The failure it prevents is not hypothetical. `OUT` is what starts the
+ * customer's "on its way" message. An order that reaches it unassigned tells
+ * a customer their food is moving while it is sitting on the counter, and the
+ * shop finds out when they ring.
+ */
+export function requiresAssignment(to: OrderStatus): boolean {
+  return to === 'OUT';
+}
+
+/**
+ * The full move test: the graph, plus the assignment rule.
+ *
+ * Deliberately a separate function rather than extra parameters on
+ * `canTransition`. `canTransition` answers a question about the STATUS GRAPH
+ * and is used by screens that render "what can happen next"; this one answers
+ * whether this PARTICULAR order may move right now. Merging them would force
+ * every caller of the first to know about partners.
+ */
+export function canAdvance(
+  from: OrderStatus,
+  to: OrderStatus,
+  hasAssignment: boolean,
+): boolean {
+  if (!canTransition(from, to)) return false;
+  if (requiresAssignment(to) && !hasAssignment) return false;
+  return true;
+}
+
 // ── Notifications (FR-24) ────────────────────────────────────────────────
 
 /**
@@ -134,7 +189,7 @@ export function canDeliver(
  */
 export interface PlannedNotification {
   readonly kind: string;
-  readonly channel: 'EMAIL';
+  readonly channel: 'EMAIL' | 'SMS';
   readonly dedupeKey: string;
 }
 

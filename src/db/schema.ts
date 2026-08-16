@@ -619,6 +619,113 @@ export const customer = pgTable(
   ],
 );
 
+// ── delivery_partner ───────────────────────────────────────────────────
+
+/**
+ * The people who carry the boxes.
+ *
+ * ⭐ A PARTNER IS A ROW, NOT A USER. `07-PLAN` §1.5 and §2.1.
+ *
+ * They do not sign in. No account, no password, no session, no console. The
+ * instinct is to give them a login and the instinct is wrong at this size:
+ *
+ *   - The shop does 2-6 orders a day with one van. There is no dispatch
+ *     problem to solve, only a communication one.
+ *   - An account is a credential, a reset flow, a lockout policy and a support
+ *     burden, for a person who needs to know one address at a time.
+ *   - Every authenticated surface is new attack surface on a public repo's
+ *     deployment, and this one would hold customer home addresses.
+ *
+ * What they get instead is a text message (`src/domain/dispatch.ts`).
+ */
+export const deliveryPartner = pgTable(
+  'delivery_partner',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+
+    /**
+     * ⚠ E.164, WITH A CHECK, NOT FREE TEXT.
+     *
+     * Every mechanism downstream — Twilio's API, an `sms:` link, `wa.me` --
+     * needs the international form. A number stored as `514-555-0142` fails at
+     * the LAST step, at the moment the order is going out of the door and the
+     * owner has no time to debug it. Normalise at the boundary
+     * (`src/domain/phone.ts`) and let the database refuse anything else.
+     */
+    phone: text('phone').notNull(),
+
+    active: boolean('active').notNull().default(true),
+
+    /** Free text the owner reads: "van", "bike, no highway", "weekends only". */
+    notes: text('notes'),
+
+    /** The order they appear in the picker. Lowest first. */
+    sortOrder: integer('sort_order').notNull().default(0),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /*
+     * ⚠ `[+]`, NOT `\+`. The backslash does not survive.
+     *
+     * `sql` is a TAGGED TEMPLATE LITERAL, so TypeScript resolves the escape
+     * before Drizzle ever sees the string: `\+` in this file becomes a bare
+     * `+` in the emitted SQL, and `^+` is an invalid POSIX quantifier that
+     * Postgres refuses outright. Writing `\+` works but is one careless
+     * reformat away from breaking again, and it breaks at MIGRATION time on
+     * the live database rather than here.
+     *
+     * A bracket expression means the same thing and has no escape to lose.
+     */
+    check('partner_phone_e164', sql`${t.phone} ~ '^[+][1-9][0-9]{6,14}$'`),
+
+    /**
+     * ⭐ UNIQUE ON `(phone) WHERE active`, NOT ON `phone`.
+     *
+     * Two live rows with the same number means one dispatch sent twice, which
+     * is how two drivers turn up at one door. But a partner who leaves and
+     * comes back must be re-addable, and the deactivated row has to STAY for
+     * the orders that reference it — so the uniqueness has to be scoped to
+     * the live ones.
+     */
+    uniqueIndex('partner_phone_active').on(t.phone).where(sql`${t.active}`),
+  ],
+);
+
+// ── shop_setting ───────────────────────────────────────────────────────
+
+/**
+ * Operational settings the OWNER changes, as key/value rows.
+ *
+ * ══ WHY A KEY/VALUE TABLE AND NOT COLUMNS ════════════════════════
+ *
+ * Normally this shape is a mistake — it defeats types, constraints and every
+ * query planner. It is right here for one narrow reason: these are settings
+ * with NO relational meaning and no invariant that spans them. Nothing joins
+ * to "the new-order chime volume". A migration per preference would be a
+ * migration per preference.
+ *
+ * ⚠ THE LINE THIS MUST NOT CROSS: anything a CHECK constraint should
+ * enforce, or anything another table references, gets a real column. The
+ * delivery zone's fee and radius are NOT in here for exactly that reason --
+ * they live on `zone`, where `zone_circle_whole` can refuse a half-written
+ * circle. If you find yourself wanting to validate a value in here against
+ * another one in here, you have found the boundary and the answer is a column.
+ *
+ * `value` is jsonb so a setting can be a boolean, a number or a string without
+ * a parse step at every read.
+ */
+export const shopSetting = pgTable('shop_setting', {
+  /** Dotted, namespaced: `console.newOrderSound`, `console.newOrderMessage`. */
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Which staff row last wrote it. Nullable: a seed script has no staff id. */
+  updatedBy: uuid('updated_by').references(() => staff.id, { onDelete: 'set null' }),
+});
+
 // ── order ────────────────────────────────────────────────────────────────
 
 export const order = pgTable(
@@ -730,6 +837,34 @@ export const order = pgTable(
     slotHotEligible: boolean('slot_hot_eligible').notNull(),
     hasHotLine: boolean('has_hot_line').notNull(),
 
+    /**
+     * ⭐ WHO IS CARRYING IT — a live reference AND a snapshot, both.
+     *
+     * `on delete set null` plus the snapshot, never `restrict`. The FK is for
+     * joining today's roster; the two `partner_*` columns are the historical
+     * record. With `restrict` the owner could never remove somebody who did
+     * one delivery in March, and they will ask why. With only the FK, removing
+     * them erases who delivered it.
+     *
+     * Same reasoning as `order_line.product_name`: the roster will change and
+     * a delivered order must still say who took it.
+     */
+    deliveryPartnerId: uuid('delivery_partner_id').references(() => deliveryPartner.id, {
+      onDelete: 'set null',
+    }),
+    partnerName: text('partner_name'),
+    partnerPhone: text('partner_phone'),
+    assignedAt: timestamp('assigned_at', { withTimezone: true }),
+
+    /**
+     * When the dispatch message was actually sent.
+     *
+     * ⚠ CLEARED BY A REASSIGNMENT. The new partner has not been told, and
+     * an order that still looks dispatched is one nobody sends a second
+     * message about.
+     */
+    dispatchedAt: timestamp('dispatched_at', { withTimezone: true }),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
@@ -775,6 +910,48 @@ export const order = pgTable(
     check(
       'order_est_total_is_sum',
       sql`${t.estTotalCents} = ${t.estLineTotalCents} + ${t.deliveryFeeCents}`,
+    ),
+
+    /**
+     * An assignment is its SNAPSHOT: a time, a name and a number, all three or
+     * none of them.
+     *
+     * ⚠ `delivery_partner_id` IS DELIBERATELY NOT IN THIS CHECK, AND IT WAS,
+     * AND THAT WAS A DEFECT. Measured against the live database on
+     * 2026-08-16, not reasoned about:
+     *
+     *     delete from delivery_partner where id = '…';
+     *     ERROR 23514: new row for relation "order" violates check
+     *                  constraint "order_assignment_coherent"
+     *
+     * The FK is `on delete set null`. When a partner is deleted, Postgres
+     * performs that UPDATE — and the referential action is itself subject to
+     * CHECK constraints. So nulling the FK while the snapshot remained broke a
+     * check that required them to move together, and the delete failed.
+     *
+     * ⭐ THE EFFECT WAS THAT `on delete set null` BEHAVED EXACTLY LIKE
+     * `on delete restrict` — the one outcome `07-PLAN` §3.1 explicitly set out
+     * to avoid, in its own words: "the owner cannot ever remove a partner who
+     * did one delivery in March, and they will ask why". The plan asked for
+     * both and the two cannot both be true. The plan is the bug (`CLAUDE.md`
+     * §5).
+     *
+     * What is actually worth enforcing is the SNAPSHOT's coherence, because
+     * the snapshot is the historical record — a delivered order must still say
+     * who took it. The FK is a convenience join onto a roster that will change,
+     * and a null there means only "that person is no longer on the roster".
+     */
+    check(
+      'order_assignment_coherent',
+      sql`(${t.assignedAt} IS NULL AND ${t.partnerName} IS NULL AND ${t.partnerPhone} IS NULL)
+          OR (${t.assignedAt} IS NOT NULL AND ${t.partnerName} IS NOT NULL
+              AND ${t.partnerPhone} IS NOT NULL)`,
+    ),
+
+    /** You cannot tell somebody about a job before you have given it to them. */
+    check(
+      'order_dispatch_after_assign',
+      sql`${t.dispatchedAt} IS NULL OR ${t.assignedAt} IS NOT NULL`,
     ),
   ],
 );

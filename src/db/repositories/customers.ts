@@ -13,11 +13,18 @@ import { customer } from '@/db/schema';
  * identifiers are therefore optional and both are uniquely indexed only where
  * they are present.
  *
- * ⚠ NEITHER IDENTIFIER IS VERIFIED. Anyone who knows a number can claim to be
- * its owner. That is tolerable only because nothing sensitive hangs off it:
- * order tracking is gated on `order.public_token`, not on identity. When
- * `PhoneVerifier` becomes real, `phone_verified_at` is what changes and this
- * file is not.
+ * ⭐ THE PHONE NUMBER IS NOW VERIFIED — BUT NOT BY THIS FILE, AND NOT ON
+ * EVERY PATH.
+ *
+ * `findOrCreateCustomerByPhone` still takes a number somebody TYPED and asks
+ * no questions about it, because it runs inside checkout where the customer
+ * has already proven the number to `/api/auth/verify` and the checkout route
+ * checks the session before calling in here. `phone_verified_at` is stamped by
+ * `markPhoneVerified` below, from the verify route only.
+ *
+ * ⚠ So a row in this table with a NULL `phone_verified_at` is a real thing
+ * and not a bug: it is either a pre-2026-08-16 order, or an email-path
+ * checkout. Never read the presence of a row as proof of anything.
  *
  * ══ ON CONFLICT AGAINST A PARTIAL INDEX ═══════════════════════════════════
  *
@@ -55,18 +62,40 @@ const refreshContact = {
 } as const;
 
 /**
- * Normalise a Canadian phone number to E.164.
+ * ⚠ `normalisePhone` MOVED TO `src/domain/phone.ts`. It is re-exported here
+ * so existing imports keep working, and it is NOT reimplemented.
  *
- * Deliberately narrow: it accepts the shapes a Montreal customer actually
- * types — `514-486-5246`, `(514) 486-5246`, `+1 514 486 5246` — and returns
- * `null` for anything else rather than guessing. A number stored in two
- * formats is two customers.
+ * It moved for two reasons. It gained callers that are not customers — the
+ * OTP routes and the delivery-partner roster — and a rule enforced in three
+ * places has to be stated in one. And it stopped being Canada-only: the moment
+ * a phone number became a LOGIN, a normaliser that returns null for the user's
+ * own number stopped being strict and started being broken.
  */
-export function normalisePhone(raw: string): string | null {
-  const digits = raw.replace(/\D/g, '');
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
-  return null;
+export { normalisePhone } from '@/domain/phone';
+
+/**
+ * Stamp `phone_verified_at` after a successful OTP check.
+ *
+ * ⭐ SEPARATE FROM THE UPSERT, ON PURPOSE. `findOrCreateCustomerByPhone`
+ * runs at CHECKOUT, from a number somebody typed; this runs only from the
+ * verify route, after a code that was texted to that number came back. If one
+ * function did both, every checkout would silently mark itself verified and
+ * the column would record nothing at all — which is exactly the state it was
+ * in for the whole prototype, and the state it exists to escape.
+ *
+ * Idempotent: verifying twice keeps the FIRST timestamp, because the question
+ * the column answers is "when was this number proven", not "when was it last
+ * proven".
+ */
+export async function markPhoneVerified(
+  phoneE164: string,
+  atMs: number,
+  tx: Tx | typeof db = db,
+): Promise<void> {
+  await tx
+    .update(customer)
+    .set({ phoneVerifiedAt: sql`coalesce(${customer.phoneVerifiedAt}, ${new Date(atMs)})` })
+    .where(eq(customer.phone, phoneE164));
 }
 
 /**

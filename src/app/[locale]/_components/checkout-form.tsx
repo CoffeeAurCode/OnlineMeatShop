@@ -6,10 +6,11 @@ import { FlameIcon, MapPinIcon, PencilSimpleIcon } from '@phosphor-icons/react/d
 
 import { quoteProblemMessage, t, type Locale } from '@/i18n';
 import { clearCart, lineKey, useCart } from '@/ui/cart';
+import { useCustomerSession } from '@/ui/customer-session';
 import { money, weight } from '@/ui/format';
 import { isDeliverable, useDeliveryLocation } from '@/ui/location';
 
-import { openLocationSheet } from './drawer-state';
+import { openLocationSheet, openSignIn } from './drawer-state';
 import { MoneySentence, TestOrderBanner } from './money-sentence';
 
 /**
@@ -68,6 +69,16 @@ interface Quote {
 }
 
 export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: Locale }) {
+  /*
+   * ⭐ THE SIGN-IN STATE, READ BUT NEVER TRUSTED.
+   *
+   * This decides what the BUTTON SAYS. It does not decide whether the order is
+   * allowed — `/api/checkout` re-reads the signed cookie and refuses with
+   * `signInRequired` regardless of what this component believes. Two checks
+   * that look redundant, and are not: this one is so the customer is never
+   * surprised, and the server's is so the rule is actually enforced.
+   */
+  const session = useCustomerSession();
   const router = useRouter();
   const cart = useCart();
   const { location, ready } = useDeliveryLocation();
@@ -141,6 +152,23 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
   const hot = quote?.hasHotLine === true;
   const usable = slots.filter((s) => !s.cutoffPassed && (!hot || s.hotEligible));
 
+  /*
+   * ⭐ THE PROVEN NUMBER WINS, AND IT IS DERIVED RATHER THAN COPIED INTO
+   * STATE.
+   *
+   * The server refuses the order unless the body's phone normalises to the
+   * cookie's (`phoneMismatch`), so a customer who signed in with one number
+   * and then edited the field would be blocked with no idea why.
+   *
+   * ⚠ An effect that copied `session.phone` into `phone` would work and is
+   * the obvious shape — it is also a setState inside an effect, which React's
+   * own lint rule refuses, and correctly: it renders once with the stale value
+   * and again with the fresh one. A derived constant has no intermediate
+   * state to be wrong in. The `phone` field below is only ever shown, and only
+   * ever typed into, while signed OUT.
+   */
+  const provenPhone = session.phone ?? phone;
+
   function validate(): boolean {
     const errors: Record<string, string> = {};
     /*
@@ -150,8 +178,11 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
      * range; `normalisePhone` on the server is what decides the canonical
      * form, and it is the only opinion that has to be right.
      */
-    const digits = phone.replace(/\D/g, '');
-    if (digits.length < 7 || digits.length > 15) {
+    // Skipped entirely when signed in: the number came from a code texted to
+    // it, so re-validating its shape here could only ever disagree with the
+    // server about a number the server already proved.
+    const digits = provenPhone.replace(/\D/g, '');
+    if (session.phone == null && (digits.length < 7 || digits.length > 15)) {
       errors.phone = t(locale, 'checkout.phoneInvalid');
     }
     if (!isDeliverable(location)) errors.address = t(locale, 'checkout.addressIncomplete');
@@ -163,6 +194,20 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (submitting || quote === null) return;
+
+    /*
+     * ⭐ THE SIGN-IN GATE, AT THE MOMENT OF THE TAP.
+     *
+     * Deliberately here rather than as a redirect on page load. A customer who
+     * has filled in a window and is ready to pay should not lose that to a
+     * navigation; opening the sheet over the page keeps every field they
+     * entered, and the sheet closing puts them back on a live button.
+     */
+    if (session.phone == null) {
+      openSignIn();
+      return;
+    }
+
     if (!validate()) return;
 
     setSubmitting(true);
@@ -188,7 +233,7 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
           deliveryNotes: location.notes.trim() === '' ? null : location.notes,
           dropOff: t(locale, `location.dropOff.${location.dropOff}`),
           slotId,
-          phone,
+          phone: provenPhone,
           name: name.trim() === '' ? null : name,
           email: email.trim() === '' ? null : email,
           catalogVersion: quote.catalogVersion,
@@ -214,6 +259,17 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
       // wrong" on a checkout is what makes a customer try again and place two
       // orders.
       const reason = body.reason ?? 'generic';
+      /*
+       * A thirty-day cookie can expire between loading this page and pressing
+       * the button. Reopening the sheet turns that into two taps instead of a
+       * dead end with a sentence nobody can act on.
+       */
+      if (res.status === 401 && reason === 'signInRequired') {
+        await session.refresh();
+        openSignIn();
+        setSubmitting(false);
+        return;
+      }
       setFailure(
         body.detail?.productName !== undefined
           ? t(locale, 'errors.insufficientStock', { name: body.detail.productName })
@@ -250,17 +306,49 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
       </Section>
 
       <Section heading={t(locale, 'checkout.contactHeading')}>
-        <Field
-          id="phone"
-          label={t(locale, 'checkout.phoneLabel')}
-          help={t(locale, 'checkout.phoneHelp')}
-          error={fieldErrors.phone}
-          value={phone}
-          onChange={setPhone}
-          type="tel"
-          autoComplete="tel"
-          required
-        />
+        {/*
+          ⭐ SIGNED IN: THE NUMBER IS SHOWN, NOT ASKED FOR.
+
+          It is the number a code was texted to, so there is nothing to type
+          and nothing to get wrong. "Use a different number" signs out and
+          reopens the sheet, which is the only honest way to change it —
+          editing the field would produce a `phoneMismatch` the customer could
+          not diagnose.
+
+          Signed out, the field stays editable so the page reads normally, but
+          the button opens the sheet rather than placing anything.
+        */}
+        {session.phone == null ? (
+          <Field
+            id="phone"
+            label={t(locale, 'checkout.phoneLabel')}
+            help={t(locale, 'checkout.phoneHelp')}
+            error={fieldErrors.phone}
+            value={phone}
+            onChange={setPhone}
+            type="tel"
+            autoComplete="tel"
+            required
+          />
+        ) : (
+          <div className="flex items-baseline justify-between gap-4 rounded-sm border border-line bg-soft px-4 py-3">
+            <span className="min-w-0">
+              <span className="block text-meta text-muted">
+                {t(locale, 'checkout.phoneLabel')}
+              </span>
+              <span className="tnum block truncate text-body font-semibold">{session.phone}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                void session.signOut().then(openSignIn);
+              }}
+              className="tap shrink-0 text-meta text-muted underline underline-offset-4"
+            >
+              {t(locale, 'auth.changeNumber')}
+            </button>
+          </div>
+        )}
         <Field
           id="name"
           label={t(locale, 'checkout.nameLabel')}
@@ -402,7 +490,18 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
           disabled={submitting || hasProblem || quote?.estTotalCents == null}
           className="tap-lg inline-flex items-center justify-center rounded-sm bg-accent px-6 text-lead font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover disabled:opacity-60 active:scale-[0.99]"
         >
-          {submitting ? t(locale, 'checkout.placing') : t(locale, 'checkout.place')}
+          {/*
+            ⚠ THE LABEL CHANGES BEFORE THE ACTION DOES. A button that says
+            "Place order" and opens a sign-in sheet is a button that lied; one
+            that says "Sign in to order" sets the expectation the tap then
+            meets. `session.loading` keeps the label stable during the first
+            fetch rather than flickering from one to the other.
+          */}
+          {submitting
+            ? t(locale, 'checkout.placing')
+            : session.phone == null && !session.loading
+              ? t(locale, 'auth.required')
+              : t(locale, 'checkout.place')}
         </button>
       </div>
     </form>

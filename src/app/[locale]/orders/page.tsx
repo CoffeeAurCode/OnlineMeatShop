@@ -7,11 +7,19 @@ import { isLocale, t } from '@/i18n';
 import { OrderHistory } from '../_components/order-history';
 
 /**
- * "My orders", behind the stub verifier.
+ * "My orders", behind a verified phone number.
  *
- * ⚠ NOT INDEXABLE, and the reason is not the usual one. This page is a form,
+ * ⚠ NOT INDEXABLE, and the reason is not the usual one. This page is a list,
  * so there is nothing worth indexing, but the important part is that a crawler
  * following a link here must never end up with order data in an index.
+ *
+ * ⭐ THE `verificationAvailable()` BRANCH IS WHAT THIS PAGE USED TO ALWAYS
+ * TAKE. On the deployed site it was false — the stub verifier refuses to exist
+ * in production and there was nothing else — so every customer saw
+ * "Something went wrong. Try again." with two real orders sitting in the
+ * database. It is kept, because a deployment with no `NEXT_PUBLIC_SUPABASE_*`
+ * still cannot sign anybody in and should say so rather than showing a button
+ * that does nothing. It is simply no longer the normal case.
  */
 
 export const metadata: Metadata = {
@@ -24,8 +32,6 @@ export default async function OrdersPage({ params }: { params: Promise<{ locale:
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
 
-  // Checked on the server, so a deployment without a verifier does not render
-  // a form that cannot work. The route refuses too; this is the courtesy.
   const available = verificationAvailable();
 
   return (
@@ -36,7 +42,7 @@ export default async function OrdersPage({ params }: { params: Promise<{ locale:
         <OrderHistory locale={locale} />
       ) : (
         <p className="mt-6 rounded-md border border-line bg-soft px-4 py-3 text-body">
-          {t(locale, 'errors.generic')}
+          {t(locale, 'auth.notAvailable')}
         </p>
       )}
     </div>

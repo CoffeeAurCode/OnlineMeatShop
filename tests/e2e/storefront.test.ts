@@ -9,7 +9,13 @@ import {
   seedServedArea,
   seedSlot,
 } from '../integration/helpers/fixtures';
-import { asStranger, startServer, stopServer } from './helpers/server';
+import {
+  asCustomer,
+  asStranger,
+  E2E_CUSTOMER_PHONE,
+  startServer,
+  stopServer,
+} from './helpers/server';
 
 /**
  * ⭐ THE STOREFRONT, END TO END.
@@ -270,7 +276,7 @@ describe('checkout', () => {
 
     // P7 — a food-safety rule, enforced at placement and not merely hidden in
     // the picker. The UI filtering is a courtesy; this is the guarantee.
-    const refused = await asStranger('/api/checkout', {
+    const refused = await asCustomer('/api/checkout', {
       json: {
         lines: [{ productId: hotId, requestedG: 500, prepOptionId: null }],
         postalCode: `${FSA_SERVED} 1A1`,
@@ -280,7 +286,7 @@ describe('checkout', () => {
         city: 'Testville',
         province: 'QC',
         deliveryNotes: null,
-        phone: '514-555-0123',
+        phone: E2E_CUSTOMER_PHONE,
         name: 'Sample Customer',
         email: null,
         catalogVersion: quote.catalogVersion,
@@ -291,7 +297,7 @@ describe('checkout', () => {
 
     // The same basket into a hot-eligible slot goes through.
     const hotSlot = await seedSlot(pool, { hotEligible: true });
-    const placed = await asStranger('/api/checkout', {
+    const placed = await asCustomer('/api/checkout', {
       json: {
         lines: [{ productId: hotId, requestedG: 500, prepOptionId: null }],
         postalCode: `${FSA_SERVED} 1A1`,
@@ -301,7 +307,7 @@ describe('checkout', () => {
         city: 'Testville',
         province: 'QC',
         deliveryNotes: null,
-        phone: '514-555-0123',
+        phone: E2E_CUSTOMER_PHONE,
         name: 'Sample Customer',
         email: null,
         catalogVersion: quote.catalogVersion,
@@ -352,7 +358,7 @@ describe('checkout', () => {
   it('refuses a stale quote rather than silently charging the new price', async () => {
     const slotId = await seedSlot(pool, { hotEligible: false });
 
-    const stale = await asStranger('/api/checkout', {
+    const stale = await asCustomer('/api/checkout', {
       json: {
         lines: [{ productId: lambId, requestedG: 500, prepOptionId: null }],
         postalCode: `${FSA_SERVED} 1A1`,
@@ -362,7 +368,7 @@ describe('checkout', () => {
         city: 'Testville',
         province: 'QC',
         deliveryNotes: null,
-        phone: '514-555-0123',
+        phone: E2E_CUSTOMER_PHONE,
         name: null,
         email: null,
         // A version the catalog has moved past.
@@ -392,7 +398,7 @@ describe('checkout', () => {
       })
     ).json();
 
-    const res = await asStranger('/api/checkout', {
+    const res = await asCustomer('/api/checkout', {
       json: {
         lines: [{ productId: lambId, requestedG: 500, prepOptionId: null }],
         postalCode: `${FSA_UNSERVED} 9Z9`,
@@ -402,7 +408,7 @@ describe('checkout', () => {
         city: 'Testville',
         province: 'QC',
         deliveryNotes: null,
-        phone: '514-555-0123',
+        phone: E2E_CUSTOMER_PHONE,
         name: null,
         email: null,
         catalogVersion: quote.catalogVersion,

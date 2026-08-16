@@ -15,13 +15,19 @@ import { useSyncExternalStore } from 'react';
  * where they want it; this is ephemeral view state. Putting them together
  * would persist "the drawer was open" across reloads, which nobody wants.
  *
- * ⚠ THE TWO OVERLAYS ARE MUTUALLY EXCLUSIVE, enforced here rather than left to
- * each caller. They are both fixed, both dialogs, and both trap focus; two
- * open at once is two focus traps fighting, and the customer cannot leave
- * either. Opening one closes the other.
+ * ⚠ THE OVERLAYS ARE MUTUALLY EXCLUSIVE, enforced here rather than left to
+ * each caller. They are all fixed, all dialogs, and all trap focus; two open
+ * at once is two focus traps fighting, and the customer cannot leave either.
+ * Opening one closes the others.
+ *
+ * ⭐ THE SIGN-IN SHEET IS IN THIS SET FOR A REASON THAT ONLY SHOWS UP AT
+ * CHECKOUT. Pressing "Place order" while signed out opens it, and it opens
+ * OVER a checkout page — so it has to close the cart drawer if that is what
+ * the customer came from, and it must not be openable alongside the address
+ * sheet, which is the other thing checkout can raise.
  */
 
-type Overlay = 'cart' | 'location' | null;
+type Overlay = 'cart' | 'location' | 'signin' | null;
 
 let overlay: Overlay = null;
 const listeners = new Set<() => void>();
@@ -61,6 +67,22 @@ export function useCartOpen(): boolean {
     () => overlay === 'cart',
     // The server never has an open overlay, so the HTML and the hydration pass
     // agree and there is no flash.
+    () => false,
+  );
+}
+
+export function openSignIn(): void {
+  show('signin');
+}
+
+export function closeSignIn(): void {
+  if (overlay === 'signin') show(null);
+}
+
+export function useSignInOpen(): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => overlay === 'signin',
     () => false,
   );
 }

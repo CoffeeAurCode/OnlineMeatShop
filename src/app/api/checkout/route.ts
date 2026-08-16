@@ -1,9 +1,12 @@
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { captureKey, paymentAdapter } from '@/adapters/payments';
+import { CUSTOMER_SESSION_COOKIE, readCustomerSession } from '@/auth/customer-session';
 import { currentBusinessDay } from '@/db/repositories/availability';
-import { findOrCreateCustomerByPhone, normalisePhone } from '@/db/repositories/customers';
+import { findOrCreateCustomerByPhone } from '@/db/repositories/customers';
+import { normalisePhone } from '@/domain/phone';
 import { cancelOrder, placeOrder } from '@/db/repositories/placement';
 import { quoteBasket } from '@/db/repositories/quote';
 import { DEFAULT_TOLERANCE } from '@/domain/pricing';
@@ -82,11 +85,18 @@ const schema = z.object({
   slotId: z.uuid(),
 
   /**
-   * ⚠ UNVERIFIED. Anyone who knows a number can type it. That is tolerable
-   * only because nothing sensitive hangs off it: order tracking is gated on
-   * the order's own `public_token`, not on this. See `05-PLAN` §4.5.
+   * ⭐ VERIFIED SINCE 2026-08-16, AND CROSS-CHECKED AGAINST THE SESSION.
+   *
+   * This field is still in the body because the screen shows it and the order
+   * stores it, but it is no longer TRUSTED: the handler refuses unless it
+   * normalises to the same number as the signed customer cookie. Sending
+   * somebody else's number now fails; before, it merely mislabelled an order.
+   *
+   * ⚠ It is not the authority even so — `phoneE164` below is taken from the
+   * COOKIE. Comparing and then using the body's copy would make the comparison
+   * decorative.
    */
-  phone: z.string().min(7).max(40),
+  phone: z.string().min(5).max(40),
   name: z.string().trim().max(120).nullable(),
   email: z.email().max(200).nullable(),
 
@@ -109,8 +119,30 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ reason: 'invalidBody' }, { status: 400 });
   const input = parsed.data;
 
-  const phoneE164 = normalisePhone(input.phone);
-  if (phoneE164 === null) return NextResponse.json({ reason: 'invalidPhone' }, { status: 400 });
+  /*
+   * ⭐ THE SIGN-IN GATE. An order cannot be placed by an unproven number.
+   *
+   * ⚠ THE NUMBER USED IS THE COOKIE'S, NOT THE BODY'S. The body's copy is
+   * only compared, so that a screen showing one number while placing an order
+   * under another is refused rather than silently corrected — that mismatch
+   * means the page is stale, and the customer is looking at an address and a
+   * basket that may belong to the previous session.
+   *
+   * Refusing with 401 and `signInRequired` rather than 400: the storefront
+   * opens the sign-in sheet on exactly this code, which is what makes an
+   * expired thirty-day cookie a two-tap recovery instead of a dead checkout
+   * button.
+   */
+  const jar = await cookies();
+  const session = readCustomerSession(jar.get(CUSTOMER_SESSION_COOKIE)?.value, Date.now());
+  if (!session.ok) {
+    return NextResponse.json({ reason: 'signInRequired' }, { status: 401 });
+  }
+
+  const phoneE164 = session.payload.phone;
+  if (normalisePhone(input.phone) !== phoneE164) {
+    return NextResponse.json({ reason: 'phoneMismatch' }, { status: 409 });
+  }
 
   const day = await currentBusinessDay();
   if (day === null) return NextResponse.json({ reason: 'shopClosed' }, { status: 409 });

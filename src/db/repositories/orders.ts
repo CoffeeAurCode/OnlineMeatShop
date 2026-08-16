@@ -1,11 +1,11 @@
 import 'server-only';
 
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gt, isNotNull, ne, notInArray } from 'drizzle-orm';
 
 import { db, type Tx } from '@/db/client';
-import { order, orderLine, slot } from '@/db/schema';
+import { customer, order, orderLine, slot } from '@/db/schema';
 import { transitionOrder } from '@/db/repositories/payments';
-import { canTransition } from '@/domain/lifecycle';
+import { canTransition, requiresAssignment } from '@/domain/lifecycle';
 import { recordActualWeight, toleranceBand, type WeighableLine } from '@/domain/weighing';
 import { cents, grams, type Cents, type Grams, type OrderStatus, type Pricing } from '@/domain/types';
 
@@ -337,12 +337,323 @@ export async function advanceOrder(
   orderId: string,
   from: OrderStatus,
   to: OrderStatus,
-): Promise<{ readonly ok: boolean; readonly reason?: 'illegalTransition' | 'staleStatus' }> {
+): Promise<{
+  readonly ok: boolean;
+  readonly reason?: 'illegalTransition' | 'staleStatus' | 'notAssigned';
+}> {
   if (!canTransition(from, to)) return { ok: false, reason: 'illegalTransition' };
+
+  /*
+   * ⭐ AN ORDER CANNOT GO OUT WITH NOBODY CARRYING IT.
+   *
+   * The rule is a pure predicate in `src/domain/lifecycle.ts`; the read that
+   * feeds it is here, because the domain may not touch the database. Checked
+   * OUTSIDE the transaction on purpose: it is a read of one row, and holding a
+   * transaction open across it buys nothing — a partner unassigned in the
+   * millisecond after this check still leaves an order that is OUT with a
+   * snapshot naming who had it, which is recoverable. An order that reached
+   * OUT with no snapshot at all is not.
+   */
+  if (requiresAssignment(to)) {
+    const assignment = await assignmentOf(orderId);
+    if (assignment === null) return { ok: false, reason: 'staleStatus' };
+    if (assignment.partnerId === null) return { ok: false, reason: 'notAssigned' };
+  }
 
   const moved = await db.transaction((tx) =>
     transitionOrder(tx, orderId, [from], to, to === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
   );
 
   return moved ? { ok: true } : { ok: false, reason: 'staleStatus' };
+}
+
+// ── Assignment and dispatch (07-PLAN Parts 3 and 5) ──────────────────────
+
+/**
+ * Give an order to a delivery partner.
+ *
+ * ⭐ WRITES A SNAPSHOT AS WELL AS THE REFERENCE, IN THE SAME STATEMENT.
+ *
+ * `partner_name` and `partner_phone` are copied here and never read back from
+ * `delivery_partner` afterwards. The FK is for joining today's roster; the
+ * snapshot is the historical record, and the `order_assignment_coherent` CHECK
+ * refuses the half-written shape where one exists without the other.
+ *
+ * ⚠ REASSIGNMENT CLEARS `dispatched_at`. The new partner has not been told,
+ * and an order that still reads as dispatched is one nobody sends a second
+ * message about. This is the single easiest thing to leave out, and its
+ * symptom is a driver sitting at home while the console says the job went out.
+ *
+ * ⚠ ONE ROW, ONE TABLE, NO OTHER LOCK. This takes no lock on `slot`,
+ * `product` or `stock_item`, so the canonical lock order (`CLAUDE.md` §7) is
+ * untouched and it cannot deadlock against checkout. Do not add a stock or
+ * slot read in here.
+ */
+export async function assignPartner(
+  orderId: string,
+  partner: { id: string; name: string; phone: string },
+  nowMs: number,
+): Promise<{ readonly ok: boolean; readonly reason?: 'notFound' | 'finished' }> {
+  const rows = await db
+    .update(order)
+    .set({
+      deliveryPartnerId: partner.id,
+      partnerName: partner.name,
+      partnerPhone: partner.phone,
+      assignedAt: new Date(nowMs),
+      dispatchedAt: null,
+      updatedAt: new Date(nowMs),
+    })
+    .where(
+      and(
+        eq(order.id, orderId),
+        // The guard is in the WHERE clause rather than in a prior SELECT, so a
+        // status that changed between the screen and this call is a no-op
+        // rather than a lost update.
+        notInArray(order.status, ['DELIVERED', 'CANCELLED']),
+      ),
+    )
+    .returning({ id: order.id });
+
+  if (rows[0] !== undefined) return { ok: true };
+
+  const exists = await db
+    .select({ status: order.status })
+    .from(order)
+    .where(eq(order.id, orderId))
+    .limit(1);
+
+  return { ok: false, reason: exists[0] === undefined ? 'notFound' : 'finished' };
+}
+
+/** Take the job back off somebody. Clears the dispatch flag with it. */
+export async function unassignPartner(orderId: string, nowMs: number): Promise<boolean> {
+  const rows = await db
+    .update(order)
+    .set({
+      deliveryPartnerId: null,
+      partnerName: null,
+      partnerPhone: null,
+      assignedAt: null,
+      dispatchedAt: null,
+      updatedAt: new Date(nowMs),
+    })
+    .where(and(eq(order.id, orderId), notInArray(order.status, ['DELIVERED', 'CANCELLED'])))
+    .returning({ id: order.id });
+
+  return rows[0] !== undefined;
+}
+
+/**
+ * Record that the dispatch message actually went.
+ *
+ * ⚠ CALLED AFTER THE SEND, NEVER BEFORE. Marking first and sending second
+ * means a Twilio failure leaves an order claiming a driver was told. The other
+ * order — send, then mark — can double-send after a crash, and a driver
+ * receiving the same job twice is a phone call, not a lost delivery.
+ */
+export async function markDispatched(orderId: string, nowMs: number): Promise<boolean> {
+  const rows = await db
+    .update(order)
+    .set({ dispatchedAt: new Date(nowMs), updatedAt: new Date(nowMs) })
+    .where(and(eq(order.id, orderId), isNotNull(order.assignedAt)))
+    .returning({ id: order.id });
+
+  return rows[0] !== undefined;
+}
+
+export interface DispatchSnapshot {
+  readonly orderId: string;
+  readonly reference: string;
+  readonly partnerId: string;
+  readonly partnerName: string;
+  readonly partnerPhone: string;
+  readonly assignedAtMs: number;
+  readonly slotStartsAt: Date;
+  readonly slotEndsAt: Date;
+  readonly addressLine1: string;
+  readonly addressLine2: string | null;
+  readonly city: string;
+  readonly province: string;
+  readonly postalCode: string | null;
+  readonly deliveryNotes: string | null;
+  readonly lat: number | null;
+  readonly lng: number | null;
+  readonly customerPhone: string | null;
+  readonly customerName: string | null;
+  readonly lines: readonly {
+    name: string;
+    requestedG: number;
+    pricingMode: 'pack' | 'perKg';
+    hot: boolean;
+  }[];
+}
+
+/**
+ * Everything the dispatch message needs, in one read.
+ *
+ * ⚠ `lat`/`lng` ARE `numeric` AND ARRIVE AS STRINGS. `pg` returns numeric as
+ * text on purpose — it does not fit in a double without loss — so they are
+ * parsed here, at the edge, exactly once. A `Number()` sprinkled at the call
+ * site is how one of them ends up as the string `"45.501900"` inside a URL.
+ */
+export async function orderForDispatch(orderId: string): Promise<DispatchSnapshot | null> {
+  const head = await db
+    .select({
+      id: order.id,
+      postalCode: order.postalCode,
+      partnerId: order.deliveryPartnerId,
+      partnerName: order.partnerName,
+      partnerPhone: order.partnerPhone,
+      assignedAt: order.assignedAt,
+      addressLine1: order.addressLine1,
+      addressLine2: order.addressLine2,
+      city: order.city,
+      province: order.province,
+      deliveryNotes: order.deliveryNotes,
+      lat: order.lat,
+      lng: order.lng,
+      slotStartsAt: slot.startsAt,
+      slotEndsAt: slot.endsAt,
+      customerPhone: customer.phone,
+      customerName: customer.name,
+    })
+    .from(order)
+    .innerJoin(slot, eq(slot.id, order.slotId))
+    .innerJoin(customer, eq(customer.id, order.customerId))
+    .where(eq(order.id, orderId))
+    .limit(1);
+
+  const o = head[0];
+  if (o === undefined) return null;
+  if (o.partnerId === null || o.partnerName === null || o.partnerPhone === null) return null;
+  if (o.assignedAt === null) return null;
+
+  const lines = await db
+    .select({
+      name: orderLine.productName,
+      requestedG: orderLine.requestedG,
+      pricingMode: orderLine.pricingMode,
+      handling: orderLine.handling,
+    })
+    .from(orderLine)
+    .where(eq(orderLine.orderId, orderId))
+    .orderBy(asc(orderLine.id));
+
+  return {
+    orderId: o.id,
+    reference: o.id.slice(0, 8),
+    partnerId: o.partnerId,
+    partnerName: o.partnerName,
+    partnerPhone: o.partnerPhone,
+    assignedAtMs: o.assignedAt.getTime(),
+    slotStartsAt: o.slotStartsAt,
+    slotEndsAt: o.slotEndsAt,
+    addressLine1: o.addressLine1,
+    addressLine2: o.addressLine2,
+    city: o.city,
+    province: o.province,
+    postalCode: o.postalCode,
+    deliveryNotes: o.deliveryNotes,
+    lat: o.lat === null ? null : Number(o.lat),
+    lng: o.lng === null ? null : Number(o.lng),
+    customerPhone: o.customerPhone,
+    customerName: o.customerName,
+    lines: lines.map((l) => ({
+      name: l.name,
+      requestedG: l.requestedG,
+      pricingMode: l.pricingMode,
+      hot: l.handling === 'COOKED_HOT',
+    })),
+  };
+}
+
+export interface Assignment {
+  readonly partnerId: string | null;
+  readonly partnerName: string | null;
+  readonly partnerPhone: string | null;
+  readonly assignedAtMs: number | null;
+  readonly dispatchedAtMs: number | null;
+}
+
+/** The assignment state the console screen and the status guard both need. */
+export async function assignmentOf(orderId: string): Promise<Assignment | null> {
+  const rows = await db
+    .select({
+      partnerId: order.deliveryPartnerId,
+      partnerName: order.partnerName,
+      partnerPhone: order.partnerPhone,
+      assignedAt: order.assignedAt,
+      dispatchedAt: order.dispatchedAt,
+    })
+    .from(order)
+    .where(eq(order.id, orderId))
+    .limit(1);
+
+  const r = rows[0];
+  if (r === undefined) return null;
+  return {
+    partnerId: r.partnerId,
+    partnerName: r.partnerName,
+    partnerPhone: r.partnerPhone,
+    assignedAtMs: r.assignedAt?.getTime() ?? null,
+    dispatchedAtMs: r.dispatchedAt?.getTime() ?? null,
+  };
+}
+
+// ── The new-order alarm ──────────────────────────────────────────────────
+
+export interface ArrivedOrder {
+  readonly id: string;
+  readonly reference: string;
+  readonly placedAtMs: number;
+  readonly hasHotLine: boolean;
+  readonly estTotalCents: number;
+}
+
+/**
+ * Orders that landed after a moment the CONSOLE remembers.
+ *
+ * ══ WHY A POLL AND NOT A PUSH ═════════════════════════════════════════════
+ *
+ * Supabase Realtime was cut at launch (D18), and re-adding it would mean
+ * exposing `order` to the anon key behind RLS policies — a second
+ * authorisation system, on the table holding customers' home addresses, so
+ * that a phone can make a noise. A ten-second poll behind the staff cookie
+ * reuses the authorisation that already exists and cannot leak a row the
+ * console could not already read.
+ *
+ * ⚠ THE CURSOR IS A TIMESTAMP THE CALLER HOLDS, NOT A "SEEN" FLAG ON THE ROW.
+ * A flag would mean two consoles fighting over it — the first tab to poll
+ * would mark the order seen and the second would stay silent, which is exactly
+ * wrong when the owner has the shop tablet open and their phone in a pocket.
+ *
+ * ⚠ AND IT IS `>`, NOT `>=`. With `>=`, the order that triggered this poll is
+ * returned again on the next one, forever, because its own timestamp becomes
+ * the cursor. The alarm would never stop.
+ */
+export async function ordersArrivedSince(
+  sinceMs: number,
+  limit = 20,
+): Promise<readonly ArrivedOrder[]> {
+  const rows = await db
+    .select({
+      id: order.id,
+      postalCode: order.postalCode,
+      createdAt: order.createdAt,
+      hasHotLine: order.hasHotLine,
+      estTotalCents: order.estTotalCents,
+    })
+    .from(order)
+    .where(and(gt(order.createdAt, new Date(sinceMs)), ne(order.status, 'CANCELLED')))
+    .orderBy(asc(order.createdAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    id: r.id,
+    reference: orderRef({ id: r.id, postalCode: r.postalCode }),
+    placedAtMs: r.createdAt.getTime(),
+    hasHotLine: r.hasHotLine,
+    estTotalCents: r.estTotalCents,
+  }));
 }

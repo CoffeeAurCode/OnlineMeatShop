@@ -35,6 +35,27 @@ export const E2E_STAFF_PASSWORD = 'e2e-console-password';
 export const E2E_SESSION_SECRET = 'e2e-staff-session-secret-of-sufficient-length';
 
 /**
+ * The fixed code `StubPhoneVerifier` accepts, for the CUSTOMER sign-in.
+ *
+ * ⭐ THE SUITE RUNS AGAINST THE STUB VERIFIER ON PURPOSE, AND THE ENV BELOW
+ * IS WHAT FORCES IT.
+ *
+ * `phoneVerifier()` prefers Supabase whenever `NEXT_PUBLIC_SUPABASE_*` are
+ * set — and `.env.local` in this checkout sets them, pointing at the REAL
+ * project. Without blanking them here, every e2e run would ask Supabase to
+ * send a real SMS to a fictional number, would fail in CI (no credentials, no
+ * network to it), and would bill the shop for the privilege.
+ *
+ * Blanking them plus setting this code selects the stub, which exercises every
+ * part of the flow that belongs to this codebase — the routes, the
+ * normalisation, the customer upsert, the signed cookie, the checkout gate —
+ * and fakes only the one part that belongs to a phone network.
+ */
+export const E2E_VERIFICATION_CODE = '424242';
+/** Fictional, per CLAUDE.md §1. Reserved 555 range, so it cannot be anybody. */
+export const E2E_CUSTOMER_PHONE = '+15145550142';
+
+/**
  * The signed session cookie, obtained ONCE by actually signing in.
  *
  * Deliberately not forged locally. Going through `/api/admin/login` means the
@@ -58,6 +79,16 @@ export async function startServer(): Promise<void> {
         DATABASE_URL: TEST_DATABASE_URL,
         STAFF_SESSION_SECRET: E2E_SESSION_SECRET,
         SHOP_TIMEZONE: 'America/Toronto',
+        /*
+         * ⚠ EMPTY STRINGS, NOT ABSENT. `@next/env` will not overwrite a
+         * variable that is already SET in the process environment, and an
+         * empty string counts as set — so this is what actually stops
+         * `.env.local`'s real Supabase project reaching the suite.
+         * `phoneVerifier()` treats '' as absent and falls through to the stub.
+         */
+        NEXT_PUBLIC_SUPABASE_URL: '',
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: '',
+        DEV_VERIFICATION_CODE: E2E_VERIFICATION_CODE,
         NODE_ENV: 'development',
         // Fictional, per CLAUDE.md §1. These make the sitemap, the canonical
         // URLs and the JSON-LD deterministic so the suite can assert on them.
@@ -163,4 +194,58 @@ export function asStaff(path: string, init: { json?: unknown } = {}): Promise<Re
 /** The same request with no console cookie at all. */
 export function asStranger(path: string, init: { json?: unknown } = {}): Promise<Response> {
   return request(path, init.json, null);
+}
+
+let customerCookie: string | null = null;
+
+/**
+ * Sign a CUSTOMER in, through the real routes.
+ *
+ * ⭐ NOT FORGED. Same principle as `signInAsStaff`: it goes through
+ * `/api/auth/otp` and `/api/auth/verify`, so the suite exercises the real
+ * door — normalisation, the verifier seam, the customer upsert, the
+ * `phone_verified_at` stamp and the signed cookie. Only the OTP PROVIDER is a
+ * stub, because the alternative is a phone network.
+ *
+ * A test-only helper that minted the cookie directly would keep passing after
+ * the verify route broke, which is the failure this project has already been
+ * bitten by once on the tracking page.
+ */
+export async function signInAsCustomer(phone = E2E_CUSTOMER_PHONE): Promise<string> {
+  const start = await fetch(`${E2E_ORIGIN}/api/auth/otp`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ phone }),
+  });
+  if (!start.ok) throw new Error(`otp start failed: ${start.status} ${await start.text()}`);
+
+  const res = await fetch(`${E2E_ORIGIN}/api/auth/verify`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ phone, code: E2E_VERIFICATION_CODE }),
+  });
+  if (!res.ok) throw new Error(`customer sign-in failed: ${res.status} ${await res.text()}`);
+
+  const setCookie = res.headers.get('set-cookie');
+  if (setCookie === null) throw new Error('verify returned no session cookie');
+  const cookie = setCookie.split(';')[0] ?? null;
+  if (cookie === null) throw new Error('could not read the customer cookie');
+  customerCookie = cookie;
+  return cookie;
+}
+
+/**
+ * A request as a signed-in customer.
+ *
+ * ⚠ CHECKOUT NOW REFUSES WITHOUT THIS (`signInRequired`, 401), and refuses
+ * again if the body's phone is not the one the cookie proves
+ * (`phoneMismatch`, 409). Any test placing an order has to use this, and has
+ * to send `E2E_CUSTOMER_PHONE` in the body.
+ */
+export async function asCustomer(
+  path: string,
+  init: { json?: unknown } = {},
+): Promise<Response> {
+  if (customerCookie === null) await signInAsCustomer();
+  return request(path, init.json, customerCookie);
 }

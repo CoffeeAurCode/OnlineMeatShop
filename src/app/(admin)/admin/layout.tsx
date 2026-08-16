@@ -6,6 +6,7 @@ import { checkStaff, type StaffRefusal } from '@/app/admin-guard';
 import '../../globals.css';
 import { OfflineBar } from './_components/offline-bar';
 import { LoginForm } from './_components/login-form';
+import { NewOrderAlarm } from './_components/new-order-alarm';
 
 /**
  * The console shell, and THE SECOND ROOT LAYOUT.
@@ -82,6 +83,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <html lang="en-CA">
       <body className={GeistMono.variable}>
         <OfflineBar />
+        {/*
+          ⭐ THE ALARM IS IN THE LAYOUT, SO IT SURVIVES NAVIGATION.
+
+          Put on a page instead, it would unmount and remount every time the
+          owner opened an order — losing its cursor, its armed AudioContext and
+          its unacknowledged list each time, and re-announcing whatever arrived
+          during the walk between screens. In the layout it is mounted once for
+          the whole session.
+
+          It renders inside the authenticated branch only. There is no alarm on
+          the login screen, which is the correct amount of information to give
+          somebody who has not signed in.
+        */}
+        <NewOrderAlarm />
         {/*
           `min-h-[100dvh]`, never `h-screen`. On iOS the address bar changes the
           viewport height as it hides, and `100vh` makes the page jump under a

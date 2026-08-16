@@ -57,6 +57,20 @@
       "when": 1786816878817,
       "tag": "0007_geo_delivery_zones",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786858201818,
+      "tag": "0008_delivery_partners",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786860710182,
+      "tag": "0009_assignment_snapshot_check",
+      "breakpoints": true
     }
   ]
 }

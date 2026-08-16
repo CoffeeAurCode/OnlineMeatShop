@@ -191,7 +191,8 @@
     "viewOrder": "View order",
     "arriving": "Arriving {window}",
     "viewOnMap": "View on the map",
-    "partnerHeading": "Your driver"
+    "partnerHeading": "Your driver",
+    "partnerNamed": "{name} is bringing your order."
   },
   "status": {
     "PLACED": "Placed",
@@ -235,7 +236,9 @@
     "malformedBody": "Something went wrong. Try again.",
     "generic": "Something went wrong. Try again.",
     "retry": "Try again",
-    "outsideDeliveryAreaGps": "We do not deliver that far yet."
+    "outsideDeliveryAreaGps": "We do not deliver that far yet.",
+    "phoneMismatch": "The number on this page is not the one you signed in with. Reload and try again.",
+    "signInRequired": "Please sign in to place your order."
   },
   "delivery": {
     "title": "Delivery",
@@ -305,5 +308,32 @@
       "timeout": "That took too long. Try again, or type your address below.",
       "unsupported": "This browser cannot share a location. Type your address below."
     }
+  },
+  "auth": {
+    "title": "Sign in or sign up",
+    "body": "We text you a code. There is no password.",
+    "phoneLabel": "Mobile number",
+    "phoneHelp": "Include the country code for a number outside Canada.",
+    "proceed": "Proceed via OTP",
+    "sending": "Sending",
+    "codeTitle": "Enter the code",
+    "codeSentTo": "We texted a code to {phone}.",
+    "codeLabel": "Verification code",
+    "verify": "Verify and continue",
+    "verifying": "Checking",
+    "resend": "Send it again",
+    "resendIn": "You can ask again in {seconds}s",
+    "changeNumber": "Use a different number",
+    "terms": "By signing in you agree to our terms and conditions.",
+    "wrongCode": "That code is not right.",
+    "invalidPhone": "Enter a phone number with its country code.",
+    "tooSoon": "A code has just been sent. Wait a moment before asking again.",
+    "unusableNumber": "We could not text that number.",
+    "notAvailable": "Signing in is not available right now.",
+    "devNotice": "Development mode: no text is sent. Use the development code.",
+    "signedInAs": "Signed in as {phone}",
+    "signOut": "Sign out",
+    "required": "Please sign in to place your order.",
+    "close": "Close"
   }
 }

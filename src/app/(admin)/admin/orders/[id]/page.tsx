@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { orderForWeighing, orderRef } from '@/db/repositories/orders';
+import { assignmentOf, orderForWeighing, orderRef } from '@/db/repositories/orders';
+import { lastAssignedPartnerId, listPartners } from '@/db/repositories/partners';
 import { ADMIN_LOCALE, money, weight } from '@/ui/format';
 
 import { Screen } from '../../_components/shell';
 import { AdvanceButton } from '../../_components/advance-button';
+import { DispatchPanel } from '../../_components/dispatch-panel';
 
 /**
  * One order.
@@ -20,6 +22,17 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const order = await orderForWeighing(id);
   if (order === null) notFound();
+
+  /*
+   * Fetched in parallel with each other but AFTER the order, because two of
+   * the three are pointless if it does not exist. At 2-6 orders a day the
+   * round trips are free; the readability is not.
+   */
+  const [assignment, partners, suggestedPartnerId] = await Promise.all([
+    assignmentOf(order.id),
+    listPartners(true),
+    lastAssignedPartnerId(),
+  ]);
 
   const unweighed = order.lines.filter((l) => l.pricingMode === 'perKg' && l.actWeightG === null);
   const linesTotal = order.lines.reduce(
@@ -88,6 +101,22 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </p>
       ) : null}
 
+      {assignment !== null && (
+        <DispatchPanel
+          orderId={order.id}
+          status={order.status}
+          assignment={assignment}
+          partners={partners}
+          suggestedPartnerId={suggestedPartnerId}
+        />
+      )}
+
+      {/*
+        ⚠ THE ADVANCE BUTTON IS LAST, AND THE DRIVER PANEL IS ABOVE IT, because
+        the server refuses to move an order to OUT with nobody assigned
+        (`notAssigned`). Putting the assignment above the button that needs it
+        means the owner meets the requirement before they meet the refusal.
+      */}
       <AdvanceButton orderId={order.id} status={order.status} readyToFinalise={unweighed.length === 0} />
     </Screen>
   );

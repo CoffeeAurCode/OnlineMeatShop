@@ -2,11 +2,13 @@ import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 
 import { LOCALES, htmlLang, isLocale, t } from '@/i18n';
+import { CustomerSessionProvider } from '@/ui/customer-session';
 import { shopName, siteOrigin } from '@/ui/shop-config';
 
 import '../globals.css';
 import { CartDrawer } from './_components/cart-drawer';
 import { LocationSheet } from './_components/location-sheet';
+import { SignInSheet } from './_components/sign-in-sheet';
 import { ShopFooter, ShopHeader } from './_components/shop-shell';
 
 /**
@@ -127,21 +129,38 @@ export default async function LocaleRootLayout({
         >
           {t(locale, 'nav.skipToContent')}
         </a>
-        <div className="flex min-h-[100dvh] flex-col">
-          <ShopHeader locale={locale} />
-          <main id="main" className="flex-1">
-            {children}
-          </main>
-          <ShopFooter locale={locale} />
-        </div>
         {/*
-          Both overlays are mounted once at the root rather than per page, so
-          opening either never unmounts the page behind it and a customer can
-          keep browsing with one open. Each renders nothing until it is opened,
-          and `drawer-state` guarantees only one of them ever is.
+          ⭐ THE SESSION PROVIDER WRAPS THE WHOLE TREE, INCLUDING THE HEADER.
+
+          It holds no credential — that is an `httpOnly` cookie the browser
+          sends by itself and JavaScript cannot read. What it holds is the
+          cached ANSWER to "am I signed in", so the header, the checkout button
+          and the sign-in sheet all agree without three separate round trips.
+
+          ⚠ It is a Client Component boundary, and it is placed here rather
+          than around each consumer for a specific reason: the sheet is opened
+          from checkout and its result has to be visible to the header at the
+          same instant. Two providers would be two caches, and the one that did
+          not hear about the sign-in would keep saying "sign in".
         */}
-        <CartDrawer locale={locale} />
-        <LocationSheet locale={locale} />
+        <CustomerSessionProvider>
+          <div className="flex min-h-[100dvh] flex-col">
+            <ShopHeader locale={locale} />
+            <main id="main" className="flex-1">
+              {children}
+            </main>
+            <ShopFooter locale={locale} />
+          </div>
+          {/*
+            Every overlay is mounted once at the root rather than per page, so
+            opening one never unmounts the page behind it and a customer can
+            keep browsing with one open. Each renders nothing until it is
+            opened, and `drawer-state` guarantees only one of them ever is.
+          */}
+          <CartDrawer locale={locale} />
+          <LocationSheet locale={locale} />
+          <SignInSheet locale={locale} />
+        </CustomerSessionProvider>
       </body>
     </html>
   );
