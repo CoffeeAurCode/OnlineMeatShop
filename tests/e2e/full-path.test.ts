@@ -2,7 +2,14 @@ import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { migrateTestDatabase, testPool, truncateAll } from '../integration/helpers/db';
-import { FSA_SERVED, seedPerKgProduct, seedServedArea, seedSlot } from '../integration/helpers/fixtures';
+import {
+  FSA_SERVED,
+  POINT_SERVED,
+  RADIUS_SERVED_M,
+  seedPerKgProduct,
+  seedServedArea,
+  seedSlot,
+} from '../integration/helpers/fixtures';
 import { asStaff, asStranger, signInAsStaff, startServer, stopServer } from './helpers/server';
 
 /**
@@ -38,7 +45,13 @@ beforeAll(async () => {
   });
   productId = fish.id;
 
-  await seedServedArea(pool, { feeCents: FEE });
+  // ⭐ THE ZONE HAS BOTH MECHANISMS: an FSA and a circle. The storefront sends
+  // a coordinate now, so a fixture with only an FSA tests a path no customer
+  // takes any more.
+  await seedServedArea(pool, {
+    feeCents: FEE,
+    circle: { ...POINT_SERVED, radiusM: RADIUS_SERVED_M },
+  });
 
   const { rows } = await pool.query(
     `INSERT INTO business_day (business_date, open) VALUES ('2026-08-12', true) RETURNING id`,
@@ -91,10 +104,22 @@ describe('browse to order to console to tracking', () => {
     // ⌈4000 × 750 / 1000⌉ = 3000.
     expect(quote.estTotalCents).toBe(3000 + FEE);
 
+    /*
+     * ⭐ PLACED BY COORDINATE, which is what the rebuilt storefront sends: the
+     * address sheet asks the device where it is and the postal code is now the
+     * fallback for somebody who refused the permission.
+     *
+     * ⚠ THIS IS ALSO A REGRESSION TEST FOR A 500 ON THE TRACKING PAGE. The
+     * map link is the only thing on that page gated on `lat !== null`, so an
+     * order placed without a coordinate renders every other line of it and
+     * proves nothing about the one that broke. See `src/ui/maps.ts`.
+     */
     const placed = await asStranger('/api/checkout', {
       json: {
         lines: [{ productId, requestedG: 750, prepOptionId: null }],
         postalCode: `${FSA_SERVED} 1A1`,
+        lat: POINT_SERVED.lat,
+        lng: POINT_SERVED.lng,
         addressLine1: '4200 Sample Street',
         addressLine2: 'Apt 3',
         city: 'Sampleville',
@@ -117,6 +142,10 @@ describe('browse to order to console to tracking', () => {
     // ── 3. The customer can already track it, with NO session. ────────────
     const tracked = await (await asStranger(`/fr/orders/${token}`)).text();
     expect(tracked).toContain('4200 Sample Street');
+    // The pin the order was placed with, rendered as a Maps link rather than an
+    // embed. A page that threw would still 200 in Next's error shell, so assert
+    // on the link itself.
+    expect(tracked).toContain(`query=${POINT_SERVED.lat},${POINT_SERVED.lng}`);
     // The test-order banner is unmissable, because nothing in the data says
     // this order took no money except `payment.provider`.
     expect(tracked).toContain('data-test-order-banner');

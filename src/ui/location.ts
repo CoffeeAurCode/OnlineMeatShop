@@ -283,21 +283,12 @@ export async function requestDeviceLocation(): Promise<LocationFix | LocationFai
   return watched.ok ? watched : precise;
 }
 
-/**
- * A link that opens the destination in Google Maps.
- *
- * The same construction the delivery partner's text message will use, kept in
- * one place so the two cannot disagree. `dir` with no origin lets Maps use the
- * viewer's own position, which is right for a driver and harmless for a
- * customer checking their own pin.
+/*
+ * ⚠ THE MAPS LINK BUILDERS USED TO LIVE HERE, AND MOVED TO `src/ui/maps.ts`.
+ * They are pure functions, but this module is `'use client'`, so a server
+ * component that imported them got a client reference and threw the moment it
+ * CALLED one. Do not move them back. `maps.ts` explains the failure in full.
  */
-export function mapsDirectionsUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
-}
-
-export function mapsPinUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-}
 
 /**
  * Parse stored JSON defensively. The value came from a previous version of

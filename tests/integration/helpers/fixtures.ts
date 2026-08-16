@@ -12,6 +12,13 @@ import type { Pool } from 'pg';
 export const FSA_SERVED = 'A1A';
 export const FSA_UNSERVED = 'Z9Z';
 
+/**
+ * A served COORDINATE, for the path a phone actually takes. Not an address:
+ * a point in the river, with a radius around it, so it locates nobody.
+ */
+export const POINT_SERVED = { lat: 45.5, lng: -73.6 } as const;
+export const RADIUS_SERVED_M = 20_000;
+
 export interface SeededProduct {
   id: string;
   slug: string;
@@ -105,14 +112,35 @@ export async function seedBusinessDay(
   return id;
 }
 
-/** A delivery zone. Fee values are fictional. */
+/**
+ * A delivery zone. Fee values are fictional.
+ *
+ * A circle is optional, and all three of its columns move together or the row
+ * is refused — `zone_circle_whole` says so in the schema, so passing one is
+ * passing all of them.
+ */
 export async function seedZone(
   pool: Pool,
-  opts: { name: string; feeCents: number; freeAboveCents?: number | null },
+  opts: {
+    name: string;
+    feeCents: number;
+    freeAboveCents?: number | null;
+    /** `| undefined` because `exactOptionalPropertyTypes` is on: a caller that
+     *  forwards its own optional circle is passing the property, not omitting it. */
+    circle?: { lat: number; lng: number; radiusM: number } | undefined;
+  },
 ): Promise<string> {
   const { rows } = await pool.query(
-    `INSERT INTO zone (name, fee_cents, free_above_cents) VALUES ($1, $2, $3) RETURNING id`,
-    [opts.name, opts.feeCents, opts.freeAboveCents ?? null],
+    `INSERT INTO zone (name, fee_cents, free_above_cents, centre_lat, centre_lng, radius_m)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [
+      opts.name,
+      opts.feeCents,
+      opts.freeAboveCents ?? null,
+      opts.circle?.lat ?? null,
+      opts.circle?.lng ?? null,
+      opts.circle?.radiusM ?? null,
+    ],
   );
   return rows[0].id as string;
 }
@@ -176,12 +204,18 @@ export async function seedCustomer(pool: Pool, email = 'sample@example.test'): P
 /** A zone covering FSA A1A, plus the serviceable_fsa row. */
 export async function seedServedArea(
   pool: Pool,
-  opts: { feeCents?: number; freeAboveCents?: number | null } = {},
+  opts: {
+    feeCents?: number;
+    freeAboveCents?: number | null;
+    /** Give the zone a circle too, so the COORDINATE path resolves as well. */
+    circle?: { lat: number; lng: number; radiusM: number };
+  } = {},
 ): Promise<string> {
   const zoneId = await seedZone(pool, {
     name: `zone-${Math.random().toString(36).slice(2, 8)}`,
     feeCents: opts.feeCents ?? 0,
     freeAboveCents: opts.freeAboveCents ?? null,
+    circle: opts.circle,
   });
   await pool.query(`INSERT INTO serviceable_fsa (fsa, zone_id) VALUES ($1, $2)`, [
     FSA_SERVED,

@@ -12,7 +12,7 @@ import { LIFECYCLE_ORDER } from '@/domain/lifecycle';
 import { isLocale, t, type Locale } from '@/i18n';
 import { shopTimeZone, slotWindow } from '@/ui/business-date';
 import { money, weight } from '@/ui/format';
-import { mapsPinUrl } from '@/ui/location';
+import { mapsPinUrl } from '@/ui/maps';
 
 import { TestOrderBanner } from '../../_components/money-sentence';
 import { TrackRefresh } from '../../_components/track-refresh';
