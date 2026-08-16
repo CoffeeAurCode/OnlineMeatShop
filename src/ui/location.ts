@@ -177,48 +177,84 @@ export function locationLabel(l: DeliveryLocation): string | null {
  * and a page served over plain HTTP gets no geolocation at all, which is a
  * developer's problem and not the customer's.
  *
- * ⭐ TWO ATTEMPTS, precise then coarse. High accuracy first, because this is a
- * street address and the network-based fix can be a kilometre out in a city,
- * which is several delivery zones wide. But a desktop has no GPS radio, and
- * Chrome answers a high-accuracy request there with POSITION_UNAVAILABLE
- * rather than quietly falling back — observed on the deployed site, where the
- * same browser returned a 98 m network fix the moment `enableHighAccuracy` was
- * turned off. So a failure that is not a refusal is retried coarse. A fix a
- * block wide plus the typed door lines still finds the building; no fix at all
- * sends a customer away to type an address they did not need to.
+ * ⭐ TWO ATTEMPTS, AND THE SECOND ONE IS A WATCH. High accuracy first, because
+ * this is a street address and a network fix can be a kilometre out in a city,
+ * which is several delivery zones wide. On a phone that first attempt succeeds
+ * and nothing else runs.
+ *
+ * A desktop has no GPS radio, and there Chrome fails the precise request with
+ * POSITION_UNAVAILABLE instead of falling back to the network provider on its
+ * own. The retry is therefore coarse — but it is also a `watchPosition`, not a
+ * second `getCurrentPosition`, and that difference is the whole fix. Observed
+ * on the deployed site: repeated `getCurrentPosition` calls failed while
+ * browserleaks.com obtained a 97 m fix in the same browser in the same minute
+ * through a watch. `getCurrentPosition` gives up on the provider's first miss;
+ * a watch stays subscribed and takes the fix when it lands a moment later.
+ * The watch is cleared the instant it yields anything, so it costs one reading,
+ * not a running subscription.
  *
  * A REFUSAL IS NEVER RETRIED. Asking twice cannot change the answer, and on a
- * browser that shows a prompt per call it asks the customer twice.
+ * browser that prompts per call it asks the customer twice.
  *
- * The 15 second timeout is generous because a cold GPS fix indoors genuinely
- * takes that long; the coarse retry gets 8, because a network lookup that has
- * not answered by then is not going to.
+ * The 15 second precise timeout is generous because a cold GPS fix indoors
+ * genuinely takes that long. The watch gets 10, which is long enough for a
+ * network lookup that is going to answer at all.
  */
 export type LocationError = 'denied' | 'unavailable' | 'timeout' | 'unsupported';
 
 export type LocationFix = { ok: true; lat: number; lng: number; accuracyM: number };
 export type LocationFailure = { ok: false; error: LocationError };
 
+function toFix(pos: GeolocationPosition): LocationFix {
+  return {
+    ok: true,
+    lat: pos.coords.latitude,
+    lng: pos.coords.longitude,
+    accuracyM: Math.round(pos.coords.accuracy),
+  };
+}
+
+function toFailure(err: GeolocationPositionError): LocationFailure {
+  return {
+    ok: false,
+    error:
+      err.code === err.PERMISSION_DENIED
+        ? 'denied'
+        : err.code === err.TIMEOUT
+          ? 'timeout'
+          : 'unavailable',
+  };
+}
+
 function getPosition(options: PositionOptions): Promise<LocationFix | LocationFailure> {
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
-          ok: true,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracyM: Math.round(pos.coords.accuracy),
-        }),
-      (err) =>
-        resolve({
-          ok: false,
-          error:
-            err.code === err.PERMISSION_DENIED
-              ? 'denied'
-              : err.code === err.TIMEOUT
-                ? 'timeout'
-                : 'unavailable',
-        }),
+      (pos) => resolve(toFix(pos)),
+      (err) => resolve(toFailure(err)),
+      options,
+    );
+  });
+}
+
+/**
+ * One reading via `watchPosition`. Resolves on the first position or the first
+ * error and unsubscribes either way, so a caller cannot leak a live watch.
+ * `settled` guards against a provider that reports an error and then delivers
+ * a fix anyway, which would otherwise resolve the promise twice and clear a
+ * watch id that no longer exists.
+ */
+function watchOnce(options: PositionOptions): Promise<LocationFix | LocationFailure> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const stop = (result: LocationFix | LocationFailure) => {
+      if (settled) return;
+      settled = true;
+      navigator.geolocation.clearWatch(id);
+      resolve(result);
+    };
+    const id = navigator.geolocation.watchPosition(
+      (pos) => stop(toFix(pos)),
+      (err) => stop(toFailure(err)),
       options,
     );
   });
@@ -236,15 +272,15 @@ export async function requestDeviceLocation(): Promise<LocationFix | LocationFai
   });
   if (precise.ok || precise.error === 'denied') return precise;
 
-  const coarse = await getPosition({
+  const watched = await watchOnce({
     enableHighAccuracy: false,
-    timeout: 8_000,
+    timeout: 10_000,
     maximumAge: 60_000,
   });
   // The precise attempt's error is the more informative of the two when both
   // fail — a GPS timeout followed by a network timeout is still a timeout, but
   // a genuine "no provider at all" should not be reported as one.
-  return coarse.ok ? coarse : precise;
+  return watched.ok ? watched : precise;
 }
 
 /**
