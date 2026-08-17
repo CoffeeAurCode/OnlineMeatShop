@@ -37,11 +37,51 @@ export async function register(): Promise<void> {
    * to want; one that does it by accident is the most expensive failure this
    * shop can have.
    */
-  if (process.env.ALLOW_STUB_PAYMENTS !== 'true') {
+  const monerisStore = process.env.MONERIS_STORE_ID;
+  const monerisToken = process.env.MONERIS_API_TOKEN;
+  const monerisConfigured =
+    monerisStore !== undefined && monerisStore !== '' &&
+    monerisToken !== undefined && monerisToken !== '';
+
+  if (!monerisConfigured && process.env.ALLOW_STUB_PAYMENTS !== 'true') {
     problems.push(
       'No real payment adapter is configured. StubPaymentAdapter takes no money. ' +
-        'Set ALLOW_STUB_PAYMENTS=true for a deliberate no-money demo deployment, ' +
-        'or configure a processor.',
+        'Set MONERIS_STORE_ID and MONERIS_API_TOKEN, set ALLOW_STUB_PAYMENTS=true ' +
+        'for a deliberate no-money demo deployment, or configure a processor.',
+    );
+  }
+
+  /*
+   * ⚠ HALF A PROCESSOR IS WORSE THAN NONE, and it is the shape that survives
+   * a copy-paste of environment variables between two Render services.
+   *
+   * A store id with no token authorises nothing, and `monerisConfig()` would
+   * fall back to the stub — so the deployment would take orders, move no
+   * money, and NOT show the no-money banner, because somebody clearly intended
+   * to configure a processor. Refusing to start is the only honest answer.
+   */
+  const monerisHalf =
+    (monerisStore !== undefined && monerisStore !== '') !==
+    (monerisToken !== undefined && monerisToken !== '');
+  if (monerisHalf) {
+    problems.push(
+      'Moneris is half-configured: exactly one of MONERIS_STORE_ID and ' +
+        'MONERIS_API_TOKEN is set. Set both, or neither.',
+    );
+  }
+
+  /*
+   * ⭐ THE ONE THAT COSTS REAL MONEY BY ACCIDENT. `MONERIS_ENV` defaults to
+   * the TEST host, which is the safe default everywhere except the deployment
+   * that is supposed to be trading. A production shop silently pointed at the
+   * test gateway takes orders whose money never arrives, and the receipts all
+   * look fine.
+   */
+  if (monerisConfigured && process.env.MONERIS_ENV !== 'production') {
+    problems.push(
+      'Moneris is configured but MONERIS_ENV is not "production", so this deployment ' +
+        'would send live checkouts to the Moneris TEST gateway and settle nothing. ' +
+        'Set MONERIS_ENV=production, or unset the Moneris variables to run on the stub.',
     );
   }
 

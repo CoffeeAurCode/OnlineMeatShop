@@ -71,6 +71,20 @@
       "when": 1786860710182,
       "tag": "0009_assignment_snapshot_check",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786974000000,
+      "tag": "0010_cod_and_driver_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786975200000,
+      "tag": "0011_driver_links",
+      "breakpoints": true
     }
   ]
 }

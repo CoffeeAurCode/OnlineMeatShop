@@ -33,6 +33,8 @@ const BASE: DispatchOrder = {
   customerName: 'Sample Customer',
   lat: 45.5019,
   lng: -73.567,
+  payMode: 'PREPAID',
+  jobUrl: 'https://example.test/driver',
 };
 
 describe('buildDispatchMessage', () => {
@@ -161,5 +163,31 @@ describe('forbiddenFieldIn', () => {
     expect(forbiddenFieldIn('Total: $84.20')).toBe('money');
     expect(forbiddenFieldIn('Customer: sample@example.com')).toBe('email');
     expect(forbiddenFieldIn('Deliver: Tue 14:00-16:00')).toBeNull();
+  });
+});
+
+describe('the payment line', () => {
+  it('tells a driver to collect cash WITHOUT naming a figure', () => {
+    const { text } = buildDispatchMessage({ ...BASE, payMode: 'COD' });
+    expect(text).toContain('CASH ON DELIVERY');
+    /*
+     * ⭐ THE POINT OF THE WHOLE DESIGN. A text is forwardable, screenshottable
+     * and unrevocable, so the amount lives behind the driver's sign-in where
+     * it is also always current. An amount printed into a text on Tuesday is
+     * wrong the moment the shop re-weighs the order.
+     */
+    expect(forbiddenFieldIn(text)).toBeNull();
+  });
+
+  it('tells a driver on a prepaid order to collect nothing', () => {
+    const { text } = buildDispatchMessage({ ...BASE, payMode: 'PREPAID' });
+    expect(text).toContain('collect nothing');
+    expect(text).not.toContain('CASH ON DELIVERY');
+  });
+
+  it('links the jobs page when there is one, and omits the line when there is not', () => {
+    expect(buildDispatchMessage(BASE).text).toContain('https://example.test/driver');
+    // A relative link in an SMS is not a link; it is text that looks like one.
+    expect(buildDispatchMessage({ ...BASE, jobUrl: null }).text).not.toContain('Your jobs');
   });
 });

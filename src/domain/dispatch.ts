@@ -54,6 +54,27 @@ export interface DispatchOrder {
 
   readonly lat: number | null;
   readonly lng: number | null;
+
+  /**
+   * ⭐ HOW THE ORDER IS PAID, BUT NEVER HOW MUCH.
+   *
+   * The driver has to know whether to hold their hand out at the door — that
+   * is the one payment fact that changes what they DO. The amount is not, and
+   * it stays out of the SMS for the reason the header gives: a text is
+   * forwardable, screenshottable and unrevocable, and `forbiddenFieldIn`
+   * refuses any message carrying a dollar figure.
+   *
+   * The exact figure lives one tap away, behind the driver's sign-in, where it
+   * is also always CURRENT — an amount printed into a text on Tuesday is wrong
+   * the moment the shop re-weighs the order.
+   */
+  readonly payMode: 'PREPAID' | 'COD';
+
+  /**
+   * The driver's job page for this order, or null when the portal has no
+   * configured origin. Null renders no line at all rather than a broken link.
+   */
+  readonly jobUrl: string | null;
 }
 
 export interface DispatchMessage {
@@ -92,6 +113,17 @@ export function buildDispatchMessage(order: DispatchOrder): DispatchMessage {
     .filter((line): line is string => line !== null && line.trim() !== '')
     .join('\n');
 
+  /*
+   * ⚠ WORDS, NOT A FIGURE. "CASH ON DELIVERY - amount on your jobs page" costs
+   * a line and keeps the message clean of money, which is what lets
+   * `forbiddenFieldIn` stay a hard refusal rather than a rule with exceptions.
+   * The first exception is what turns a runtime backstop into decoration.
+   */
+  const payLine =
+    order.payMode === 'COD'
+      ? 'PAYMENT: CASH ON DELIVERY - amount on your jobs page'
+      : 'PAYMENT: paid online, collect nothing';
+
   const text = [
     `New order #${order.reference} - ${order.shopName}`,
     '',
@@ -103,7 +135,9 @@ export function buildDispatchMessage(order: DispatchOrder): DispatchMessage {
     '',
     `Customer: ${order.customerName === null ? '' : `${order.customerName} `}${order.customerPhone}`,
     '',
+    payLine,
     `Route: ${mapsUrl}`,
+    ...(order.jobUrl === null ? [] : [`Your jobs: ${order.jobUrl}`]),
   ].join('\n');
 
   return { text, mapsUrl, segments: segmentsFor(text) };

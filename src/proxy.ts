@@ -26,6 +26,16 @@ import { DEFAULT_LOCALE, LOCALES, LOCALE_COOKIE, isLocale } from '@/i18n';
 const PASSTHROUGH = [
   '/api',
   '/admin',
+  /*
+   * ⚠ The driver portal is a TOOL, not a shopfront, and it has no locale — same
+   * reasoning as `/admin`. Left out of this list it would be redirected to
+   * `/en-CA/driver`, which does not exist, and every link in every dispatch SMS
+   * would 404. The SMS is not editable once sent.
+   */
+  '/driver',
+  // The dispatch SMS's sign-in link. Same reason as `/driver`, and it matters
+  // more here: the URL is already printed in somebody's text messages.
+  '/d',
   '/healthz',
   '/_next',
   '/fonts',

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { smsSender } from '@/adapters/sms';
+import { driverLinkUrl, mintDriverLinkToken } from '@/auth/driver-link';
+import { issueDriverLink } from '@/db/repositories/driver';
 import {
   claimDispatch,
   dispatchDedupeKey,
@@ -11,9 +13,58 @@ import {
 } from '@/db/repositories/dispatch';
 import { markDispatched, orderForDispatch } from '@/db/repositories/orders';
 import { buildDispatchMessage, forbiddenFieldIn, type DispatchLine } from '@/domain/dispatch';
-import { shopName } from '@/ui/shop-config';
+import { shopName, siteOrigin } from '@/ui/shop-config';
 
 import { guarded } from '../_guard';
+
+/**
+ * The driver portal's absolute URL, or null when no origin is configured.
+ *
+ * ⚠ NULL RATHER THAN A RELATIVE PATH. A relative link in an SMS is not a link;
+ * it is text that looks like one, and the driver taps it and nothing happens.
+ * Omitting the line entirely is the honest failure.
+ */
+function portalOrigin(): string | null {
+  const origin = siteOrigin();
+  /*
+   * ⚠ `siteOrigin()` NEVER RETURNS EMPTY — it falls back to
+   * `https://example.invalid`, which is a real string and a dead link. The
+   * placeholder has to be recognised here, or an unconfigured deployment texts
+   * every driver a URL that cannot resolve and the failure is invisible from
+   * the shop's side.
+   */
+  if (origin === '' || origin.includes('example.invalid')) return null;
+  return origin;
+}
+
+/**
+ * Mint the driver's one-tap sign-in link for this dispatch.
+ *
+ * ⭐ A NEW LINK EVERY TIME THIS ROUTE SENDS, INCLUDING ON A RE-SEND, and that
+ * is deliberate: the previous one may already have been spent, and a re-send
+ * carrying a dead link is worse than a re-send carrying none. Old rows expire
+ * on their own and are swept after a week.
+ *
+ * Returns null when there is no configured origin — the message then simply
+ * omits the line rather than carrying a URL that cannot resolve.
+ */
+async function mintJobLink(
+  partnerId: string,
+  orderId: string,
+  nowMs: number,
+): Promise<string | null> {
+  const origin = portalOrigin();
+  if (origin === null) return null;
+
+  const minted = mintDriverLinkToken(nowMs);
+  await issueDriverLink({
+    tokenHash: minted.tokenHash,
+    partnerId,
+    orderId,
+    expiresAt: minted.expiresAt,
+  });
+  return driverLinkUrl(origin, minted.token);
+}
 
 /**
  * Send the delivery partner their job.
@@ -94,6 +145,19 @@ export async function POST(request: Request) {
       customerName: snapshot.customerName,
       lat: snapshot.lat,
       lng: snapshot.lng,
+      payMode: snapshot.payMode,
+      /*
+       * ⭐ A ONE-TAP, SINGLE-USE, 12-HOUR SIGN-IN LINK (client decision,
+       * 2026-08-17). It lands on THIS order and the driver's full list is one
+       * tap behind it.
+       *
+       * ⚠ THE MESSAGE STILL CARRIES NO CODE, and cannot. A login code is
+       * minted when somebody asks for one and expires; a code printed into a
+       * text sent hours earlier is either already dead or a standing password
+       * sitting in a forwardable message. The link solves the same problem
+       * without either failure — and dies the moment it is used.
+       */
+      jobUrl: await mintJobLink(snapshot.partnerId, orderId, Date.now()),
     });
 
     const forbidden = forbiddenFieldIn(message.text);

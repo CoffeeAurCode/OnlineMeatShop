@@ -41,6 +41,14 @@ export interface QueueOrder {
   readonly finalTotalCents: Cents | null;
   readonly deliveryFeeCents: Cents;
   readonly hasHotLine: boolean;
+  /**
+   * ⭐ THE COUNTER HAS TO SEE THIS. A cash order is packed the same and handed
+   * over differently — somebody is coming back with money for it — and the
+   * client asked for it to be visible to the shop as well as the driver.
+   */
+  readonly payMode: 'PREPAID' | 'COD';
+  /** What the driver said they took, on a cash order. Null until they report. */
+  readonly cashCollectedCents: Cents | null;
   readonly lines: readonly QueueLine[];
 }
 
@@ -117,6 +125,8 @@ export async function orderQueue(
       finalTotalCents: order.finalTotalCents,
       deliveryFeeCents: order.deliveryFeeCents,
       hasHotLine: order.hasHotLine,
+      payMode: order.payMode,
+      cashCollectedCents: order.cashCollectedCents,
     })
     .from(order)
     .innerJoin(slot, eq(slot.id, order.slotId))
@@ -181,6 +191,8 @@ export async function orderQueue(
       finalTotalCents: r.finalTotalCents === null ? null : cents(r.finalTotalCents),
       deliveryFeeCents: cents(r.deliveryFeeCents),
       hasHotLine: r.hasHotLine,
+      payMode: r.payMode,
+      cashCollectedCents: r.cashCollectedCents === null ? null : cents(r.cashCollectedCents),
       lines: linesByOrder.get(r.orderId) ?? [],
     });
     slots.set(r.slotId, entry);
@@ -203,6 +215,8 @@ export async function orderForWeighing(
       finalTotalCents: order.finalTotalCents,
       deliveryFeeCents: order.deliveryFeeCents,
       hasHotLine: order.hasHotLine,
+      payMode: order.payMode,
+      cashCollectedCents: order.cashCollectedCents,
     })
     .from(order)
     .where(eq(order.id, orderId))
@@ -225,6 +239,8 @@ export async function orderForWeighing(
     finalTotalCents: o.finalTotalCents === null ? null : cents(o.finalTotalCents),
     deliveryFeeCents: cents(o.deliveryFeeCents),
     hasHotLine: o.hasHotLine,
+    payMode: o.payMode,
+    cashCollectedCents: o.cashCollectedCents === null ? null : cents(o.cashCollectedCents),
     lines: lines.map((l) => ({
       id: l.id,
       productName: l.productName,
@@ -481,6 +497,8 @@ export interface DispatchSnapshot {
   readonly lng: number | null;
   readonly customerPhone: string | null;
   readonly customerName: string | null;
+  /** Whether the driver holds their hand out at the door. Never the amount. */
+  readonly payMode: 'PREPAID' | 'COD';
   readonly lines: readonly {
     name: string;
     requestedG: number;
@@ -502,6 +520,7 @@ export async function orderForDispatch(orderId: string): Promise<DispatchSnapsho
     .select({
       id: order.id,
       postalCode: order.postalCode,
+      payMode: order.payMode,
       partnerId: order.deliveryPartnerId,
       partnerName: order.partnerName,
       partnerPhone: order.partnerPhone,
@@ -559,6 +578,7 @@ export async function orderForDispatch(orderId: string): Promise<DispatchSnapsho
     lng: o.lng === null ? null : Number(o.lng),
     customerPhone: o.customerPhone,
     customerName: o.customerName,
+    payMode: o.payMode,
     lines: lines.map((l) => ({
       name: l.name,
       requestedG: l.requestedG,

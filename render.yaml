@@ -95,6 +95,12 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: MONERIS_STORE_ID
+        sync: false
+      - key: MONERIS_API_TOKEN
+        sync: false
+      - key: MONERIS_ENV
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET

@@ -132,10 +132,21 @@ specific, expensive ways.
 
 ### Payments
 
-> The processor is **Clover**. Nothing below depends on the vendor: every rule
-> here is about the SHAPE of the flow, and everything goes through
-> `PaymentAdapter` in `src/adapters/payments.ts` rather than talking to a
-> processor directly.
+> The processor is **Moneris** (since 2026-08-17; it replaced Clover, which
+> replaced Stripe). Nothing below depends on the vendor: every rule here is
+> about the SHAPE of the flow, and everything goes through `PaymentAdapter` in
+> `src/adapters/payments.ts` rather than talking to a processor directly. The
+> interface has not changed once across three processors.
+>
+> 🔴 **`MonerisPaymentAdapter` has never spoken to Moneris.** There are no
+> credentials yet, so it is unreachable at runtime and the stub still runs. Its
+> XML field names are written against the classic Gateway API and **must be
+> checked against the merchant's own integration guide** before the first real
+> transaction. See the header of `src/adapters/moneris.ts`.
+>
+> ⭐ Moneris closes both items that blocked Clover: `order_id` must be unique
+> per store, which IS an idempotency mechanism, and a store is provisioned in a
+> currency, so CAD cannot be got wrong from this side.
 
 - Authorise a **ceiling**, capture the **exact** final amount. Authorising the
   estimate itself fails whenever a cut comes in heavy, which is normal here.
@@ -162,12 +173,43 @@ specific, expensive ways.
   orders are `PREPAID`, which means **nothing in the data distinguishes them
   from real prepaid orders except `payment.provider`.** Anything that reads
   takings must filter on `provider <> 'stub'`.
+- **Cash on delivery is real, and it is the customer's choice** (since
+  2026-08-17). A `COD` order has **no `payment` row at all** — not a zero
+  authorisation, not a stub one. It is gated by the `checkout.codEnabled`
+  shop setting, re-read server-side at `/api/checkout`; a hidden control on the
+  page is a display decision and never the one that binds.
+- ⭐ **A cash order closes only on the EXACT amount** (spec §5.8). The driver
+  reports what they collected; equal closes the order, anything else is
+  RECORDED and the order deliberately stays `OUT` for the shop to resolve.
+  Enforced in `src/db/repositories/driver.ts` **and** by the
+  `order_cod_settled_on_delivery` CHECK — "exactly", never "at least", because
+  an over-payment means the customer was charged more than they agreed to.
 
 ### Security
 - The service-role key is **server-only**. Never in a `NEXT_PUBLIC_*` variable,
   never in the client bundle, never committed.
 - Every admin mutation re-checks the staff role **server-side against the
-  database** — never from a token claim alone.
+  database** — never from a token claim alone. The driver portal follows the
+  same rule against `delivery_partner.active` (`src/app/driver-guard.ts`): the
+  cookie says WHO, the database says WHETHER, and nothing caches the answer.
+- **A driver sees only orders assigned to them, and the filter is in the SQL**
+  (`src/db/repositories/driver.ts`). The partner id is part of the LOOKUP KEY,
+  never a comparison made after the row is read — what it protects is every
+  customer's home address and phone number.
+- ⭐ **The dispatch SMS carries a SINGLE-USE sign-in link** (`/d/<token>`, 12 h).
+  Three rules, and each one is load-bearing:
+  1. **The token is random and STORED AS A HASH**, never signed-and-stateless —
+     single use requires state, and the row must be useless to whoever reads it.
+  2. **A `GET` must never spend it.** Carriers and messaging apps pre-fetch URLs
+     out of texts to build previews; a link consumed on render would be dead
+     before the driver ever tapped it, on every dispatch. The page renders a
+     button and the **POST** spends it.
+  3. **Spending is a conditional `UPDATE ... WHERE used_at IS NULL`**, never a
+     read-then-write — same mechanism, and the same reason, as the one-capture
+     rule.
+- ⚠ **Never put a login code in an SMS.** A code is minted on request and
+  expires; one printed into a text sent hours earlier is either already dead or
+  a standing password sitting in a forwardable message. The link replaces it.
 - Validate at every route-handler boundary.
 
 ### Admin console

@@ -68,7 +68,22 @@ interface Quote {
   serviceable: boolean | null;
 }
 
-export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: Locale }) {
+export function CheckoutForm({
+  slots,
+  locale,
+  codEnabled,
+}: {
+  slots: SlotOption[];
+  locale: Locale;
+  /**
+   * ⚠ A DISPLAY DECISION ONLY. `/api/checkout` re-reads the setting and
+   * refuses a cash order with `codUnavailable` regardless of what this
+   * component was told at render time. Two checks that look redundant and are
+   * not: this one is so the customer is never offered something they cannot
+   * have, and the server's is so a stale tab cannot place one anyway.
+   */
+  codEnabled: boolean;
+}) {
   /*
    * ⭐ THE SIGN-IN STATE, READ BUT NEVER TRUSTED.
    *
@@ -87,6 +102,13 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [slotId, setSlotId] = useState('');
+  /*
+   * ⭐ CARD IS THE DEFAULT, AND THAT IS A DELIBERATE CHOICE RATHER THAN AN
+   * ALPHABETICAL ONE. A prepaid order is settled before the driver leaves; a
+   * cash order carries the shop's exposure all the way to a doorstep. The
+   * quieter, safer option should be the one nobody has to pick.
+   */
+  const [payMode, setPayMode] = useState<'PREPAID' | 'COD'>('PREPAID');
 
   const [fetchedQuote, setQuote] = useState<Quote | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -237,6 +259,10 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
           name: name.trim() === '' ? null : name,
           email: email.trim() === '' ? null : email,
           catalogVersion: quote.catalogVersion,
+          // Never `payMode` from a hidden field the customer never saw: if the
+          // shop turned cash off while this page was open, send the card path
+          // rather than a mode the server is about to refuse.
+          payMode: codEnabled ? payMode : 'PREPAID',
         }),
       });
 
@@ -366,6 +392,50 @@ export function CheckoutForm({ slots, locale }: { slots: SlotOption[]; locale: L
           autoComplete="email"
         />
       </Section>
+
+      {/*
+        ⭐ THE PAYMENT CHOICE, AFTER THE ADDRESS AND BEFORE THE WINDOW.
+
+        Placed here because it is the last thing that changes the TOTAL story —
+        a cash customer needs to know the driver arrives with an exact figure —
+        and because burying it under the slot list would put it below the fold
+        on a phone, where the customer's thumb is already on the place button.
+
+        The whole section disappears when the shop is not taking cash. A single
+        disabled radio explaining why is a worse screen than one option
+        presented plainly.
+      */}
+      {codEnabled && (
+        <Section heading={t(locale, 'checkout.payHeading')}>
+          <div className="grid gap-2">
+            {(['PREPAID', 'COD'] as const).map((mode) => (
+              <label
+                key={mode}
+                className={`flex cursor-pointer items-start gap-3 rounded-sm border px-4 py-3 ${
+                  payMode === mode ? 'border-accent bg-soft' : 'border-line'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="payMode"
+                  value={mode}
+                  checked={payMode === mode}
+                  onChange={() => setPayMode(mode)}
+                  className="mt-1 size-5 shrink-0"
+                />
+                <span className="min-w-0">
+                  <span className="block text-body font-semibold">
+                    {t(locale, mode === 'PREPAID' ? 'checkout.payNow' : 'checkout.payCash')}
+                  </span>
+                  <span className="mt-1 block text-meta text-muted">
+                    {t(locale, mode === 'PREPAID' ? 'checkout.payNowHelp' : 'checkout.payCashHelp')}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </Section>
+      )}
 
       <Section heading={t(locale, 'checkout.slotHeading')}>
         {hot && (

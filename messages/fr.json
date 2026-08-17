@@ -155,7 +155,12 @@
     "regionLabel": "Province ou état",
     "editAddress": "Modifier",
     "noAddressYet": "Aucune adresse de livraison pour l’instant.",
-    "addressIncomplete": "Il nous faut une adresse et une ville avant de pouvoir livrer."
+    "addressIncomplete": "Il nous faut une adresse et une ville avant de pouvoir livrer.",
+    "payHeading": "Comment souhaitez-vous payer",
+    "payNow": "Payer maintenant par carte",
+    "payNowHelp": "Nous retenons un peu plus que l'estimation et prélevons le montant exact une fois votre commande pesée. Vous ne payez jamais plus que la retenue.",
+    "payCash": "Paiement à la livraison",
+    "payCashHelp": "Payez le livreur à la porte. Il aura le montant exact une fois votre commande pesée."
   },
   "payment": {
     "testBannerTitle": "Commande test. Aucun paiement n'a été pris.",
@@ -238,7 +243,8 @@
     "retry": "Réessayer",
     "outsideDeliveryAreaGps": "Nous ne livrons pas encore aussi loin.",
     "phoneMismatch": "Le numéro de cette page n'est pas celui de votre connexion. Rechargez et réessayez.",
-    "signInRequired": "Connectez-vous pour passer votre commande."
+    "signInRequired": "Connectez-vous pour passer votre commande.",
+    "codUnavailable": "La boutique n'accepte pas le paiement à la livraison en ce moment. Veuillez choisir le paiement par carte."
   },
   "delivery": {
     "title": "Livraison",

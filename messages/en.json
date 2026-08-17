@@ -155,7 +155,12 @@
     "regionLabel": "Province or state",
     "editAddress": "Edit",
     "noAddressYet": "No delivery address yet.",
-    "addressIncomplete": "We need a street address and a city before we can deliver."
+    "addressIncomplete": "We need a street address and a city before we can deliver.",
+    "payHeading": "How you would like to pay",
+    "payNow": "Pay now by card",
+    "payNowHelp": "We hold a little more than the estimate and charge the exact amount once your order is weighed. You are never charged more than the hold.",
+    "payCash": "Cash on delivery",
+    "payCashHelp": "Pay the driver at the door. They will have the exact amount once your order is weighed."
   },
   "payment": {
     "testBannerTitle": "Test order. No payment has been taken.",
@@ -238,7 +243,8 @@
     "retry": "Try again",
     "outsideDeliveryAreaGps": "We do not deliver that far yet.",
     "phoneMismatch": "The number on this page is not the one you signed in with. Reload and try again.",
-    "signInRequired": "Please sign in to place your order."
+    "signInRequired": "Please sign in to place your order.",
+    "codUnavailable": "The shop is not taking cash on delivery right now. Please choose to pay by card."
   },
   "delivery": {
     "title": "Delivery",

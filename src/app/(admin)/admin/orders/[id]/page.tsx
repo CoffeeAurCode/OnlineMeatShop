@@ -94,6 +94,43 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </span>
       </div>
 
+      {/*
+        ⭐ HOW THIS ORDER GETS PAID, said plainly, because the two cases are
+        packed identically and handed over differently.
+
+        ⚠ On a cash order the amount shown is the FINAL total, never the
+        estimate — that is the figure the driver collects, and showing an
+        estimate here would put a number in somebody's head that the scale is
+        about to change.
+      */}
+      <div className="mt-6 rounded-md border border-line bg-raised px-4 py-3">
+        <p className="text-body font-semibold">
+          {order.payMode === 'COD' ? 'Cash on delivery' : 'Paid online'}
+        </p>
+        <p className="mt-1 text-meta text-muted">
+          {order.payMode === 'COD'
+            ? order.finalTotalCents === null
+              ? 'The driver collects the final amount once this order is weighed.'
+              : `The driver collects ${money(order.finalTotalCents, ADMIN_LOCALE)} at the door.`
+            : 'Held on the card at checkout, charged exactly once weighed.'}
+        </p>
+
+        {order.cashCollectedCents !== null && (
+          <p
+            className={
+              order.cashCollectedCents === order.finalTotalCents
+                ? 'mt-2 text-meta text-muted'
+                : 'mt-2 rounded-sm bg-danger-wash px-2 py-1 text-meta font-semibold text-danger'
+            }
+          >
+            Driver reported {money(order.cashCollectedCents, ADMIN_LOCALE)} collected
+            {order.cashCollectedCents === order.finalTotalCents
+              ? '.'
+              : `, but ${money(order.finalTotalCents ?? 0, ADMIN_LOCALE)} was due. This order was deliberately left open.`}
+          </p>
+        )}
+      </div>
+
       {unweighed.length > 0 ? (
         <p className="mt-4 text-body text-muted">
           {unweighed.length} {unweighed.length === 1 ? 'item' : 'items'} still to weigh before this

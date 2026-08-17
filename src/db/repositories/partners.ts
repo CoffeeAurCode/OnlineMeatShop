@@ -76,6 +76,69 @@ export async function partnerById(
   return rows[0] ?? null;
 }
 
+/**
+ * The row behind a driver's session cookie, or null.
+ *
+ * ⭐ THE `active` FILTER IS THE ENTIRE REVOCATION MECHANISM for the driver
+ * portal. `src/app/driver-guard.ts` calls this on every request precisely so
+ * that taking somebody off the roster locks them out on their next tap rather
+ * than when a thirty-day cookie expires.
+ *
+ * ⚠ RETURNS NULL FOR BOTH "no such id" AND "deactivated", on purpose. They are
+ * the same answer to the only question being asked, and splitting them would
+ * cost a second query to produce a distinction no screen may show.
+ */
+export async function activePartnerById(
+  id: string,
+  tx: Tx | typeof db = db,
+): Promise<Partner | null> {
+  const rows = await tx
+    .select({
+      id: deliveryPartner.id,
+      name: deliveryPartner.name,
+      phone: deliveryPartner.phone,
+      active: deliveryPartner.active,
+      notes: deliveryPartner.notes,
+      sortOrder: deliveryPartner.sortOrder,
+    })
+    .from(deliveryPartner)
+    .where(and(eq(deliveryPartner.id, id), eq(deliveryPartner.active, true)))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+/**
+ * Who, if anybody, this number belongs to on the active roster.
+ *
+ * The driver sign-in's whole authorisation step. `phone` must ALREADY be
+ * E.164 — same rule as `addPartner`, so a lookup and an insert cannot disagree
+ * about what a number is.
+ *
+ * ⚠ AT MOST ONE ROW IS POSSIBLE and that is enforced by the database, not by
+ * the `limit(1)`: `partner_phone_active` is a partial unique index over active
+ * rows. The limit is belt and braces for the day somebody drops the index.
+ */
+export async function activePartnerByPhone(
+  phoneE164: string,
+  tx: Tx | typeof db = db,
+): Promise<Partner | null> {
+  const rows = await tx
+    .select({
+      id: deliveryPartner.id,
+      name: deliveryPartner.name,
+      phone: deliveryPartner.phone,
+      active: deliveryPartner.active,
+      notes: deliveryPartner.notes,
+      sortOrder: deliveryPartner.sortOrder,
+    })
+    .from(deliveryPartner)
+    .where(and(eq(deliveryPartner.phone, phoneE164), eq(deliveryPartner.active, true)))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
 export type PartnerWriteResult =
   | { readonly ok: true; readonly id: string }
   | { readonly ok: false; readonly reason: 'duplicatePhone' | 'notFound' };

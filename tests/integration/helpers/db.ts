@@ -89,6 +89,28 @@ const TABLES_IN_DEPENDENCY_ORDER = [
   'prep_option',
   'product',
   'customer',
+  /*
+   * ⚠ ADDED 2026-08-17, AND THEY HAD BEEN MISSING SINCE MIGRATION 0008.
+   *
+   * Nothing had noticed because no suite seeded a partner. The first one that
+   * did failed on `partner_phone_active` — a driver seeded by one test was
+   * still there for the next, so the second insert of the same number
+   * collided. The symptom looked like a bug in the new test rather than a hole
+   * in the harness, which is the expensive kind.
+   *
+   * ⭐ THE RULE THIS RESTATES: a migration that adds a table must add it here
+   * in the same commit, or the leak stays invisible until a suite happens to
+   * write to it.
+   */
+  /*
+   * ⚠ Listed explicitly even though it CASCADEs from `delivery_partner`.
+   * Relying on the cascade means the day somebody drops that FK, this table
+   * silently starts leaking rows between tests — which is the same failure
+   * that cost a run above, one level deeper and harder to see.
+   */
+  'driver_link',
+  'delivery_partner',
+  'shop_setting',
 ];
 
 let migrated = false;

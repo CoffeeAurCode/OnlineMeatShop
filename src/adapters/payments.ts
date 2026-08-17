@@ -7,6 +7,8 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { payment } from '@/db/schema';
 
+import { MonerisPaymentAdapter, monerisConfig } from './moneris';
+
 /**
  * ⭐⭐ THE PAYMENT SEAM, AND THE MOST VALUABLE THING IN THIS PROTOTYPE.
  *
@@ -30,11 +32,16 @@ import { payment } from '@/db/schema';
  *
  * ══ WHY THIS IS NOT WRITTEN AGAINST STRIPE ════════════════════════════════
  *
- * The processor is Clover. `CloverPaymentAdapter` implements this same
- * interface and that is the whole seam. Two things must be settled before it
- * is written, and neither is a frontend problem: Clover documents no
- * idempotency-key mechanism, so `02-DTM` §8.2's checkout boundary has to be
- * re-solved, and CAD settlement is unconfirmed.
+ * ⚠ THE PROCESSOR IS MONERIS (client decision, 2026-08-17). It replaced
+ * Clover, which replaced Stripe, and THIS INTERFACE HAS NOT MOVED ONCE across
+ * all three -- which is the strongest evidence available that the seam is in
+ * the right place. `MonerisPaymentAdapter` (`./moneris.ts`) implements it.
+ *
+ * ⭐ Moneris also closes both items that blocked Clover: `order_id` must be
+ * unique per store, which IS an idempotency key, and a Moneris store is
+ * provisioned in a currency so CAD cannot be got wrong from this side. See the
+ * header of `./moneris.ts` for why neither is a substitute for a test
+ * transaction.
  */
 
 export interface AuthoriseInput {
@@ -51,6 +58,20 @@ export interface AuthoriseInput {
    * response and quietly authorise the old number.
    */
   readonly idempotencyKey: string;
+  /**
+   * The tokenised card, from the processor's own hosted field in the browser.
+   *
+   * ⚠ OPTIONAL ON THE INTERFACE, REQUIRED BY ANY REAL ADAPTER. The stub has no
+   * card to tokenise and would have to be handed a fake one purely to satisfy
+   * a required field, which is a lie in the type rather than a check.
+   * `MonerisPaymentAdapter` throws when it is absent.
+   *
+   * ⚠ IT IS A TOKEN, NEVER A CARD NUMBER. The PAN is captured by the
+   * processor's iframe and never reaches this server. That is what keeps the
+   * shop out of PCI-DSS scope for card data, and it is why no field on this
+   * interface is named `pan`, `cvv` or `expiry` — nor should one ever be.
+   */
+  readonly paymentToken?: string;
 }
 
 export interface CaptureInput {
@@ -228,11 +249,24 @@ export class StubPaymentAdapter implements PaymentAdapter {
  * check stays as the backstop for anything that bypasses startup.
  */
 export function paymentAdapter(): PaymentAdapter {
+  /*
+   * ⭐ THE REAL PROCESSOR WINS WHENEVER IT IS CONFIGURED, in every environment
+   * including development.
+   *
+   * The tempting alternative — stub in dev, Moneris in production — means the
+   * adapter that handles money is the one path never exercised before it
+   * handles money. Selecting on the CREDENTIALS instead means anyone who sets
+   * the test-store variables is running the real code against Moneris' test
+   * host, and `MONERIS_ENV` defaults to `test` precisely so that is safe.
+   */
+  const moneris = monerisConfig();
+  if (moneris !== null) return new MonerisPaymentAdapter(moneris);
+
   if (process.env.NODE_ENV === 'production' && process.env.ALLOW_STUB_PAYMENTS !== 'true') {
     throw new Error(
       'No real payment adapter is configured. StubPaymentAdapter moves no money and ' +
-        'must never be reached in production. Configure a processor, or set ' +
-        'ALLOW_STUB_PAYMENTS=true to run a deliberate no-money demo deployment.',
+        'must never be reached in production. Set MONERIS_STORE_ID and MONERIS_API_TOKEN, ' +
+        'or set ALLOW_STUB_PAYMENTS=true to run a deliberate no-money demo deployment.',
     );
   }
   return new StubPaymentAdapter();
@@ -242,9 +276,13 @@ export function paymentAdapter(): PaymentAdapter {
  * Whether the current deployment is taking real money, which the UI banner
  * turns on. Read separately from `paymentAdapter()` so a page can ask without
  * constructing one.
+ *
+ * ⚠ IT ASKS THE SAME QUESTION `paymentAdapter()` DOES, not a parallel one. The
+ * banner and the behaviour must never be able to disagree — a page saying "no
+ * real money" over a live processor is the worst available combination.
  */
 export function isStubPayments(): boolean {
-  return true;
+  return monerisConfig() === null;
 }
 
 /** A capture key that CHANGES WITH THE AMOUNT. See `AuthoriseInput`. */

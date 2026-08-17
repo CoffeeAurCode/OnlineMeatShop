@@ -619,6 +619,78 @@ export const customer = pgTable(
   ],
 );
 
+/**
+ * ⭐ THE SINGLE-USE SIGN-IN LINK CARRIED BY THE DISPATCH SMS.
+ *
+ * ══ WHAT IT DEFENDS AGAINST, AND WHAT IT CANNOT ═══════════════════════════
+ *
+ * ⚠ A LINK IN A TEXT MESSAGE CANNOT BE STOPPED FROM BEING FORWARDED. Nothing
+ * in this table changes that, and no design can — the message is on somebody
+ * else's phone the moment it is delivered.
+ *
+ * ⭐ WHAT IT CAN DO IS MAKE THE FORWARDED COPY WORTHLESS. The link is spent by
+ * the FIRST person who completes the sign-in, and single use is enforced by a
+ * conditional UPDATE on `used_at` — so two people racing it produce exactly one
+ * winner, the same mechanism that stops a double capture.
+ *
+ * ⚠ THE HONEST RESIDUAL RISK: if the forwarded copy is spent BEFORE the driver
+ * taps it, the wrong person is signed in and the driver sees a dead link. That
+ * is a loud failure rather than a silent one — the driver rings the shop
+ * because their link does not work — and `reuse_attempts` records the other
+ * side of it. It is the same bargain every delivery company makes with a
+ * texted link, taken deliberately rather than by default.
+ *
+ * Revocation is unchanged and immediate: `delivery_partner.active` is re-read
+ * on every driver request, so deactivating somebody kills every link they hold
+ * whether it has been spent or not.
+ */
+export const driverLink = pgTable(
+  'driver_link',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    /**
+     * ⚠ SHA-256 HEX OF THE TOKEN. THE TOKEN ITSELF IS NEVER STORED.
+     *
+     * Same reason a password is hashed: a backup, a support query or a leaked
+     * dump would otherwise hand out working sign-in links for every driver.
+     */
+    tokenHash: text('token_hash').notNull(),
+
+    partnerId: uuid('partner_id')
+      .notNull()
+      .references(() => deliveryPartner.id, { onDelete: 'cascade' }),
+
+    /**
+     * Where the link lands. Nullable, and `set null` rather than `cascade`,
+     * because ⭐ THE LINK IS A SIGN-IN, NOT PERMISSION TO SEE ONE ORDER. If the
+     * order goes, the link still legitimately signs the driver in; it just
+     * lands on their job list instead.
+     */
+    orderId: uuid('order_id').references(() => order.id, { onDelete: 'set null' }),
+
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+
+    /** Null until spent. The conditional UPDATE on this is the single-use rule. */
+    usedAt: timestamp('used_at', { withTimezone: true }),
+
+    /**
+     * ⭐ THE ONLY SIGNAL A FORWARD EVER PRODUCES. A spent link presented again
+     * is either a double tap or somebody else holding the text. Neither is
+     * provable, and a link with six attempts against it is worth asking about.
+     */
+    reuseAttempts: integer('reuse_attempts').notNull().default(0),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Two rows with one hash would make "which link was spent" unanswerable.
+    uniqueIndex('driver_link_token_hash').on(t.tokenHash),
+    index('driver_link_partner_expiry').on(t.partnerId, t.expiresAt),
+    check('driver_link_reuse_nonneg', sql`${t.reuseAttempts} >= 0`),
+  ],
+);
+
 // ── delivery_partner ───────────────────────────────────────────────────
 
 /**
@@ -865,12 +937,59 @@ export const order = pgTable(
      */
     dispatchedAt: timestamp('dispatched_at', { withTimezone: true }),
 
+    /**
+     * ⭐ WHAT THE DRIVER SAYS THEY TOOK AT THE DOOR. Cash orders only.
+     *
+     * Spec §5.8 — an order closes when it is prepaid, or the rider collected
+     * EXACTLY the final amount. `canDeliver` has taken this argument since it
+     * was written; nothing passed it anything until COD became real, because
+     * every order was PREPAID.
+     *
+     * ⚠ IT IS A REPORT, NOT A RECEIPT. It records what the person carrying the
+     * box said, which is the only figure anybody has. A mismatch against
+     * `final_total_cents` is therefore a fact to surface to the shop, not a
+     * contradiction to resolve in code.
+     */
+    cashCollectedCents: integer('cash_collected_cents'),
+    cashReportedAt: timestamp('cash_reported_at', { withTimezone: true }),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     deliveredAt: timestamp('delivered_at', { withTimezone: true }),
   },
   (t) => [
+    /** Money is a non-negative integer of cents. Never a float, nowhere. */
+    check('order_cash_nonneg', sql`${t.cashCollectedCents} IS NULL OR ${t.cashCollectedCents} >= 0`),
+
+    /**
+     * Cash is only ever reported against a cash order. A prepaid order
+     * carrying a collected amount means two rails took money for one basket.
+     */
+    check('order_cash_only_on_cod', sql`${t.cashCollectedCents} IS NULL OR ${t.payMode} = 'COD'`),
+
+    /** The two cash columns move together — "how much" always has a "when". */
+    check(
+      'order_cash_coherent',
+      sql`(${t.cashCollectedCents} IS NULL) = (${t.cashReportedAt} IS NULL)`,
+    ),
+
+    /**
+     * ⭐ A CASH ORDER CANNOT REACH DELIVERED WITHOUT THE EXACT MONEY AGAINST
+     * IT. Spec §5.8, expressed where a future route handler cannot forget it.
+     *
+     * The same reasoning as `reserved_g <= stocked_g`: if the application has
+     * a bug the right outcome is a failed transaction, not a cash order
+     * silently closed with nothing recorded. Unlike overselling, this loss is
+     * not recoverable by cutting another piece of fish.
+     */
+    check(
+      'order_cod_settled_on_delivery',
+      sql`${t.status} <> 'DELIVERED' OR ${t.payMode} <> 'COD'
+          OR (${t.cashCollectedCents} IS NOT NULL
+              AND ${t.cashCollectedCents} = ${t.finalTotalCents})`,
+    ),
+
     /**
      * ⭐ inv-O5 — a final total exists exactly when weighing is done, and not
      * before. Written as an equality between two booleans so it cannot be

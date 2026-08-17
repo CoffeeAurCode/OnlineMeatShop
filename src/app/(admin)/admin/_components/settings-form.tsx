@@ -29,6 +29,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
   const [message, setMessage] = useState(settings['console.newOrderMessage']);
   const [pollSeconds, setPollSeconds] = useState(String(settings['console.pollSeconds']));
   const [repeat, setRepeat] = useState(settings['console.repeatUntilSeen']);
+  const [cod, setCod] = useState(settings['checkout.codEnabled']);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -61,6 +62,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
           newOrderMessage: message.trim(),
           pollSeconds: Number(pollSeconds) || 10,
           repeatUntilSeen: repeat,
+          codEnabled: cod,
         }),
       });
       if (!res.ok) {
@@ -136,6 +138,25 @@ export function SettingsForm({ settings }: { settings: Settings }) {
             <span className="block text-meta text-muted">
               For a busy counter where one chime gets missed. It repeats on every check until the
               banner is dismissed or the order is opened.
+            </span>
+          </span>
+        </label>
+
+        <h2 className="mt-8 text-section font-semibold tracking-tight">Checkout</h2>
+
+        <label className="flex items-start gap-3 text-body">
+          <input
+            type="checkbox"
+            checked={cod}
+            onChange={(e) => setCod(e.target.checked)}
+            className="mt-1 size-5"
+          />
+          <span>
+            <span className="block font-semibold">Offer cash on delivery</span>
+            <span className="block text-meta text-muted">
+              Customers can choose to pay the driver at the door instead of paying online. Turning
+              this off stops NEW cash orders only — anything already placed still settles at the
+              door, and the driver still sees the amount to collect.
             </span>
           </span>
         </label>

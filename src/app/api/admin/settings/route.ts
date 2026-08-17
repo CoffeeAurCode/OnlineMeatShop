@@ -30,6 +30,15 @@ const schema = z.object({
    */
   pollSeconds: z.number().int().min(5).max(60).optional(),
   repeatUntilSeen: z.boolean().optional(),
+  /**
+   * ⚠ NOT A CONSOLE PREFERENCE. Every other key on this route changes what the
+   * owner's own screen does; this one changes what CUSTOMERS are offered at
+   * checkout. It rides here because it is a single boolean the owner flips
+   * from a phone, and a screen of its own for one switch would be a screen
+   * nobody finds. If a second storefront setting appears, they get their own
+   * section rather than growing this one.
+   */
+  codEnabled: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -41,6 +50,7 @@ export async function POST(request: Request) {
           'console.newOrderMessage': input.newOrderMessage,
         }),
         ...(input.pollSeconds !== undefined && { 'console.pollSeconds': input.pollSeconds }),
+        ...(input.codEnabled !== undefined && { 'checkout.codEnabled': input.codEnabled }),
         ...(input.repeatUntilSeen !== undefined && {
           'console.repeatUntilSeen': input.repeatUntilSeen,
         }),

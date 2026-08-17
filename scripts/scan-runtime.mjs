@@ -30,6 +30,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 /** Must match the values CI builds with. */
 const CANARIES = {
   SUPABASE_SERVICE_ROLE_KEY: 'cnry_service_role_MUST_NOT_SHIP',
+  MONERIS_API_TOKEN: 'cnry_moneris_token_MUST_NOT_SHIP',
   STRIPE_SECRET_KEY: 'cnry_stripe_secret_MUST_NOT_SHIP',
   STRIPE_WEBHOOK_SECRET: 'cnry_stripe_webhook_MUST_NOT_SHIP',
   DATABASE_URL: 'cnry_database_url_MUST_NOT_SHIP',
@@ -42,7 +43,16 @@ const CANARIES = {
  * Routes to fetch. Add every new dynamic route that touches secrets — an
  * admin page, a checkout step, an order detail view.
  */
-const ROUTES = ['/', '/healthz'];
+/*
+ * ⚠ A NEW DYNAMIC ROUTE THAT TOUCHES SECRETS MUST BE ADDED HERE.
+ *
+ * `/driver` is included because it is the one surface outside `/admin` that
+ * renders behind a signed session and reads customer addresses — exactly the
+ * shape where a server prop leaks into the RSC payload. Signed out it renders
+ * the sign-in form, which is what this scan sees, and that is still worth
+ * scanning: the layout runs either way.
+ */
+const ROUTES = ['/', '/healthz', '/driver', '/d/not-a-real-token'];
 
 const env = { ...process.env, ...CANARIES, NODE_ENV: 'production', PORT };
 

@@ -74,6 +74,34 @@ export default async function OrdersPage() {
                       {order.hasHotLine ? ' · hot food' : ''}
                       {unweighed > 0 ? `, ${unweighed} to weigh` : ''}
                     </p>
+                    {/*
+                      ⭐ A cash order is packed the same and handed over
+                      differently — somebody is coming back with money for it.
+                      Prepaid says nothing, because saying "paid" on the
+                      overwhelming majority of rows is noise that makes the
+                      minority harder to spot, not easier.
+                    */}
+                    {order.payMode === 'COD' ? (
+                      <p className="mt-1 text-meta font-semibold text-ink">
+                        CASH ON DELIVERY
+                        {order.finalTotalCents === null
+                          ? ''
+                          : ` · ${money(order.finalTotalCents, ADMIN_LOCALE)} due`}
+                      </p>
+                    ) : null}
+                    {/*
+                      The driver reported a figure that did not match. The
+                      order deliberately did NOT close — see `reportDelivery`.
+                    */}
+                    {order.cashCollectedCents !== null &&
+                    order.cashCollectedCents !== order.finalTotalCents ? (
+                      <p className="mt-1 rounded-sm bg-danger-wash px-2 py-1 text-meta font-semibold text-danger">
+                        Driver reported {money(order.cashCollectedCents, ADMIN_LOCALE)} collected
+                        {order.finalTotalCents === null
+                          ? ''
+                          : `, ${money(order.finalTotalCents, ADMIN_LOCALE)} was due`}
+                      </p>
+                    ) : null}
                     <p className="mt-1 text-meta text-muted">
                       {order.lines
                         .map((l) => `${l.productName} ${weight(l.requestedG, ADMIN_LOCALE)}`)

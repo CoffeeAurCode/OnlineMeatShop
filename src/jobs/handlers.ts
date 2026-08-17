@@ -163,6 +163,32 @@ export function abandonStaleAttemptsJob(): Job {
 }
 
 /**
+ * Delete dispatch links that expired over a week ago.
+ *
+ * ⚠ HOUSEKEEPING, NOT A PRIVACY MEASURE. The row holds a hash, a partner id and
+ * an order id — nothing sensitive on its own, and the token was never stored.
+ * What it protects is the usefulness of `reuse_attempts`: a table full of
+ * months-old rows makes the interesting ones impossible to spot.
+ *
+ * ⭐ THE SEVEN-DAY GRACE IS THE POINT. Deleting on use would destroy the
+ * evidence at exactly the moment somebody starts asking why a driver could not
+ * sign in, or who opened a link first.
+ *
+ * ⚠ NOTHING INVOKES THE SCHEDULER YET (`CLAUDE.md` §6 in the app repo), so this
+ * job is written and not running. At two to six dispatches a day the table
+ * grows by a few rows daily, which is harmless for a long time — but this is
+ * the reason it does not clean itself today.
+ */
+export function sweepDriverLinksJob(): Job {
+  return defineJob('sweep-driver-links', async (tx) => {
+    await tx.execute(sql`
+      DELETE FROM driver_link
+       WHERE expires_at < now() - interval '7 days'
+    `);
+  });
+}
+
+/**
  * The nightly consistency check (DTM §6.2 / §15.3).
  *
  * inv-O3 spans order_line → product → slot and cannot be a CHECK constraint,

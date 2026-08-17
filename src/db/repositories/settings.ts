@@ -42,6 +42,21 @@ export const SETTING_DEFAULTS = {
   'console.pollSeconds': 10,
   /** Repeat the announcement until somebody opens the order. */
   'console.repeatUntilSeen': false,
+  /**
+   * ⭐ WHETHER THE STOREFRONT OFFERS CASH ON DELIVERY.
+   *
+   * A setting rather than an environment variable, deliberately. The shop
+   * turning cash off is an OPERATIONAL decision made on a morning — no float
+   * in the till, a driver who will not carry cash, a run of bad notes — and it
+   * has to be reversible from a phone in the time it takes to serve a
+   * customer. An env var means a redeploy, which means it does not happen.
+   *
+   * ⚠ TURNING IT OFF DOES NOT TOUCH ORDERS ALREADY PLACED. A cash order in
+   * flight still settles at the door; this gate is only on new checkouts. That
+   * is the correct behaviour and it is also the surprising one, so it is
+   * written down: the console will keep showing cash orders after cash is off.
+   */
+  'checkout.codEnabled': true,
 } as const;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
@@ -60,6 +75,7 @@ export interface Settings {
   'console.newOrderMessage': string;
   'console.pollSeconds': number;
   'console.repeatUntilSeen': boolean;
+  'checkout.codEnabled': boolean;
 }
 
 /**
