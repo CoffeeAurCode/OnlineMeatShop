@@ -620,29 +620,32 @@ export const customer = pgTable(
 );
 
 /**
- * ⭐ THE SINGLE-USE SIGN-IN LINK CARRIED BY THE DISPATCH SMS.
+ * ⭐ THE SIGN-IN LINK CARRIED BY THE DISPATCH SMS.
  *
- * ══ WHAT IT DEFENDS AGAINST, AND WHAT IT CANNOT ═══════════════════════════
+ * One tap from the text into the job. No code to type — a login code cannot go
+ * in a dispatch SMS at all, because a code is minted when somebody asks for one
+ * and expires, so one printed into a text sent hours earlier is either already
+ * dead or a standing password.
  *
- * ⚠ A LINK IN A TEXT MESSAGE CANNOT BE STOPPED FROM BEING FORWARDED. Nothing
- * in this table changes that, and no design can — the message is on somebody
- * else's phone the moment it is delivered.
+ * ══ WHAT BOUNDS IT, AND WHAT DELIBERATELY DOES NOT ════════════════════════
  *
- * ⭐ WHAT IT CAN DO IS MAKE THE FORWARDED COPY WORTHLESS. The link is spent by
- * the FIRST person who completes the sign-in, and single use is enforced by a
- * conditional UPDATE on `used_at` — so two people racing it produce exactly one
- * winner, the same mechanism that stops a double capture.
+ * ⚠ **TIME IS THE ONLY BOUND. THE LINK IS NOT SINGLE USE.** An earlier draft
+ * spent the token on first use so a forwarded copy would be worthless; the
+ * client removed that on 2026-08-17. The reasoning is sound: a driver who
+ * reopens their own text must not find themselves locked out, and that failure
+ * is both likelier and more expensive than the one it was guarding against.
  *
- * ⚠ THE HONEST RESIDUAL RISK: if the forwarded copy is spent BEFORE the driver
- * taps it, the wrong person is signed in and the driver sees a dead link. That
- * is a loud failure rather than a silent one — the driver rings the shop
- * because their link does not work — and `reuse_attempts` records the other
- * side of it. It is the same bargain every delivery company makes with a
- * texted link, taken deliberately rather than by default.
+ * ⚠ SO A FORWARDED TEXT WORKS, FOR UP TO TWELVE HOURS. Stated plainly because
+ * it is a deliberate acceptance rather than an oversight. What still holds:
  *
- * Revocation is unchanged and immediate: `delivery_partner.active` is re-read
- * on every driver request, so deactivating somebody kills every link they hold
- * whether it has been spent or not.
+ *   - **12 hours, enforced on every visit** (`DRIVER_LINK_TTL_MS`). Dead by the
+ *     next morning whether it was used or not.
+ *   - **Revocation is immediate.** `delivery_partner.active` is re-read on
+ *     every driver request, so deactivating somebody kills every link they
+ *     hold, expiry or not.
+ *   - **Only a hash is stored**, so reading this table yields nothing usable.
+ *   - **Expired rows are swept** (`sweepDriverLinksJob`), which is what stops
+ *     the table growing without bound now that nothing deletes a link on use.
  */
 export const driverLink = pgTable(
   'driver_link',
@@ -653,7 +656,8 @@ export const driverLink = pgTable(
      * ⚠ SHA-256 HEX OF THE TOKEN. THE TOKEN ITSELF IS NEVER STORED.
      *
      * Same reason a password is hashed: a backup, a support query or a leaked
-     * dump would otherwise hand out working sign-in links for every driver.
+     * dump would otherwise hand out working sign-in links for every driver for
+     * the next twelve hours.
      */
     tokenHash: text('token_hash').notNull(),
 
@@ -670,24 +674,11 @@ export const driverLink = pgTable(
     orderId: uuid('order_id').references(() => order.id, { onDelete: 'set null' }),
 
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-
-    /** Null until spent. The conditional UPDATE on this is the single-use rule. */
-    usedAt: timestamp('used_at', { withTimezone: true }),
-
-    /**
-     * ⭐ THE ONLY SIGNAL A FORWARD EVER PRODUCES. A spent link presented again
-     * is either a double tap or somebody else holding the text. Neither is
-     * provable, and a link with six attempts against it is worth asking about.
-     */
-    reuseAttempts: integer('reuse_attempts').notNull().default(0),
-
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // Two rows with one hash would make "which link was spent" unanswerable.
     uniqueIndex('driver_link_token_hash').on(t.tokenHash),
     index('driver_link_partner_expiry').on(t.partnerId, t.expiresAt),
-    check('driver_link_reuse_nonneg', sql`${t.reuseAttempts} >= 0`),
   ],
 );
 

@@ -11,12 +11,18 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
  * server can verify one without remembering it, which is exactly what you want
  * from a cookie presented on every request.
  *
- * ⭐ THIS ONE IS THE OPPOSITE ON PURPOSE, AND THE REASON IS SINGLE USE. A
- * signed token is valid every time it is presented, by anyone holding it, until
- * it expires — there is nowhere to record that it has been spent. A link in a
- * text message can be forwarded, screenshotted and posted, so "valid every
- * time" is precisely the property that must not hold. Spending it has to be
- * written down, so the token is random and the row is the truth.
+ * ⭐ THIS ONE IS RANDOM AND STORED, AND THE REASON IS CONTROL OVER ITS LIFE. An
+ * expiry baked into a signed token cannot be shortened, cancelled or swept —
+ * once issued it is simply true until the clock passes it, and nothing can
+ * reach back and change that. A row can be deleted, and it is: the sweep is
+ * what stops the table growing, and a driver removed from the roster takes
+ * their links with them by CASCADE.
+ *
+ * ⚠ IT IS NOT SINGLE USE. An earlier draft spent the token on first use so a
+ * forwarded copy would be worthless; the client removed that on 2026-08-17,
+ * because a driver who reopens their own text must not be locked out. A
+ * forwarded text therefore works until it expires — an accepted trade, not an
+ * oversight.
  *
  * ══ 32 BYTES, AND WHY NOT FEWER ═══════════════════════════════════════════
  *
@@ -27,7 +33,13 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
  * segments.
  */
 
-/** 12 hours — the client's choice, 2026-08-17. Covers a shift, dead by morning. */
+/**
+ * 12 hours — the client's choice, 2026-08-17.
+ *
+ * ⭐ IT IS THE ONLY BOUND ON THE LINK, which is why it is a named constant with
+ * a test on its value rather than an inline number. Covers a shift; dead by the
+ * next morning whether the link was opened or not.
+ */
 export const DRIVER_LINK_TTL_MS = 12 * 60 * 60 * 1000;
 
 export interface MintedDriverLink {

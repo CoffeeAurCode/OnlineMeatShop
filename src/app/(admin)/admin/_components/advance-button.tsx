@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import type { OrderStatus } from '@/domain/types';
+import { ADMIN_LOCALE, money } from '@/ui/format';
 
 import { PrimaryBar, PrimaryButton } from './shell';
 
@@ -22,10 +23,16 @@ export function AdvanceButton({
   orderId,
   status,
   readyToFinalise,
+  cashDueCents = null,
+  cashReportedCents = null,
 }: {
   orderId: string;
   status: OrderStatus;
   readyToFinalise: boolean;
+  /** Cents owed at the door. Null on a prepaid order, or before weighing. */
+  cashDueCents?: number | null;
+  /** What the driver already reported, if they used the portal. */
+  cashReportedCents?: number | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -33,6 +40,21 @@ export function AdvanceButton({
 
   const next = nextAction(status, readyToFinalise);
   if (next === null) return null;
+
+  /*
+   * ⭐ CLOSING A CASH ORDER MEANS SAYING THE MONEY CAME BACK.
+   *
+   * The driver normally does this from their own portal and the figure is
+   * already recorded — this is the fallback for when they did not, and before
+   * the portal existed it was the only path.
+   *
+   * ⚠ THE BUTTON NAMES THE AMOUNT rather than offering a field. There is
+   * nothing to type, so there is nothing to mistype, and the owner is agreeing
+   * to a specific number rather than confirming an abstraction.
+   */
+  const closingCash = next.to === 'DELIVERED' && cashDueCents !== null;
+  const cashDisagrees =
+    closingCash && cashReportedCents !== null && cashReportedCents !== cashDueCents;
 
   async function run() {
     if (next === null) return;
@@ -42,7 +64,12 @@ export function AdvanceButton({
       const res = await fetch(next.endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ orderId, from: status, to: next.to }),
+        body: JSON.stringify({
+          orderId,
+          from: status,
+          to: next.to,
+          ...(closingCash ? { cashCollectedCents: cashDueCents } : {}),
+        }),
       });
       const body: unknown = await res.json();
       if (!res.ok) {
@@ -55,7 +82,13 @@ export function AdvanceButton({
             ? 'This order already moved on. Refreshing.'
             : reason === 'weighingIncomplete'
               ? 'Something on this order still has no weight.'
-              : 'That did not save. Nothing has changed.',
+              : reason === 'notAssigned'
+                ? 'Give this order to a driver before sending it out.'
+                : reason === 'cashRequired'
+                  ? 'This is a cash order. It cannot be closed until the money is recorded.'
+                  : reason === 'cashMismatch'
+                    ? 'The cash recorded does not match what was owed. Sort that out before closing this order.'
+                    : 'That did not save. Nothing has changed.',
         );
         setBusy(false);
         router.refresh();
@@ -77,9 +110,26 @@ export function AdvanceButton({
         </p>
       ) : null}
       <PrimaryBar>
-        <PrimaryButton onClick={() => void run()} disabled={busy}>
-          {busy ? 'Saving' : next.label}
-        </PrimaryButton>
+        {cashDisagrees ? (
+          /*
+           * ⚠ NO BUTTON AT ALL. The driver reported a figure that does not
+           * match what was owed, and the order was deliberately left open for
+           * exactly this reason. Offering a "Delivered" button here would let
+           * somebody close the books on a shortfall with one tap, which is the
+           * outcome the whole cash rule exists to prevent.
+           */
+          <p className="py-3 text-center text-body text-danger">
+            The driver reported a different amount. Resolve that before closing this order.
+          </p>
+        ) : (
+          <PrimaryButton onClick={() => void run()} disabled={busy}>
+            {busy
+              ? 'Saving'
+              : closingCash
+                ? `Collected ${money(cashDueCents, ADMIN_LOCALE)} — Delivered`
+                : next.label}
+          </PrimaryButton>
+        )}
       </PrimaryBar>
     </>
   );

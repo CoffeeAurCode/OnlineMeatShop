@@ -371,7 +371,7 @@ describe('4. ⭐ THE DATABASE BACKSTOP', () => {
   });
 });
 
-describe('5. ⭐⭐ THE SINGLE-USE DISPATCH LINK', () => {
+describe('5. ⭐ THE DISPATCH LINK — bounded by TIME and the roster, nothing else', () => {
   let link: typeof import('@/auth/driver-link');
 
   beforeAll(async () => {
@@ -393,7 +393,8 @@ describe('5. ⭐⭐ THE SINGLE-USE DISPATCH LINK', () => {
   it('the token is never stored — only its hash', async () => {
     /*
      * ⚠ THE PROPERTY THAT MAKES A LEAKED BACKUP HARMLESS. Anybody who can read
-     * this table would otherwise hold working sign-in links for every driver.
+     * this table would otherwise hold working sign-in links for every driver
+     * for the next twelve hours.
      */
     const world = await seedWorld();
     const alex = await seedPartner('Sample Alex', '+15145550001');
@@ -406,96 +407,67 @@ describe('5. ⭐⭐ THE SINGLE-USE DISPATCH LINK', () => {
     expect(rows[0].token_hash).toBe(link.hashDriverLinkToken(token));
   });
 
-  it('⭐ READING the link does not spend it — a preview bot must not burn it', async () => {
-    /*
-     * The single most important behaviour here. Carriers and messaging apps GET
-     * the URL out of an SMS to build a preview. If that consumed the token, the
-     * driver would tap a dead link on EVERY dispatch and the feature would be
-     * broken a hundred percent of the time.
-     */
+  it('resolves to the partner and the order the text was about', async () => {
     const world = await seedWorld();
     const alex = await seedPartner('Sample Alex', '+15145550001');
     const orderId = await seedOrder(world, { partnerId: alex });
     const token = await mint(alex, orderId);
-    const hash = link.hashDriverLinkToken(token);
 
-    for (let i = 0; i < 3; i += 1) {
-      expect(await repo.peekDriverLink(hash, Date.now())).toEqual({
-        state: 'valid',
-        partnerId: alex,
-        orderId,
-      });
-    }
-    // And it is still spendable afterwards.
-    expect(await repo.consumeDriverLink(hash, Date.now())).toMatchObject({ state: 'valid' });
-  });
-
-  it('⭐ spends exactly once — a forwarded copy is worthless afterwards', async () => {
-    const world = await seedWorld();
-    const alex = await seedPartner('Sample Alex', '+15145550001');
-    const orderId = await seedOrder(world, { partnerId: alex });
-    const token = await mint(alex, orderId);
-    const hash = link.hashDriverLinkToken(token);
-
-    expect(await repo.consumeDriverLink(hash, Date.now())).toEqual({
+    expect(await repo.resolveDriverLink(link.hashDriverLinkToken(token), Date.now())).toEqual({
       state: 'valid',
       partnerId: alex,
       orderId,
     });
-    expect(await repo.consumeDriverLink(hash, Date.now())).toEqual({ state: 'spent' });
   });
 
-  it('⭐ SINGLE USE HOLDS UNDER A RACE — exactly one winner out of ten', async () => {
+  it('⭐ KEEPS WORKING when opened again — it is deliberately NOT single use', async () => {
     /*
-     * Two people tapping the same link at once is the whole scenario this
-     * feature exists for. A read-then-write would let several through; the
-     * conditional UPDATE on `used_at` is what makes it one, and it is the same
-     * mechanism as the one-capture rule in the payment adapter.
+     * The client removed single use on 2026-08-17. The failure it was guarding
+     * against (a forwarded text being usable) is real, and the failure it
+     * CAUSED is likelier and worse: a driver who reopens their own message —
+     * or whose carrier pre-fetched the URL to build a preview — finding
+     * themselves locked out of the job they are standing next to.
      */
     const world = await seedWorld();
     const alex = await seedPartner('Sample Alex', '+15145550001');
     const orderId = await seedOrder(world, { partnerId: alex });
-    const token = await mint(alex, orderId);
-    const hash = link.hashDriverLinkToken(token);
+    const hash = link.hashDriverLinkToken(await mint(alex, orderId));
 
+    for (let i = 0; i < 5; i += 1) {
+      expect(await repo.resolveDriverLink(hash, Date.now())).toMatchObject({ state: 'valid' });
+    }
+  });
+
+  it('⭐ REFUSES ONCE EXPIRED — time is the only bound', async () => {
+    const world = await seedWorld();
+    const alex = await seedPartner('Sample Alex', '+15145550001');
+    const orderId = await seedOrder(world, { partnerId: alex });
+    const hash = link.hashDriverLinkToken(await mint(alex, orderId, -1000));
+
+    expect(await repo.resolveDriverLink(hash, Date.now())).toEqual({ state: 'expired' });
+  });
+
+  it('refuses on the far side of the boundary and allows on the near side', async () => {
+    const world = await seedWorld();
+    const alex = await seedPartner('Sample Alex', '+15145550001');
+    const orderId = await seedOrder(world, { partnerId: alex });
     const now = Date.now();
-    const results = await Promise.all(
-      Array.from({ length: 10 }, () => repo.consumeDriverLink(hash, now)),
-    );
+    const minted = link.mintDriverLinkToken(now);
+    await repo.issueDriverLink({
+      tokenHash: minted.tokenHash,
+      partnerId: alex,
+      orderId,
+      expiresAt: minted.expiresAt,
+    });
 
-    expect(results.filter((r) => r.state === 'valid')).toHaveLength(1);
-    expect(results.filter((r) => r.state === 'spent')).toHaveLength(9);
-  });
-
-  it('counts reuse attempts — the only signal a forward ever produces', async () => {
-    const world = await seedWorld();
-    const alex = await seedPartner('Sample Alex', '+15145550001');
-    const orderId = await seedOrder(world, { partnerId: alex });
-    const token = await mint(alex, orderId);
-    const hash = link.hashDriverLinkToken(token);
-
-    await repo.consumeDriverLink(hash, Date.now());
-    await repo.consumeDriverLink(hash, Date.now());
-    await repo.consumeDriverLink(hash, Date.now());
-
-    const { rows } = await pool.query(`SELECT reuse_attempts FROM driver_link`);
-    expect(rows[0].reuse_attempts).toBe(2);
-  });
-
-  it('refuses an expired link, and the expiry is checked in the same statement', async () => {
-    const world = await seedWorld();
-    const alex = await seedPartner('Sample Alex', '+15145550001');
-    const orderId = await seedOrder(world, { partnerId: alex });
-    // Already dead when it was written.
-    const token = await mint(alex, orderId, -1000);
-    const hash = link.hashDriverLinkToken(token);
-
-    expect(await repo.peekDriverLink(hash, Date.now())).toEqual({ state: 'expired' });
-    expect(await repo.consumeDriverLink(hash, Date.now())).toEqual({ state: 'expired' });
-    // And an expired link is NOT marked used, so it cannot be confused with one
-    // somebody actually spent.
-    const { rows } = await pool.query(`SELECT used_at FROM driver_link`);
-    expect(rows[0].used_at).toBeNull();
+    // One second before the twelve hours are up.
+    expect(
+      await repo.resolveDriverLink(minted.tokenHash, now + link.DRIVER_LINK_TTL_MS - 1000),
+    ).toMatchObject({ state: 'valid' });
+    // And exactly on it. `<=` in the check, so the boundary itself is dead.
+    expect(
+      await repo.resolveDriverLink(minted.tokenHash, now + link.DRIVER_LINK_TTL_MS),
+    ).toEqual({ state: 'expired' });
   });
 
   it('12 hours is the stated lifetime', () => {
@@ -503,12 +475,12 @@ describe('5. ⭐⭐ THE SINGLE-USE DISPATCH LINK', () => {
   });
 
   it('refuses a token nobody ever issued', async () => {
-    expect(await repo.peekDriverLink(link.hashDriverLinkToken('nope'), Date.now())).toEqual({
+    expect(await repo.resolveDriverLink(link.hashDriverLinkToken('nope'), Date.now())).toEqual({
       state: 'unknown',
     });
   });
 
-  it('⚠ removing a driver takes their unspent links with them', async () => {
+  it('⚠ removing a driver takes their links with them', async () => {
     const world = await seedWorld();
     const alex = await seedPartner('Sample Alex', '+15145550001');
     const orderId = await seedOrder(world, { partnerId: alex });
@@ -521,7 +493,9 @@ describe('5. ⭐⭐ THE SINGLE-USE DISPATCH LINK', () => {
     expect(rows[0].n).toBe(0);
   });
 
-  it('sweeps links that expired over a week ago, and keeps recent ones', async () => {
+  it('⭐ the sweep is now the ONLY thing that bounds the table', async () => {
+    // Nothing deletes a link on use any more, so every dispatch leaves a row
+    // behind until this runs.
     const world = await seedWorld();
     const alex = await seedPartner('Sample Alex', '+15145550001');
     const orderId = await seedOrder(world, { partnerId: alex });
@@ -531,5 +505,111 @@ describe('5. ⭐⭐ THE SINGLE-USE DISPATCH LINK', () => {
     expect(await repo.sweepDriverLinks(Date.now())).toBe(1);
     const { rows } = await pool.query(`SELECT count(*)::int AS n FROM driver_link`);
     expect(rows[0].n).toBe(1);
+  });
+});
+
+describe('6. ⭐ THE CONSOLE MUST BE ABLE TO CLOSE A CASH ORDER TOO', () => {
+  let orders: typeof import('@/db/repositories/orders');
+
+  beforeAll(async () => {
+    orders = await import('@/db/repositories/orders');
+  });
+
+  it('⭐ refuses cleanly instead of exploding on the CHECK constraint', async () => {
+    /*
+     * ⚠ THE BUG THIS PINS DOWN. `order_cod_settled_on_delivery` refuses a cash
+     * order marked DELIVERED with no money against it — correctly. But
+     * `advanceOrder` used to issue the UPDATE regardless, so the owner tapping
+     * "Delivered" on the console got a raw 23514 back as a 500 and a message
+     * about the connection.
+     *
+     * The driver portal is the intended path. This is the FALLBACK, and it was
+     * the only path that existed before the portal — so an order whose driver
+     * never opens the link must still be closable by the shop.
+     */
+    const world = await seedWorld();
+    const alex = await seedPartner('Sample Alex', '+15145550001');
+    const orderId = await seedOrder(world, {
+      partnerId: alex,
+      payMode: 'COD',
+      finalTotalCents: 4_620,
+    });
+
+    const result = await orders.advanceOrder(orderId, 'OUT', 'DELIVERED');
+    expect(result).toEqual({ ok: false, reason: 'cashRequired' });
+
+    const { rows } = await pool.query(`SELECT status FROM "order" WHERE id = $1`, [orderId]);
+    expect(rows[0].status).toBe('OUT');
+  });
+
+  it('closes the order when the console records the exact cash', async () => {
+    const world = await seedWorld();
+    const alex = await seedPartner('Sample Alex', '+15145550001');
+    const orderId = await seedOrder(world, {
+      partnerId: alex,
+      payMode: 'COD',
+      finalTotalCents: 4_620,
+    });
+
+    expect(
+      await orders.advanceOrder(orderId, 'OUT', 'DELIVERED', { cashCollectedCents: 4_620 }),
+    ).toEqual({ ok: true });
+
+    const { rows } = await pool.query(
+      `SELECT status, cash_collected_cents, cash_reported_at, delivered_at
+         FROM "order" WHERE id = $1`,
+      [orderId],
+    );
+    expect(rows[0]).toMatchObject({ status: 'DELIVERED', cash_collected_cents: 4_620 });
+    expect(rows[0].cash_reported_at).not.toBeNull();
+    expect(rows[0].delivered_at).not.toBeNull();
+  });
+
+  it('refuses a wrong amount rather than closing the books on it', async () => {
+    const world = await seedWorld();
+    const alex = await seedPartner('Sample Alex', '+15145550001');
+    const orderId = await seedOrder(world, {
+      partnerId: alex,
+      payMode: 'COD',
+      finalTotalCents: 4_620,
+    });
+
+    expect(
+      await orders.advanceOrder(orderId, 'OUT', 'DELIVERED', { cashCollectedCents: 4_000 }),
+    ).toEqual({ ok: false, reason: 'cashMismatch' });
+  });
+
+  it('honours a figure the DRIVER already reported, without re-entering it', async () => {
+    const world = await seedWorld();
+    const alex = await seedPartner('Sample Alex', '+15145550001');
+    const orderId = await seedOrder(world, {
+      partnerId: alex,
+      payMode: 'COD',
+      finalTotalCents: 4_620,
+    });
+    await pool.query(
+      `UPDATE "order" SET cash_collected_cents = 4620, cash_reported_at = now() WHERE id = $1`,
+      [orderId],
+    );
+
+    expect(await orders.advanceOrder(orderId, 'OUT', 'DELIVERED')).toEqual({ ok: true });
+  });
+
+  it('still refuses cash against a PREPAID order', async () => {
+    const world = await seedWorld();
+    const alex = await seedPartner('Sample Alex', '+15145550001');
+    const orderId = await seedOrder(world, { partnerId: alex, payMode: 'PREPAID' });
+
+    expect(
+      await orders.advanceOrder(orderId, 'OUT', 'DELIVERED', { cashCollectedCents: 4_620 }),
+    ).toEqual({ ok: false, reason: 'cashNotAllowed' });
+  });
+
+  it('a prepaid order still closes on one tap', async () => {
+    const world = await seedWorld();
+    const alex = await seedPartner('Sample Alex', '+15145550001');
+    const orderId = await seedOrder(world, { partnerId: alex, payMode: 'PREPAID' });
+
+    expect(await orders.advanceOrder(orderId, 'OUT', 'DELIVERED')).toEqual({ ok: true });
   });
 });

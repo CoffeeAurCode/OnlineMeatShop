@@ -1,33 +1,28 @@
 -- 0011_driver_links
 --
--- The single-use sign-in link that rides in the dispatch SMS.
+-- The sign-in link that rides in the dispatch SMS.
 --
 -- ══ WHY THIS NEEDS A TABLE AT ALL ═════════════════════════════════════════
 --
--- ⭐ SINGLE USE IS THE ONLY DEFENCE AGAINST A FORWARDED TEXT, AND SINGLE USE
--- REQUIRES STATE.
+-- ⚠ NOT FOR SINGLE USE. An earlier draft of this table recorded `used_at` and
+-- `reuse_attempts` so a link would die the moment it was opened. The client
+-- removed that on 2026-08-17: a driver who reopens their own text should not
+-- be locked out, and the 12-hour expiry is the bound they wanted.
 --
--- A purely signed token — HMAC, expiry inside, nothing stored — is valid every
--- time it is presented, by anyone holding it, until it expires. That is fine
--- for a customer's tracking link (a receipt, deliberately durable) and wrong
--- here: this one is a CREDENTIAL, and a credential in an SMS can be forwarded,
--- screenshotted and posted. Recording that a token has been spent is the only
--- thing that makes the second holder's copy worthless.
+-- What is left still needs a row, for two reasons:
 --
--- ══ THE TOKEN IS HASHED, NOT STORED ═══════════════════════════════════════
+--   1. **The token has to be revocable and time-bounded**, and an expiry that
+--      lives inside a signed token cannot be shortened, cancelled or swept.
+--   2. **A hash is stored, never the token.** A signed token would have to be
+--      verifiable from itself, so there would be nothing to store and nothing
+--      to expire early.
 --
--- ⚠ `token_hash` IS A SHA-256 AND THE TOKEN ITSELF IS NEVER WRITTEN DOWN.
--- Same reason a password is hashed: anybody who can read this table — a backup,
--- a support query, a leaked dump — would otherwise be holding working sign-in
--- links for every driver. A hash makes the table useless for that.
+-- ══ THE TOKEN IS HASHED ═══════════════════════════════════════════════════
 --
--- ══ `reuse_attempts` IS NOT A COUNTER FOR ITS OWN SAKE ════════════════════
---
--- ⭐ IT IS THE ONLY SIGNAL A FORWARD EVER PRODUCES. A spent link presented a
--- second time means either the driver double-tapped, or somebody else has the
--- text. Neither is provable from here, but a link with six attempts against it
--- is worth the shop asking about, and nothing else in the system would ever
--- notice.
+-- ⚠ `token_hash` IS A SHA-256 AND THE TOKEN IS NEVER WRITTEN DOWN. Same reason
+-- a password is hashed: anybody reading this table — a backup, a support query,
+-- a leaked dump — would otherwise hold working sign-in links for every driver
+-- for the next twelve hours.
 --
 -- ✅ CANNOT FAIL ON LIVE DATA — a new table with no dependents.
 
@@ -37,31 +32,23 @@ CREATE TABLE "driver_link" (
   -- SHA-256 hex of the token. Never the token. See above.
   "token_hash" text NOT NULL,
 
-  -- ⚠ CASCADE. A driver removed from the roster takes their unspent links with
-  -- them; leaving orphans would mean a link that resolves to nobody, and the
-  -- guard would have to decide what that means. Deleting is unambiguous.
+  -- ⚠ CASCADE. A driver removed from the roster takes their links with them;
+  -- an orphan would resolve to nobody and the guard would have to decide what
+  -- that means. Deleting is unambiguous.
   "partner_id" uuid NOT NULL REFERENCES "delivery_partner"("id") ON DELETE CASCADE,
 
-  -- Where the link lands. Nullable and `set null`, because the LINK IS A
-  -- SIGN-IN, not a permission to see one order: if the order is deleted the
-  -- link still legitimately signs the driver in, it just lands on their list.
+  -- Where the link lands. Nullable and `set null`, because THE LINK IS A
+  -- SIGN-IN, not permission to see one order: if the order is deleted the link
+  -- still legitimately signs the driver in, it just lands on their list.
   "order_id" uuid REFERENCES "order"("id") ON DELETE SET NULL,
 
   "expires_at" timestamp with time zone NOT NULL,
-
-  -- Null until somebody spends it. The conditional UPDATE on this column is
-  -- what makes "single use" true under concurrency rather than aspirational.
-  "used_at" timestamp with time zone,
-
-  "reuse_attempts" integer DEFAULT 0 NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-
-  CONSTRAINT "driver_link_reuse_nonneg" CHECK ("reuse_attempts" >= 0)
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL
 );--> statement-breakpoint
 
--- The lookup is BY HASH on every visit, and it must be unique: two rows with
--- one hash would make "which link was spent" unanswerable.
+-- The lookup is BY HASH on every visit.
 CREATE UNIQUE INDEX "driver_link_token_hash" ON "driver_link" ("token_hash");--> statement-breakpoint
 
--- For the sweep of expired rows, and for showing a driver's live links.
+-- For the sweep of expired rows, which is what stops the table growing without
+-- bound now that nothing deletes a link on use.
 CREATE INDEX "driver_link_partner_expiry" ON "driver_link" ("partner_id", "expires_at");

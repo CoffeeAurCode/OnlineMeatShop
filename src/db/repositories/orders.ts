@@ -5,7 +5,7 @@ import { and, asc, eq, gt, isNotNull, ne, notInArray } from 'drizzle-orm';
 import { db, type Tx } from '@/db/client';
 import { customer, order, orderLine, slot } from '@/db/schema';
 import { transitionOrder } from '@/db/repositories/payments';
-import { canTransition, requiresAssignment } from '@/domain/lifecycle';
+import { canDeliver, canTransition, requiresAssignment } from '@/domain/lifecycle';
 import { recordActualWeight, toleranceBand, type WeighableLine } from '@/domain/weighing';
 import { cents, grams, type Cents, type Grams, type OrderStatus, type Pricing } from '@/domain/types';
 
@@ -349,13 +349,32 @@ export async function saveActualWeight(
  * an illegal pair is refused before it reaches SQL, where it would look like
  * an ordinary no-match.
  */
+export interface AdvanceOptions {
+  /**
+   * Cash the shop is recording on the owner's behalf, in cents.
+   *
+   * ⚠ ONLY MEANINGFUL ON A `COD` ORDER MOVING TO `DELIVERED`. Absent means
+   * "whatever the driver already reported", which is the normal case once the
+   * portal has been used — the owner should never have to re-key a figure that
+   * is already recorded.
+   */
+  readonly cashCollectedCents?: number | null;
+}
+
 export async function advanceOrder(
   orderId: string,
   from: OrderStatus,
   to: OrderStatus,
+  options: AdvanceOptions = {},
 ): Promise<{
   readonly ok: boolean;
-  readonly reason?: 'illegalTransition' | 'staleStatus' | 'notAssigned';
+  readonly reason?:
+    | 'illegalTransition'
+    | 'staleStatus'
+    | 'notAssigned'
+    | 'cashRequired'
+    | 'cashMismatch'
+    | 'cashNotAllowed';
 }> {
   if (!canTransition(from, to)) return { ok: false, reason: 'illegalTransition' };
 
@@ -376,9 +395,86 @@ export async function advanceOrder(
     if (assignment.partnerId === null) return { ok: false, reason: 'notAssigned' };
   }
 
-  const moved = await db.transaction((tx) =>
-    transitionOrder(tx, orderId, [from], to, to === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
-  );
+  /*
+   * ⭐⭐ CLOSING A CASH ORDER NEEDS THE MONEY, AND THAT HAS TO BE CHECKED HERE
+   * RATHER THAN LEFT TO THE CONSTRAINT.
+   *
+   * `order_cod_settled_on_delivery` already refuses a `COD` order marked
+   * DELIVERED without the exact cash against it, and it is right to. But a
+   * CHECK violation surfaces as a raw 23514 — the route has no handler for it,
+   * so the owner tapping "Delivered" got a 500 and a message about their
+   * connection. The rule has to be stated where a reason code can come back.
+   *
+   * ⚠ THIS PATH IS THE FALLBACK, NOT THE MAIN ONE. The driver closes the order
+   * from the portal; this is the shop closing it when the driver did not — and
+   * before the portal existed it was the ONLY way, so an order whose driver
+   * never opens the link must still be closable.
+   *
+   * ⚠ THE READ IS INSIDE THE TRANSACTION, WITH THE ROW LOCKED. Read outside it,
+   * a weighing that landed in between would change `final_total_cents` and the
+   * cash would be reconciled against a number that is no longer owed.
+   *
+   * ⚠ ONE ROW, ONE TABLE, NO OTHER LOCK — the canonical lock order
+   * (`CLAUDE.md` §7) is untouched and this cannot deadlock against checkout.
+   */
+  if (to === 'DELIVERED') {
+    return db.transaction(async (tx) => {
+      const rows = await tx
+        .select({
+          payMode: order.payMode,
+          finalTotalCents: order.finalTotalCents,
+          cashCollectedCents: order.cashCollectedCents,
+        })
+        .from(order)
+        .where(eq(order.id, orderId))
+        .for('update')
+        .limit(1);
+
+      const o = rows[0];
+      if (o === undefined) return { ok: false, reason: 'staleStatus' } as const;
+
+      if (o.payMode !== 'COD') {
+        if (options.cashCollectedCents != null) {
+          // Cash against a prepaid order means two rails took money for one
+          // basket. Refused here and by `order_cash_only_on_cod` beneath.
+          return { ok: false, reason: 'cashNotAllowed' } as const;
+        }
+      } else {
+        // Whatever the driver already reported, unless the console is
+        // supplying a figure now.
+        const collected = options.cashCollectedCents ?? o.cashCollectedCents;
+
+        // `canDeliver` has taken this argument since it was written and nothing
+        // ever passed it anything. This is the call it was waiting for.
+        /*
+         * `'OUT'` is passed rather than read: `canTransition` above has already
+         * established that `from` is OUT, and `transitionOrder` below refuses
+         * if the row has moved since. Re-selecting the status here to feed it
+         * back into a predicate that only asks "is it OUT" would be a third
+         * statement of the same fact.
+         */
+        if (!canDeliver('OUT', 'COD', o.finalTotalCents, collected ?? null)) {
+          if (collected == null) return { ok: false, reason: 'cashRequired' } as const;
+          return { ok: false, reason: 'cashMismatch' } as const;
+        }
+
+        if (options.cashCollectedCents != null) {
+          await tx
+            .update(order)
+            .set({
+              cashCollectedCents: options.cashCollectedCents,
+              cashReportedAt: new Date(),
+            })
+            .where(eq(order.id, orderId));
+        }
+      }
+
+      const moved = await transitionOrder(tx, orderId, [from], to, { deliveredAt: new Date() });
+      return moved ? ({ ok: true } as const) : ({ ok: false, reason: 'staleStatus' } as const);
+    });
+  }
+
+  const moved = await db.transaction((tx) => transitionOrder(tx, orderId, [from], to, {}));
 
   return moved ? { ok: true } : { ok: false, reason: 'staleStatus' };
 }

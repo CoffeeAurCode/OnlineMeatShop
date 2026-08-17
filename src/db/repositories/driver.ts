@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { customer, driverLink, order, orderLine, slot } from '@/db/schema';
@@ -406,30 +406,24 @@ export async function issueDriverLink(input: {
 export type DriverLinkState =
   | { readonly state: 'valid'; readonly partnerId: string; readonly orderId: string | null }
   | { readonly state: 'expired' }
-  | { readonly state: 'spent' }
   | { readonly state: 'unknown' };
 
 /**
- * Look a link up WITHOUT spending it.
+ * Resolve a link from the dispatch SMS.
  *
- * ⭐⭐ THE READ AND THE SPEND ARE SEPARATE, AND THIS IS THE MOST IMPORTANT
- * DESIGN DECISION IN THE WHOLE MAGIC-LINK FEATURE.
+ * ⚠ IT DOES NOT SPEND THE TOKEN, AND THAT IS NOW THE WHOLE BEHAVIOUR. The link
+ * is reusable for its twelve hours by design (client decision, 2026-08-17) —
+ * a driver who reopens their own text must not be locked out. Time is the only
+ * bound, and `delivery_partner.active` is the only revocation.
  *
- * ⚠ IF A PLAIN `GET` SPENT THE TOKEN, THE FEATURE WOULD BE BROKEN ON ARRIVAL.
- * Carriers, messaging apps, link scanners and corporate security products
- * routinely FETCH a URL in an SMS before any human sees it, to build a preview
- * or check for malware. Every one of those fetches is a GET, and every one
- * would burn the link — so the driver would tap a dead link on every single
- * dispatch and the shop would conclude the whole system does not work.
- *
- * So: the GET renders a page with a button, and the button POSTs. Spending
- * requires an action a preview bot does not take. The cost is one extra tap;
- * the alternative is a feature that fails a hundred percent of the time.
+ * ⚠ THE EXPIRY IS CHECKED HERE AND NOT ONLY IN SQL, because a row that has
+ * expired but not yet been swept is still sitting in the table. The sweep is
+ * housekeeping; this is the rule.
  */
-export async function peekDriverLink(
+export async function resolveDriverLink(
   tokenHash: string,
   /*
-   * ⚠ DEFAULTED HERE RATHER THAN READ IN THE PAGE. A Server Component calling
+   * ⚠ DEFAULTED HERE RATHER THAN READ IN A PAGE. A Server Component calling
    * `Date.now()` during render is an impure read of a moving value and React
    * refuses it. A repository is server code that already talks to a clock-bound
    * database, so this is where the clock belongs — and the parameter stays
@@ -442,7 +436,6 @@ export async function peekDriverLink(
       partnerId: driverLink.partnerId,
       orderId: driverLink.orderId,
       expiresAt: driverLink.expiresAt,
-      usedAt: driverLink.usedAt,
     })
     .from(driverLink)
     .where(eq(driverLink.tokenHash, tokenHash))
@@ -450,74 +443,20 @@ export async function peekDriverLink(
 
   const row = rows[0];
   if (row === undefined) return { state: 'unknown' };
-  if (row.usedAt !== null) return { state: 'spent' };
   if (row.expiresAt.getTime() <= nowMs) return { state: 'expired' };
   return { state: 'valid', partnerId: row.partnerId, orderId: row.orderId };
 }
 
 /**
- * Spend the link. At most once, ever.
+ * Delete links that expired over a week ago.
  *
- * ⭐ SINGLE USE IS A CONDITIONAL UPDATE, not a read followed by a decision.
- * `where used_at is null` means two requests racing the same token serialise on
- * the row and exactly one matches; the other updates zero rows and is told
- * `spent`. A read-then-write would let both through — the same reasoning, and
- * the same shape, as the one-capture rule in `StubPaymentAdapter`.
+ * ⭐ THIS IS NOW THE ONLY THING THAT KEEPS THE TABLE BOUNDED. Nothing deletes a
+ * link on use any more, so every dispatch leaves a row behind for good until
+ * this runs. At two to six dispatches a day that is slow, and it is not zero.
  *
- * ⚠ THE EXPIRY IS IN THE SAME STATEMENT for the same reason. Checked
- * beforehand, a link expiring in the millisecond between the check and the
- * write would still be spent.
- */
-export async function consumeDriverLink(
-  tokenHash: string,
-  nowMs: number,
-): Promise<DriverLinkState> {
-  const now = new Date(nowMs);
-
-  const spent = await db
-    .update(driverLink)
-    .set({ usedAt: now })
-    .where(
-      and(
-        eq(driverLink.tokenHash, tokenHash),
-        isNull(driverLink.usedAt),
-        sql`${driverLink.expiresAt} > ${now}`,
-      ),
-    )
-    .returning({ partnerId: driverLink.partnerId, orderId: driverLink.orderId });
-
-  const won = spent[0];
-  if (won !== undefined) {
-    return { state: 'valid', partnerId: won.partnerId, orderId: won.orderId };
-  }
-
-  /*
-   * ⭐ IT DID NOT MATCH, SO COUNT THE ATTEMPT BEFORE REPORTING WHY.
-   *
-   * This counter is the ONLY signal a forwarded text ever produces. A driver
-   * double-tapping on a bad connection registers one or two; a link being tried
-   * repeatedly after it was spent is worth the shop asking about. Neither is
-   * proof of anything, and a number nobody recorded is not even a question.
-   */
-  await db
-    .update(driverLink)
-    .set({ reuseAttempts: sql`${driverLink.reuseAttempts} + 1` })
-    .where(eq(driverLink.tokenHash, tokenHash));
-
-  return peekDriverLink(tokenHash, nowMs);
-}
-
-/**
- * Delete links that are expired or long spent.
- *
- * ⚠ NOT A PRIVACY MEASURE — the row holds a hash, a partner id and an order id,
- * none of which is sensitive on its own. It is housekeeping, and it keeps
- * `reuse_attempts` meaningful: a table full of months-old rows makes the
- * interesting ones impossible to spot.
- *
- * The 7-day grace on spent rows is deliberate. Deleting on use would destroy
- * the evidence at exactly the moment somebody starts asking why a driver could
- * not sign in.
+ * The 7-day grace rather than deleting at the expiry itself: a driver ringing
+ * to ask why their link stopped working is asking about a row that would
+ * otherwise already be gone.
  */
 export async function sweepDriverLinks(nowMs: number): Promise<number> {
   const cutoff = new Date(nowMs - 7 * 24 * 60 * 60 * 1000);

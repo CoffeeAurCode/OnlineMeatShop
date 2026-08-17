@@ -196,20 +196,19 @@ specific, expensive ways.
   (`src/db/repositories/driver.ts`). The partner id is part of the LOOKUP KEY,
   never a comparison made after the row is read — what it protects is every
   customer's home address and phone number.
-- ⭐ **The dispatch SMS carries a SINGLE-USE sign-in link** (`/d/<token>`, 12 h).
-  Three rules, and each one is load-bearing:
-  1. **The token is random and STORED AS A HASH**, never signed-and-stateless —
-     single use requires state, and the row must be useless to whoever reads it.
-  2. **A `GET` must never spend it.** Carriers and messaging apps pre-fetch URLs
-     out of texts to build previews; a link consumed on render would be dead
-     before the driver ever tapped it, on every dispatch. The page renders a
-     button and the **POST** spends it.
-  3. **Spending is a conditional `UPDATE ... WHERE used_at IS NULL`**, never a
-     read-then-write — same mechanism, and the same reason, as the one-capture
-     rule.
+- **The dispatch SMS carries a sign-in link** (`/d/<token>`), and **TIME IS ITS
+  ONLY BOUND: 12 hours.** It is deliberately **not** single use — a driver who
+  reopens their own text must not be locked out. ⚠ **A forwarded text therefore
+  works until it expires. That is an accepted trade, not an oversight;** do not
+  "fix" it by spending the token on first use without asking.
+- The token is **random and stored as a SHA-256 hash**, never signed-and-
+  stateless: a row can be swept and cascaded away, an expiry baked into a signed
+  token cannot. Reading the table yields nothing usable.
 - ⚠ **Never put a login code in an SMS.** A code is minted on request and
   expires; one printed into a text sent hours earlier is either already dead or
   a standing password sitting in a forwardable message. The link replaces it.
+- `sweepDriverLinksJob` is **the only thing bounding `driver_link`** now that
+  nothing deletes a row on use. ⚠ Nothing invokes the scheduler yet.
 - Validate at every route-handler boundary.
 
 ### Admin console

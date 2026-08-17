@@ -154,7 +154,18 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         (`notAssigned`). Putting the assignment above the button that needs it
         means the owner meets the requirement before they meet the refusal.
       */}
-      <AdvanceButton orderId={order.id} status={order.status} readyToFinalise={unweighed.length === 0} />
+      <AdvanceButton
+        orderId={order.id}
+        status={order.status}
+        readyToFinalise={unweighed.length === 0}
+        /*
+          Null unless this is a cash order that has been weighed — before that
+          there is genuinely no amount, and the button must not name one the
+          scale is about to change.
+        */
+        cashDueCents={order.payMode === 'COD' ? order.finalTotalCents : null}
+        cashReportedCents={order.cashCollectedCents}
+      />
     </Screen>
   );
 }
