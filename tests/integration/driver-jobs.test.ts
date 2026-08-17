@@ -613,3 +613,78 @@ describe('6. ⭐ THE CONSOLE MUST BE ABLE TO CLOSE A CASH ORDER TOO', () => {
     expect(await orders.advanceOrder(orderId, 'OUT', 'DELIVERED')).toEqual({ ok: true });
   });
 });
+
+describe('7. 🔴 THE REDIRECT MUST NOT NAME A HOST', () => {
+  let route: typeof import('@/app/d/[token]/route');
+
+  beforeAll(async () => {
+    process.env.STAFF_SESSION_SECRET ??= 'x'.repeat(48);
+    route = await import('@/app/d/[token]/route');
+  });
+
+  /**
+   * ⭐ THE REGRESSION GUARD FOR A BUG THAT PASSED EVERY OTHER CHECK.
+   *
+   * `/d/[token]` originally redirected with
+   * `NextResponse.redirect(new URL(path, request.url))`. Behind Render's proxy
+   * the app sees its own bound address rather than the public one, so
+   * `request.url` was `http://localhost:10000/...` and every driver was sent to
+   * `https://localhost:10000/d/expired`.
+   *
+   * ⚠ IT WAS INVISIBLE EVERYWHERE EXCEPT THE DEPLOYED SITE — locally
+   * `request.url` IS the real origin. Typecheck, lint, 358 unit tests, 154
+   * database tests, the build and both secret scans were all green while the
+   * feature was completely dead in production. It was caught by curling the
+   * live site.
+   *
+   * A relative `Location` cannot be wrong about the host because it never
+   * states one.
+   */
+  async function locationFor(token: string): Promise<string | null> {
+    const response = await route.GET(new Request(`http://localhost:10000/d/${token}`), {
+      params: Promise.resolve({ token }),
+    });
+    return response.headers.get('location');
+  }
+
+  it('sends a RELATIVE Location, never one carrying an origin', async () => {
+    const location = await locationFor('a-token-that-does-not-exist');
+
+    expect(location).toBe('/d/expired');
+    // The three shapes that would each have shipped the bug back.
+    expect(location).not.toMatch(/^https?:\/\//);
+    expect(location).not.toContain('localhost');
+    expect(location).not.toContain('//');
+  });
+
+  it('uses 303 so the redirect is not treated as repeatable', async () => {
+    const response = await route.GET(new Request('http://localhost:10000/d/nope'), {
+      params: Promise.resolve({ token: 'nope' }),
+    });
+    expect(response.status).toBe(303);
+  });
+
+  it('sends a valid link to its job, still without an origin', async () => {
+    const world = await seedWorld();
+    const alex = await seedPartner('Sample Alex', '+15145550001');
+    const orderId = await seedOrder(world, { partnerId: alex });
+
+    const linkMod = await import('@/auth/driver-link');
+    const minted = linkMod.mintDriverLinkToken(Date.now());
+    await repo.issueDriverLink({
+      tokenHash: minted.tokenHash,
+      partnerId: alex,
+      orderId,
+      expiresAt: minted.expiresAt,
+    });
+
+    const response = await route.GET(new Request(`http://localhost:10000/d/${minted.token}`), {
+      params: Promise.resolve({ token: minted.token }),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe(`/driver/${orderId}`);
+    // And it signs them in on the way through.
+    expect(response.headers.get('set-cookie')).toContain('ps_driver=');
+  });
+});

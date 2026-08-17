@@ -45,15 +45,44 @@ import { activePartnerById } from '@/db/repositories/partners';
 
 export const dynamic = 'force-dynamic';
 
-function back(request: Request, path: string): NextResponse {
-  return NextResponse.redirect(new URL(path, request.url), {
+/**
+ * Redirect to a path on this same site.
+ *
+ * ══ WHY THIS DOES NOT USE `NextResponse.redirect(new URL(path, request.url))`
+ *
+ * 🔴 THAT IS WHAT IT DID, AND IT WAS BROKEN IN PRODUCTION AND ONLY IN
+ * PRODUCTION. Behind Render's proxy the app sees its own bound address, not
+ * the public one, so `request.url` is `http://localhost:10000/...` and every
+ * redirect went to `https://localhost:10000/d/expired`. Measured against the
+ * deployed site, which is the only place it shows:
+ *
+ *     /d/<token>  ->  303  Location: https://localhost:10000/d/expired
+ *
+ * Locally, and in every test, `request.url` is the real origin and the bug is
+ * invisible. **The link feature was therefore completely dead on the deployed
+ * site while passing everything.**
+ *
+ * ⭐ A RELATIVE `Location` IS THE FIX, and it is better than the alternatives
+ * rather than merely shorter. Reconstructing the origin from
+ * `x-forwarded-host` means trusting a header a client can send; reading it
+ * from `NEXT_PUBLIC_SITE_ORIGIN` means a redirect that breaks when an
+ * environment variable is unset. A relative Location has been legal since
+ * RFC 7231 §7.1.2, is resolved by the browser against the address bar, and
+ * cannot be wrong about the host because it never states one.
+ *
+ * ⚠ `NextResponse.redirect()` REQUIRES AN ABSOLUTE URL and will throw on a
+ * relative one, which is why this constructs the response by hand.
+ */
+function back(path: string): NextResponse {
+  return new NextResponse(null, {
     /*
-     * ⚠ 303, NOT THE DEFAULT 307. A 307 preserves the method and, more to the
-     * point here, invites a browser or a scanner to treat the redirect as
-     * repeatable against the original URL. 303 says plainly: the answer is
-     * somewhere else, go and GET it.
+     * ⚠ 303, NOT THE DEFAULT 307. A 307 preserves the method and invites a
+     * browser or a scanner to treat the redirect as repeatable against the
+     * original URL. 303 says plainly: the answer is somewhere else, go and
+     * GET it.
      */
     status: 303,
+    headers: { Location: path },
   });
 }
 
@@ -63,7 +92,7 @@ export async function GET(
 ) {
   const { token } = await params;
 
-  if (!driverSessionsConfigured()) return back(request, '/d/expired');
+  if (!driverSessionsConfigured()) return back('/d/expired');
 
   const link = await resolveDriverLink(hashDriverLinkToken(token));
   /*
@@ -71,15 +100,15 @@ export async function GET(
    * sign-in form, there is nothing useful to distinguish here: both mean "this
    * link will not work, sign in with your number", and that page says so.
    */
-  if (link.state !== 'valid') return back(request, '/d/expired');
+  if (link.state !== 'valid') return back('/d/expired');
 
   // ⭐ The database has the final word on WHETHER. A link minted on Tuesday for
   // somebody taken off the roster on Wednesday must not work.
   const partner = await activePartnerById(link.partnerId);
-  if (partner === null) return back(request, '/d/expired');
+  if (partner === null) return back('/d/expired');
 
   const session = issueDriverSession(partner.id, partner.phone, Date.now());
-  if (session === null) return back(request, '/d/expired');
+  if (session === null) return back('/d/expired');
 
   /*
    * Land on the job the text was about.
@@ -90,7 +119,7 @@ export async function GET(
    * still reaches every order assigned to them. That is the requirement, not a
    * leak.
    */
-  const response = back(request, link.orderId === null ? '/driver' : `/driver/${link.orderId}`);
+  const response = back(link.orderId === null ? '/driver' : `/driver/${link.orderId}`);
   response.cookies.set(
     DRIVER_SESSION_COOKIE,
     session,
