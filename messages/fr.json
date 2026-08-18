@@ -117,7 +117,8 @@
     "minimumOrder": "Minimum {amount}",
     "stepNote": "Par tranches de {amount}",
     "aboutAmount": "environ {amount}",
-    "unitPack": "paquet"
+    "unitPack": "paquet",
+    "required": "Obligatoire"
   },
   "basket": {
     "title": "Votre panier",
@@ -175,7 +176,8 @@
     "payNow": "Payer maintenant par carte",
     "payNowHelp": "Nous retenons un peu plus que l'estimation et prélevons le montant exact une fois votre commande pesée. Vous ne payez jamais plus que la retenue.",
     "payCash": "Paiement à la livraison",
-    "payCashHelp": "Payez le livreur à la porte. Il aura le montant exact une fois votre commande pesée."
+    "payCashHelp": "Payez le livreur à la porte. Il aura le montant exact une fois votre commande pesée.",
+    "editBasket": "Modifier le panier"
   },
   "payment": {
     "testBannerTitle": "Commande test. Aucun paiement n'a été pris.",
@@ -189,7 +191,12 @@
     "priceChangedOld": "Total au départ",
     "priceChangedNew": "Total maintenant",
     "priceChangedAccept": "Mettre mon total à jour",
-    "priceChangedReview": "Retour à mon panier"
+    "priceChangedReview": "Retour à mon panier",
+    "heading": "Paiement",
+    "heldExplainer": "Nous retenons un maximum maintenant, puis nous facturons le montant exact une fois votre poisson pesé.",
+    "captured": "Facturé après la pesée. Voici le montant exact prélevé.",
+    "cashDue": "Prévoyez le montant exact pour le livreur. Rien n’est prélevé avant la livraison.",
+    "cashCollected": "Perçu à la porte."
   },
   "order": {
     "confirmedTitle": "Commande enregistrée",
@@ -335,7 +342,16 @@
       "unavailable": "Votre appareil n’a pas pu obtenir de position. Réessayez, ou saisissez votre adresse ci-dessous.",
       "timeout": "Cela a pris trop de temps. Réessayez, ou saisissez votre adresse ci-dessous.",
       "unsupported": "Ce navigateur ne peut pas partager de position. Saisissez votre adresse ci-dessous."
-    }
+    },
+    "destinationHeading": "Destination",
+    "addressHeading": "Adresse",
+    "handoverHeading": "À la porte",
+    "currentLocation": "Position actuelle",
+    "currentLocationHelp": "Un seul geste, et le livreur a l’immeuble.",
+    "enable": "Activer",
+    "updatePin": "Mettre à jour",
+    "checking": "Vérification de la livraison à cette adresse",
+    "checkFailed": "Vérification impossible pour l’instant. Votre adresse est enregistrée dans tous les cas, et nous la confirmons au paiement."
   },
   "auth": {
     "title": "Connexion ou inscription",

@@ -48,9 +48,27 @@ export function AddressPill({
   return (
     <button
       type="button"
+      /*
+        ⚠ `data-parity` IS A HANDLE FOR `scripts/check-parity.mjs`, and there
+        are seven of them in the storefront. The gate presses each control at
+        its own centre to prove nothing is painted over it, and it has to find
+        the control first: this one renders twice (a phone row and a desktop
+        pill), so an `id` would be a duplicate, and every text-based selector
+        changes with the locale. Read the script's header before removing one.
+      */
+      data-parity="address-pill"
       onClick={openLocationSheet}
+      /*
+        ⚠ `h-11`, NOT `h-10`, AND THE HEADER'S HEIGHT BUDGET DEPENDS ON IT.
+        44px is this project's touch-target floor and this control was 40 —
+        found by `scripts/check-parity.mjs`, which measures every control it
+        presses. The phone address row is therefore 52px, the header is 108px
+        below `sm`, and `shop/page.tsx` and `shop/[category]/page.tsx` park
+        their sticky filter strips at `top-[6.75rem]` to match. Change this
+        height and those two numbers are wrong.
+      */
       className={`
-        flex h-10 min-w-0 items-center gap-1.5 rounded-full border border-line bg-raised px-3
+        flex h-11 min-w-0 items-center gap-1.5 rounded-full border border-line bg-raised px-3
         text-meta transition-colors duration-(--duration-fast) hover:border-accent
         ${full ? 'w-full' : 'max-w-[13rem] sm:max-w-[18rem]'}
       `}

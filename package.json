@@ -17,7 +17,9 @@
     "test:db": "vitest run --config vitest.integration.config.ts",
     "db:test:up": "docker run -d --rm --name meatshop-testdb -e POSTGRES_PASSWORD=postgres -p 5433:5432 postgres:17",
     "db:test:down": "docker rm -f meatshop-testdb",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "check:parity": "node scripts/check-parity.mjs",
+    "check:responsive": "node scripts/check-responsive.mjs"
   },
   "license": "ISC",
   "type": "module",

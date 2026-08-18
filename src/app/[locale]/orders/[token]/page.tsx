@@ -3,11 +3,14 @@ import { notFound } from 'next/navigation';
 import {
   CheckCircleIcon,
   CircleIcon,
+  CreditCardIcon,
   MapPinIcon,
+  MoneyIcon,
   NavigationArrowIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
 import { orderByPublicToken, type TrackedOrder } from '@/db/repositories/tracking';
+import { formatPostalCode } from '@/domain/serviceability';
 import { LIFECYCLE_ORDER } from '@/domain/lifecycle';
 import { isLocale, t, type Locale } from '@/i18n';
 import { shopTimeZone, slotWindow } from '@/ui/business-date';
@@ -151,6 +154,8 @@ export default async function TrackOrderPage({
         </ul>
       </section>
 
+      <PaymentSection order={order} locale={locale} />
+
       <Totals order={order} locale={locale} />
     </div>
   );
@@ -177,7 +182,10 @@ function DeliverySection({ order, locale }: { order: TrackedOrder; locale: Local
     order.addressLine2,
     order.city,
     order.province,
-    order.postalCode,
+    // `H2X1Y4` is how it is STORED — normalised, so a lookup cannot miss on a
+    // space. It is not how anybody writes it, and this is the customer's own
+    // address being read back to them on a receipt.
+    order.postalCode === null ? null : formatPostalCode(order.postalCode),
   ]
     .filter((x) => x !== null && x !== '' && x !== '-')
     .join(', ');
@@ -247,6 +255,90 @@ function Totals({ order, locale }: { order: TrackedOrder; locale: Locale }) {
         </div>
       )}
     </dl>
+  );
+}
+
+/**
+ * ⭐ HOW IT IS BEING PAID — A SECOND STATE MACHINE, SHOWN AS ONE.
+ *
+ * Figma parity, Phase 6. `08-A` §3 records that the reference's Delivered
+ * screen has no equivalent of this at all: it is a marketplace where the card
+ * was charged before the courier moved, so "what happens with the money" is
+ * never a question the tracking screen has to answer. Here it is two different
+ * stories with two different endings, and the customer needs to know which one
+ * they are in before the driver knocks.
+ *
+ * ⚠ IT IS DERIVED FROM `payMode` AND THE PAYMENT ROW, NEVER FROM
+ * `order.status`. They are separate state machines joined by an id
+ * (`CLAUDE.md` §7), and the tempting shortcut — DELIVERED therefore paid — is
+ * false for exactly the case that matters: a cash order the driver could not
+ * settle stays `OUT`, and a cash order that WAS settled carries the amount
+ * collected, which the CHECK constraint guarantees equals the final total.
+ *
+ * ⚠ A CASH ORDER HAS NO `payment` ROW AT ALL. Not a zero authorisation, not a
+ * stub one. So every payment field on the order is null here and that is
+ * healthy, which is why this block reads `payMode` first and the amounts
+ * second.
+ */
+function PaymentSection({ order, locale }: { order: TrackedOrder; locale: Locale }) {
+  const cash = order.payMode === 'COD';
+  const settled = cash
+    ? order.cashCollectedCents !== null
+    : order.capturedCents !== null;
+
+  return (
+    <section
+      data-parity="payment-block"
+      className="grid gap-2 rounded-md border border-line bg-raised p-5"
+    >
+      <h2 className="!font-sans !text-body !pb-0 !tracking-normal font-semibold uppercase tracking-[0.1em] text-muted">
+        {t(locale, 'payment.heading')}
+      </h2>
+
+      <p className="flex items-start gap-3 text-body">
+        {cash ? (
+          <MoneyIcon size={18} weight="fill" aria-hidden className="mt-0.5 shrink-0 text-accent" />
+        ) : (
+          <CreditCardIcon
+            size={18}
+            weight="fill"
+            aria-hidden
+            className="mt-0.5 shrink-0 text-accent"
+          />
+        )}
+        <span>
+          <span className="block font-semibold">
+            {t(locale, cash ? 'checkout.payCash' : 'checkout.payNow')}
+          </span>
+          <span className="block text-meta text-muted">
+            {t(
+              locale,
+              cash
+                ? settled
+                  ? 'payment.cashCollected'
+                  : 'payment.cashDue'
+                : settled
+                  ? 'payment.captured'
+                  : 'payment.heldExplainer',
+            )}
+          </span>
+        </span>
+      </p>
+
+      {/*
+        The one amount that is a FACT rather than an expectation, in each
+        branch. A cash order shows what the driver reported collecting; a card
+        order shows what was actually taken. Neither is shown before it exists.
+      */}
+      {cash && order.cashCollectedCents !== null && (
+        <p className="tnum text-body font-semibold">
+          {money(order.cashCollectedCents, locale)}
+        </p>
+      )}
+      {!cash && order.capturedCents !== null && (
+        <p className="tnum text-body font-semibold">{money(order.capturedCents, locale)}</p>
+      )}
+    </section>
   );
 }
 

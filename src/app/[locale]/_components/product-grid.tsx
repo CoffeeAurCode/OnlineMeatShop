@@ -27,16 +27,30 @@ export function ProductGrid({
   locale,
   prepsByProduct,
   savedOnly = false,
+  layout = 'grid',
+  sections,
 }: {
   items: readonly CatalogItem[];
   locale: Locale;
   prepsByProduct: ReadonlyMap<string, readonly PrepChoice[]>;
   savedOnly?: boolean;
+  /** `rows` is the reference's menu list; see `ProductRow`. */
+  layout?: 'grid' | 'rows';
+  /** Counters to band the rows by. Ignored by the grid layout. */
+  sections?: readonly { id: string; name: string }[] | undefined;
 }) {
   const cards = items.map((item) =>
     toCardItem(item, locale, prepsByProduct.get(item.id) ?? []),
   );
-  return <GridList items={cards} locale={locale} savedOnly={savedOnly} />;
+  return (
+    <GridList
+      items={cards}
+      locale={locale}
+      savedOnly={savedOnly}
+      layout={layout}
+      sections={sections}
+    />
+  );
 }
 
 export function toCardItem(
@@ -46,6 +60,7 @@ export function toCardItem(
 ): CardItem {
   return {
     id: item.id,
+    categoryId: item.categoryId,
     slug: item.slug,
     name: localisedName(item, locale),
     description: locale === 'fr' ? (item.descriptionFr ?? item.description) : item.description,

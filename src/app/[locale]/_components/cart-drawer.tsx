@@ -322,6 +322,7 @@ function Panel({ locale }: { locale: Locale }) {
               ) : (
                 <Link
                   href={`/${locale}/checkout`}
+                  data-parity="basket-checkout"
                   onClick={closeCart}
                   className="tap-lg flex items-center justify-center gap-3 rounded-sm bg-accent px-5 text-lead font-semibold text-accent-ink transition-colors duration-(--duration-fast) hover:bg-accent-hover active:scale-[0.99]"
                 >

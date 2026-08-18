@@ -40,8 +40,13 @@ import { LocaleSwitch } from './locale-switch';
  *
  * So the address gets its own full-width row below 640px, which is better than
  * the compromise anyway: it is the most-tapped control on the site and it can
- * finally show a whole street name. The bar is 56px + 48px on a phone and a
+ * finally show a whole street name. The bar is 56px + 52px on a phone and a
  * single 72px row on everything else, which keeps the desktop cap.
+ *
+ * ⚠ THE 52 IS A 44px PILL PLUS 8px OF PADDING, and `shop/page.tsx` and
+ * `shop/[category]/page.tsx` hard-code the sum as `top-[6.75rem]` for their
+ * sticky filter strips. The pill was 40px until the parity gate measured it
+ * against this project's own touch-target floor.
  */
 
 export function ShopHeader({ locale }: { locale: Locale }) {
@@ -146,7 +151,9 @@ export function ShopHeader({ locale }: { locale: Locale }) {
           <Link
             href={`${home}/search`}
             aria-label={t(locale, 'nav.search')}
-            className="grid size-10 shrink-0 place-items-center rounded-full border border-line bg-raised text-ink"
+            // 44px, matching the pill beside it on both counts: the touch-target
+            // floor, and a row whose two controls are the same height.
+            className="grid size-11 shrink-0 place-items-center rounded-full border border-line bg-raised text-ink"
           >
             <MagnifyingGlassIcon size={17} aria-hidden />
           </Link>

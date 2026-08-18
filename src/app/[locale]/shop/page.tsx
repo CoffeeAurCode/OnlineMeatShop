@@ -22,7 +22,7 @@ import { applyFilters } from '../_components/apply-filters';
  * ⚠ THE CHROME IS STICKY AND THE HEADER IS ALSO STICKY, so the two are budgeted
  * together and the offsets have to be kept in step by hand. The header is
  * 104px on a phone (a 56px bar plus the 48px address row) and 72px from `sm`
- * up, which is what `top-[6.5rem] sm:top-[4.5rem]` below is tracking. Change
+ * up, which is what `top-[6.75rem] sm:top-[4.5rem]` below is tracking. Change
  * the header's height and this number is wrong in a way nothing catches except
  * looking at it: the strip parks itself over the bar or floats below it.
  *
@@ -85,7 +85,7 @@ export default async function ShopPage({
         <DeliveryStrip locale={locale} />
       </header>
 
-      <div className="sticky top-[6.5rem] z-30 -mx-4 mt-4 grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-line bg-raised px-4 py-3 sm:top-[4.5rem] sm:mx-0 sm:rounded-md sm:border sm:px-4">
+      <div className="sticky top-[6.75rem] z-30 -mx-4 mt-4 grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-line bg-raised px-4 py-3 sm:top-[4.5rem] sm:mx-0 sm:rounded-md sm:border sm:px-4">
         <CategoryTabs categories={categories} locale={locale} activeSlug={null} />
         <FilterBar locale={locale} basePath={`/${locale}/shop`} filters={filters} />
       </div>
@@ -103,6 +103,8 @@ export default async function ShopPage({
           locale={locale}
           prepsByProduct={preps}
           savedOnly={filters.saved}
+          layout="rows"
+          sections={categories}
         />
       </div>
     </div>

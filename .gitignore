@@ -45,3 +45,7 @@ Desktop.ini
 .idea/
 *.swp
 *~
+
+# The parity gate's fresh captures. `parity/baseline/` IS committed — it is
+# what a run diffs against; `current/` is regenerated on every run.
+/parity/current/

@@ -149,10 +149,13 @@ export function ItemSheet({
           <button
             ref={closeButton}
             type="button"
+            data-parity="sheet-close"
             onClick={onClose}
             aria-label={t(locale, 'nav.close')}
+            // 44px, this project's floor. It was 40 — an escape hatch is not
+            // the control to be stingy with. Found by the parity gate.
             className="
-              absolute right-3 top-3 grid size-10 place-items-center rounded-full
+              absolute right-3 top-3 grid size-11 place-items-center rounded-full
               bg-surface text-ink transition-transform duration-(--duration-fast)
               hover:bg-soft active:scale-[0.94]
             "
@@ -161,8 +164,8 @@ export function ItemSheet({
           </button>
         </div>
 
-        <div className="grid gap-5 overflow-y-auto px-5 py-5">
-          <div className="grid gap-2">
+        <div className="overflow-y-auto">
+          <div className="grid gap-2 px-5 py-5">
             {/*
               ⭐ THE HANDLING CLASS IS THE FIRST THING IN THE SHEET, above the
               name. §8 orders it "name/rate/description, handling/availability"
@@ -196,94 +199,132 @@ export function ItemSheet({
             </p>
           </div>
 
+          {/*
+            ⭐ THE OPTION GROUP, AS THE REFERENCE DRAWS IT. Figma parity,
+            Phase 4, against `314:2986` Order Selection: a grey band, a heading
+            with a `Required` badge on the right, then full-width rows each
+            carrying a radio on the left.
+
+            ⚠ IT USED TO BE A WRAP OF PILLS, and the rows are better here for
+            a reason that is not fashion: a cut preference can be a phrase
+            ("Butterflied, bones kept for stock"), and a pill sized to its text
+            makes a ragged two-line block where the eye cannot find the selected
+            one. A column of rows has one left edge, and the selected row is the
+            one with the filled radio at it.
+          */}
           {product.preps.length > 0 && (
-            <fieldset className="grid gap-3 border-t border-line pt-5">
-              <legend className="text-body font-semibold">{t(locale, 'product.prepHeading')}</legend>
-              <div className="flex flex-wrap gap-2">
-                {product.preps.map((p) => (
-                  <label
-                    key={p.id}
-                    className={`tap inline-flex cursor-pointer items-center rounded-full border px-4 text-meta font-semibold transition-colors duration-(--duration-fast) ${
-                      prepId === p.id
-                        ? 'border-accent bg-accent text-accent-ink'
-                        : 'border-line bg-raised hover:border-accent'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="sheet-prep"
-                      value={p.id}
-                      checked={prepId === p.id}
-                      onChange={() => setPrepId(p.id)}
-                      className="sr-only"
-                    />
-                    {p.label}
-                  </label>
-                ))}
-              </div>
-              <p className="text-meta text-muted">{t(locale, 'product.prepNote')}</p>
-            </fieldset>
+            <>
+              <div aria-hidden className="h-2 bg-soft" />
+              <fieldset className="px-5 py-4">
+                <legend className="flex w-full items-center justify-between gap-3 pb-2">
+                  <span className="text-body font-semibold">
+                    {t(locale, 'product.prepHeading')}
+                  </span>
+                  <span className="rounded-full bg-soft px-2.5 py-0.5 text-meta text-muted">
+                    {t(locale, 'product.required')}
+                  </span>
+                </legend>
+                <div className="grid">
+                  {product.preps.map((p) => (
+                    <label
+                      key={p.id}
+                      className="flex cursor-pointer items-center gap-3 border-b border-line py-3 last:border-b-0"
+                    >
+                      <input
+                        type="radio"
+                        name="sheet-prep"
+                        value={p.id}
+                        checked={prepId === p.id}
+                        onChange={() => setPrepId(p.id)}
+                        className="size-5 shrink-0 accent-[var(--accent)]"
+                      />
+                      <span className="text-body">{p.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="pt-2 text-meta text-muted">{t(locale, 'product.prepNote')}</p>
+              </fieldset>
+            </>
           )}
 
-          <div className="grid gap-3 border-t border-line pt-5">
+          <div aria-hidden className="h-2 bg-soft" />
+
+          <div className="grid gap-2 px-5 py-4">
             <span className="text-body font-semibold">
               {perKg ? t(locale, 'product.chooseWeight') : t(locale, 'product.chooseQuantity')}
             </span>
-            {perKg ? (
-              <WeightStepper
-                grams={grams}
-                minG={product.minOrderG}
-                stepG={product.stepG}
-                maxG={product.availableG}
-                onChange={setGrams}
-                locale={locale}
-              />
-            ) : (
-              <QtyStepper
-                qty={qty}
-                max={
-                  product.availableG === null
-                    ? null
-                    : Math.max(1, Math.floor(product.availableG / product.minOrderG))
-                }
-                onChange={setQty}
-                locale={locale}
-              />
-            )}
             {product.availableG !== null && !soldOut && (
               <p className="text-meta text-muted">
                 {t(locale, 'shop.leftToday', { amount: weight(product.availableG, locale) })}
               </p>
             )}
+            {soldOut && (
+              <p className="text-meta font-semibold text-ink">{t(locale, 'shop.soldOut')}</p>
+            )}
           </div>
         </div>
 
         {/*
-          ⭐ THE AMOUNT IS ON THE BUTTON. Uber's pattern, and the right one:
-          the customer commits to a number rather than to a verb, and the
-          number is beside their thumb rather than scrolled off the top.
+          ⭐ THE STEPPER SITS WITH THE BUTTON, NOT IN THE SCROLL. The reference
+          centres its quantity control directly above the action bar
+          (`314:2986`), and the reason survives the translation: the option list
+          can be longer than the sheet, and a weight chosen at the top scrolls
+          out of sight exactly when the customer is deciding whether the amount
+          on the button is the one they meant.
+
+          ⚠ THE AMOUNT IS ON THE BUTTON. Uber's pattern, and the right one:
+          the customer commits to a number rather than to a verb, and the number
+          is beside their thumb rather than scrolled off the top.
         */}
         <footer className="shrink-0 border-t border-line bg-raised px-5 py-4">
-          <button
-            type="button"
-            onClick={add}
-            disabled={soldOut}
-            className="
-              tap-lg flex w-full items-center justify-center gap-3 rounded-sm bg-accent px-6
-              text-body font-semibold text-accent-ink transition-[transform,background-color]
-              duration-(--duration-fast) ease-brand hover:bg-accent-hover active:scale-[0.99]
-              disabled:pointer-events-none disabled:opacity-40
-            "
-          >
-            <CheckIcon size={18} weight="bold" aria-hidden />
-            <span>{soldOut ? t(locale, 'shop.soldOut') : t(locale, 'product.addToBasket')}</span>
-            {!soldOut && (
-              <span className="tnum ml-auto">
-                {perKg ? t(locale, 'product.aboutAmount', { amount: money(estimate, locale) })
-                       : money(estimate, locale)}
-              </span>
-            )}
-          </button>
+          <div className="grid gap-3">
+            <div className="flex justify-center">
+              {perKg ? (
+                <WeightStepper
+                  grams={grams}
+                  minG={product.minOrderG}
+                  stepG={product.stepG}
+                  maxG={product.availableG}
+                  onChange={setGrams}
+                  locale={locale}
+                />
+              ) : (
+                <QtyStepper
+                  qty={qty}
+                  max={
+                    product.availableG === null
+                      ? null
+                      : Math.max(1, Math.floor(product.availableG / product.minOrderG))
+                  }
+                  onChange={setQty}
+                  locale={locale}
+                />
+              )}
+            </div>
+
+            <button
+              type="button"
+              data-parity="sheet-add"
+              onClick={add}
+              disabled={soldOut}
+              className="
+                tap-lg flex w-full items-center justify-center gap-3 rounded-sm bg-accent px-6
+                text-body font-semibold text-accent-ink transition-[transform,background-color]
+                duration-(--duration-fast) ease-brand hover:bg-accent-hover active:scale-[0.99]
+                disabled:pointer-events-none disabled:opacity-40
+              "
+            >
+              <CheckIcon size={18} weight="bold" aria-hidden />
+              <span>{soldOut ? t(locale, 'shop.soldOut') : t(locale, 'product.addToBasket')}</span>
+              {!soldOut && (
+                <span className="tnum ml-auto">
+                  {perKg
+                    ? t(locale, 'product.aboutAmount', { amount: money(estimate, locale) })
+                    : money(estimate, locale)}
+                </span>
+              )}
+            </button>
+          </div>
         </footer>
       </div>
     </div>

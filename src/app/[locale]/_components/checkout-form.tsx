@@ -532,7 +532,25 @@ export function CheckoutForm({
         </Section>
       )}
 
-      <Section heading={t(locale, 'basket.title')}>
+      {/*
+        ⭐ "YOUR ITEMS", WITH THE WAY BACK TO THEM. Figma parity, Phase 5:
+        `335:2653` puts a `see menu` link on the right of this heading, and the
+        equivalent here is the basket — the one surface where a line can still
+        be re-weighed or removed. Without it, the only route back to a mistake
+        spotted on the review screen is the browser's back button.
+      */}
+      <Section
+        heading={t(locale, 'basket.title')}
+        action={
+          <button
+            type="button"
+            onClick={openCart}
+            className="tap text-meta font-semibold text-muted underline underline-offset-4 hover:text-ink"
+          >
+            {t(locale, 'checkout.editBasket')}
+          </button>
+        }
+      >
         <ul className="grid gap-2">
           {cart.lines.map((l) => {
             const q = quote?.lines.find(
@@ -598,15 +616,34 @@ export function CheckoutForm({
       )}
 
       {/*
-        ⚠ NOTHING GOES BETWEEN THE MONEY SENTENCE AND THE BUTTON. Not a
-        checkbox, not a promo field, not a reassurance. `04-PLAN` §10.4.
+        ⭐ THE ACTION BAR IS STICKY ON A PHONE. Figma parity, Phase 5:
+        `335:2653` ends in a full-width action carrying the amount, pinned to
+        the bottom of the screen. This screen is longer than the reference's —
+        it has a real slot list and a payment choice — so on a 390×844 phone
+        the button was two scrolls below the total.
+
+        ⚠ THE MONEY SENTENCE MOVED WITH IT, AND THAT IS NOT OPTIONAL. Nothing
+        goes between the money sentence and the button (`04-PLAN` §10.4), and
+        pinning the button on its own would have put the whole page between
+        them. They travel together or neither travels.
+
+        ⚠ THE TAB BAR IS HIDDEN ON THIS ROUTE so the two do not stack — see
+        `bottom-nav.tsx`. Static again from `lg`, where there is no thumb reach
+        problem to solve and a floating bar is just chrome.
       */}
-      <div className="grid gap-4">
+      <div
+        className="
+          sticky bottom-0 z-30 -mx-4 grid gap-4 border-t border-line bg-surface px-4 py-4
+          pb-[max(1rem,env(safe-area-inset-bottom))]
+          lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:pb-0
+        "
+      >
         {quote?.estTotalCents != null && (
           <MoneySentence estimateCents={quote.estTotalCents} locale={locale} />
         )}
         <button
           type="submit"
+          data-parity="place-order"
           disabled={submitting || hasProblem || quote?.estTotalCents == null}
           className="tap-lg inline-flex items-center justify-center rounded-sm bg-accent px-6 text-lead font-semibold text-accent-ink transition-colors duration-(--duration-fast) hover:bg-accent-hover disabled:opacity-60 active:scale-[0.99]"
         >
@@ -854,10 +891,22 @@ function AddressCard({
   );
 }
 
-function Section({ heading, children }: { heading: string; children: React.ReactNode }) {
+function Section({
+  heading,
+  action,
+  children,
+}: {
+  heading: string;
+  /** The reference's right-hand section link. Optional; most sections have none. */
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <section className="grid gap-4">
-      <h2 className="!font-sans !text-section !pb-0 !tracking-normal font-semibold">{heading}</h2>
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 className="!font-sans !text-section !pb-0 !tracking-normal font-semibold">{heading}</h2>
+        {action}
+      </div>
       {children}
     </section>
   );

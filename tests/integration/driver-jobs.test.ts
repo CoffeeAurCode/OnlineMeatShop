@@ -605,6 +605,50 @@ describe('6. ⭐ THE CONSOLE MUST BE ABLE TO CLOSE A CASH ORDER TOO', () => {
     ).toEqual({ ok: false, reason: 'cashNotAllowed' });
   });
 
+  it('🔴 leaves NO CASH BEHIND when the transition is refused as stale', async () => {
+    /*
+     * ⚠ THE BUG THIS PINS DOWN, AND IT IS A MONEY BUG.
+     *
+     * `advanceOrder` writes the cash BEFORE it moves the status — it has to,
+     * because `order_cod_settled_on_delivery` is a row CHECK evaluated on the
+     * statement that sets DELIVERED. It then used to RETURN
+     * `{ ok: false, reason: 'staleStatus' }` when the row had moved on, and
+     * returning from a `db.transaction` callback COMMITS: the refused call
+     * left `cash_collected_cents` on a live order for money nobody collected.
+     *
+     * What made that expensive rather than untidy: the console's "Delivered"
+     * path with no amount reads that column and treats it as what the driver
+     * reported, so a figure written by a FAILED request was enough to close
+     * the order as settled afterwards.
+     *
+     * Found on 2026-08-18 while seeding fixtures for the parity gate — a real
+     * console call against a real database, not a code review.
+     */
+    const world = await seedWorld();
+    const alex = await seedPartner('Sample Alex', '+15145550001');
+    const orderId = await seedOrder(world, {
+      partnerId: alex,
+      payMode: 'COD',
+      finalTotalCents: 4_620,
+    });
+
+    // The row is OUT. Somebody else has already moved it on, so this caller's
+    // `from` is a status it no longer has.
+    await pool.query(`UPDATE "order" SET status = 'READY' WHERE id = $1`, [orderId]);
+
+    expect(
+      await orders.advanceOrder(orderId, 'OUT', 'DELIVERED', { cashCollectedCents: 4_620 }),
+    ).toEqual({ ok: false, reason: 'staleStatus' });
+
+    const { rows } = await pool.query(
+      `SELECT status, cash_collected_cents, cash_reported_at FROM "order" WHERE id = $1`,
+      [orderId],
+    );
+    expect(rows[0].status).toBe('READY');
+    expect(rows[0].cash_collected_cents).toBeNull();
+    expect(rows[0].cash_reported_at).toBeNull();
+  });
+
   it('a prepaid order still closes on one tap', async () => {
     const world = await seedWorld();
     const alex = await seedPartner('Sample Alex', '+15145550001');

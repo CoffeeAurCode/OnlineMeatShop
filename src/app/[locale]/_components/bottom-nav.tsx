@@ -66,6 +66,16 @@ export function BottomNav({ locale }: { locale: Locale }) {
   const onOrders = inSection(`${home}/orders`);
   const onHome = pathname === home;
 
+  /*
+   * ⭐ THE BAR IS NOT DRAWN ON CHECKOUT, AND THE REFERENCE DOES THE SAME.
+   * Figma parity, Phase 5: `335:2653` Delivery Details has no tab bar, it has
+   * a full-width action carrying the amount, and the two cannot both own the
+   * bottom of a phone screen. Leaving both there stacks 56px of navigation
+   * under the one button the customer is trying to press, and the tabs on that
+   * screen are all ways to abandon a nearly-placed order.
+   */
+  if (inSection(`${home}/checkout`)) return null;
+
   const count = cart.lines.length;
 
   return (

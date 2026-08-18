@@ -89,11 +89,29 @@ export function FallbackTile({
   name,
   handling,
   locale,
+  compact = false,
 }: {
   name: string;
   handling: string;
   locale: Locale;
+  /**
+   * ⚠ THE 96px MENU-ROW THUMBNAIL, WHERE THE FULL TILE DOES NOT FIT. A glyph,
+   * a wrapped product name and a handling class need about 160px of height;
+   * at 96 they overflow their own tile and the name is unreadable anyway. The
+   * compact form keeps the glyph — which is what says "no photograph" rather
+   * than "photograph failed to load" — and drops the words, which are on the
+   * row beside it in full.
+   */
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <div className="fallback-tile absolute inset-0">
+        <FishSimpleIcon size={22} aria-hidden className="mx-auto text-muted" />
+      </div>
+    );
+  }
+
   return (
     <div className="fallback-tile absolute inset-0">
       <FishSimpleIcon size={26} aria-hidden className="mx-auto text-muted" />

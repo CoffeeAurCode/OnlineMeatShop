@@ -14,7 +14,21 @@
  * trade when Chrome is already installed and the protocol is a WebSocket.
  *
  * Usage (the server must already be running):
- *   node scripts/check-responsive.mjs http://127.0.0.1:3000
+ *   node scripts/check-responsive.mjs http://localhost:3000
+ *
+ * 🔴 `localhost`, NEVER `127.0.0.1`, AND THIS DEFAULT WAS WRONG FOR ITS WHOLE
+ * LIFE. Next 16 blocks dev-chunk requests from a host outside
+ * `allowedDevOrigins`:
+ *
+ *   ⚠ Blocked cross-origin request to Next.js dev resource
+ *     /_next/static/chunks/_1xdxhuk._.js from "127.0.0.1".
+ *
+ * So on `127.0.0.1` nothing hydrates. For horizontal overflow that is mostly
+ * harmless — the layout is server-rendered — but it means every one of these
+ * renders measured a document with NO CLIENT JAVASCRIPT, and anything whose
+ * size depends on hydration (the basket counter, the address label switching
+ * from a prompt to a street) was measured in its server state only. Found on
+ * 2026-08-18 by a CDP probe whose buttons all did nothing.
  */
 
 import { spawn } from 'node:child_process';
@@ -22,7 +36,7 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const ORIGIN = process.argv[2] ?? 'http://127.0.0.1:3000';
+const ORIGIN = process.argv[2] ?? 'http://localhost:3000';
 
 /**
  * The two ends of the plan's range plus the breakpoints between them.
@@ -35,6 +49,13 @@ const VIEWPORTS = [
   { name: '360 phone', width: 360, height: 780, mobile: true },
   { name: '390 phone', width: 390, height: 844, mobile: true },
   { name: '768 tablet', width: 768, height: 1024, mobile: true },
+  /*
+   * ⭐ 1024 IS ALSO WHERE 1280 AT 200% BROWSER ZOOM LANDS, near enough, and
+   * `04-PLAN` §12 asks for both. A page zoomed to 200% reflows at half its CSS
+   * width; there is no separate zoom emulation to drive, so measuring the
+   * narrow widths IS measuring the zoom.
+   */
+  { name: '1024 tablet', width: 1024, height: 900, mobile: false },
   { name: '1280 laptop', width: 1280, height: 900, mobile: false },
   { name: '2560 desktop', width: 2560, height: 1440, mobile: false },
 ];

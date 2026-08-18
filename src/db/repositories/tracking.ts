@@ -63,6 +63,20 @@ export interface TrackedOrder {
   readonly capturedCents: number | null;
   /** ⚠ `'stub'` means no money moved. The UI banner keys off this. */
   readonly paymentProvider: string | null;
+  /**
+   * ⚠ HOW IT IS BEING PAID, WHICH IS NOT THE SAME QUESTION AS WHETHER MONEY
+   * MOVED. `COD` means there is no `payment` row at all, so every field above
+   * is null for a perfectly healthy cash order; reading "no authorisation" as
+   * "payment failed" is exactly the conflation `CLAUDE.md` forbids.
+   */
+  readonly payMode: 'PREPAID' | 'COD';
+  /**
+   * What the driver reported collecting at the door. Only ever set on a
+   * delivered cash order, and only when it EQUALS the final total — the
+   * `order_cod_settled_on_delivery` CHECK is what makes that true rather than
+   * a convention.
+   */
+  readonly cashCollectedCents: number | null;
   readonly lines: readonly TrackedLine[];
 }
 
@@ -88,6 +102,8 @@ export async function orderByPublicToken(
       deliveryFeeCents: order.deliveryFeeCents,
       estTotalCents: order.estTotalCents,
       finalTotalCents: order.finalTotalCents,
+      payMode: order.payMode,
+      cashCollectedCents: order.cashCollectedCents,
       slotStartsAt: slot.startsAt,
       slotEndsAt: slot.endsAt,
     })
@@ -143,6 +159,8 @@ export async function orderByPublicToken(
     deliveryFeeCents: row.deliveryFeeCents,
     estTotalCents: row.estTotalCents,
     finalTotalCents: row.finalTotalCents,
+    payMode: row.payMode,
+    cashCollectedCents: row.cashCollectedCents,
     authorisedCents: pay?.authorisedCents ?? null,
     capturedCents: pay?.capturedCents ?? null,
     paymentProvider: pay?.provider ?? null,

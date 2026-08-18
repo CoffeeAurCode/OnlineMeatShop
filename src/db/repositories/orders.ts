@@ -418,65 +418,112 @@ export async function advanceOrder(
    * (`CLAUDE.md` §7) is untouched and this cannot deadlock against checkout.
    */
   if (to === 'DELIVERED') {
-    return db.transaction(async (tx) => {
-      const rows = await tx
-        .select({
-          payMode: order.payMode,
-          finalTotalCents: order.finalTotalCents,
-          cashCollectedCents: order.cashCollectedCents,
-        })
-        .from(order)
-        .where(eq(order.id, orderId))
-        .for('update')
-        .limit(1);
-
-      const o = rows[0];
-      if (o === undefined) return { ok: false, reason: 'staleStatus' } as const;
-
-      if (o.payMode !== 'COD') {
-        if (options.cashCollectedCents != null) {
-          // Cash against a prepaid order means two rails took money for one
-          // basket. Refused here and by `order_cash_only_on_cod` beneath.
-          return { ok: false, reason: 'cashNotAllowed' } as const;
-        }
-      } else {
-        // Whatever the driver already reported, unless the console is
-        // supplying a figure now.
-        const collected = options.cashCollectedCents ?? o.cashCollectedCents;
-
-        // `canDeliver` has taken this argument since it was written and nothing
-        // ever passed it anything. This is the call it was waiting for.
-        /*
-         * `'OUT'` is passed rather than read: `canTransition` above has already
-         * established that `from` is OUT, and `transitionOrder` below refuses
-         * if the row has moved since. Re-selecting the status here to feed it
-         * back into a predicate that only asks "is it OUT" would be a third
-         * statement of the same fact.
-         */
-        if (!canDeliver('OUT', 'COD', o.finalTotalCents, collected ?? null)) {
-          if (collected == null) return { ok: false, reason: 'cashRequired' } as const;
-          return { ok: false, reason: 'cashMismatch' } as const;
-        }
-
-        if (options.cashCollectedCents != null) {
-          await tx
-            .update(order)
-            .set({
-              cashCollectedCents: options.cashCollectedCents,
-              cashReportedAt: new Date(),
-            })
-            .where(eq(order.id, orderId));
-        }
-      }
-
-      const moved = await transitionOrder(tx, orderId, [from], to, { deliveredAt: new Date() });
-      return moved ? ({ ok: true } as const) : ({ ok: false, reason: 'staleStatus' } as const);
-    });
+    try {
+      return await deliverTransaction(orderId, from, to, options);
+    } catch (error) {
+      // The sentinel above, and nothing else. A real database error must keep
+      // going up: a 500 that says "the row moved" is a lie that hides an
+      // outage.
+      if (error instanceof StaleTransition) return { ok: false, reason: 'staleStatus' };
+      throw error;
+    }
   }
 
   const moved = await db.transaction((tx) => transitionOrder(tx, orderId, [from], to, {}));
 
   return moved ? { ok: true } : { ok: false, reason: 'staleStatus' };
+}
+
+/** Rolls the whole DELIVERED transaction back rather than returning from it. */
+class StaleTransition extends Error {}
+
+async function deliverTransaction(
+  orderId: string,
+  from: OrderStatus,
+  to: OrderStatus,
+  options: AdvanceOptions,
+): Promise<{ readonly ok: boolean; readonly reason?: 'cashRequired' | 'cashMismatch' | 'cashNotAllowed' | 'staleStatus' }> {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        payMode: order.payMode,
+        finalTotalCents: order.finalTotalCents,
+        cashCollectedCents: order.cashCollectedCents,
+      })
+      .from(order)
+      .where(eq(order.id, orderId))
+      .for('update')
+      .limit(1);
+
+    const o = rows[0];
+    if (o === undefined) return { ok: false, reason: 'staleStatus' } as const;
+
+    if (o.payMode !== 'COD') {
+      if (options.cashCollectedCents != null) {
+        // Cash against a prepaid order means two rails took money for one
+        // basket. Refused here and by `order_cash_only_on_cod` beneath.
+        return { ok: false, reason: 'cashNotAllowed' } as const;
+      }
+    } else {
+      // Whatever the driver already reported, unless the console is
+      // supplying a figure now.
+      const collected = options.cashCollectedCents ?? o.cashCollectedCents;
+
+      // `canDeliver` has taken this argument since it was written and nothing
+      // ever passed it anything. This is the call it was waiting for.
+      /*
+       * `'OUT'` is passed rather than read: `canTransition` above has already
+       * established that `from` is OUT, and `transitionOrder` below refuses
+       * if the row has moved since. Re-selecting the status here to feed it
+       * back into a predicate that only asks "is it OUT" would be a third
+       * statement of the same fact.
+       */
+      if (!canDeliver('OUT', 'COD', o.finalTotalCents, collected ?? null)) {
+        if (collected == null) return { ok: false, reason: 'cashRequired' } as const;
+        return { ok: false, reason: 'cashMismatch' } as const;
+      }
+      /*
+       * ⚠ THE CASH IS WRITTEN BEFORE THE STATUS MOVES, AND IT HAS TO BE.
+       * `order_cod_settled_on_delivery` is a row CHECK evaluated on the
+       * statement that sets DELIVERED, so an order whose cash arrives
+       * afterwards fails the constraint mid-transaction with a raw 23514.
+       * Measured on 2026-08-18 by trying it the other way round.
+       */
+      if (options.cashCollectedCents != null) {
+        await tx
+          .update(order)
+          .set({
+            cashCollectedCents: options.cashCollectedCents,
+            cashReportedAt: new Date(),
+          })
+          .where(eq(order.id, orderId));
+      }
+    }
+
+    const moved = await transitionOrder(tx, orderId, [from], to, { deliveredAt: new Date() });
+
+    /*
+     * 🔴 THROW, DO NOT RETURN, AND THIS IS A MONEY BUG THAT WAS HERE.
+     *
+     * Returning a value from a `db.transaction` callback COMMITS the
+     * transaction — only a throw rolls it back. So `return { ok: false,
+     * reason: 'staleStatus' }` here kept the cash write above.
+     *
+     * Measured on 2026-08-18 while seeding parity fixtures: a `COD` order
+     * sitting at READY was sent OUT→DELIVERED with a cash amount. The
+     * transition was correctly refused — and `cash_collected_cents = 2315`
+     * was on the row afterwards, for money nobody had collected.
+     *
+     * ⚠ WHY THAT MATTERS RATHER THAN BEING UNTIDY. The console's "Delivered"
+     * path with no amount reads `o.cashCollectedCents` and treats it as what
+     * the driver reported. The stale figure, written by a REFUSED request,
+     * is then enough to close the order as settled — and the exact-amount
+     * rule (spec §5.8) is satisfied by a number that came from a failure.
+     */
+    if (!moved) throw new StaleTransition();
+
+    return { ok: true } as const;
+  });
 }
 
 // ── Assignment and dispatch (07-PLAN Parts 3 and 5) ──────────────────────

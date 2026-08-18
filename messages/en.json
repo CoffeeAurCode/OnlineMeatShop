@@ -117,7 +117,8 @@
     "minimumOrder": "Minimum {amount}",
     "stepNote": "In steps of {amount}",
     "aboutAmount": "about {amount}",
-    "unitPack": "pack"
+    "unitPack": "pack",
+    "required": "Required"
   },
   "basket": {
     "title": "Your basket",
@@ -175,7 +176,8 @@
     "payNow": "Pay now by card",
     "payNowHelp": "We hold a little more than the estimate and charge the exact amount once your order is weighed. You are never charged more than the hold.",
     "payCash": "Cash on delivery",
-    "payCashHelp": "Pay the driver at the door. They will have the exact amount once your order is weighed."
+    "payCashHelp": "Pay the driver at the door. They will have the exact amount once your order is weighed.",
+    "editBasket": "Edit basket"
   },
   "payment": {
     "testBannerTitle": "Test order. No payment has been taken.",
@@ -189,7 +191,12 @@
     "priceChangedOld": "Total when you started",
     "priceChangedNew": "Total now",
     "priceChangedAccept": "Update my total",
-    "priceChangedReview": "Back to my basket"
+    "priceChangedReview": "Back to my basket",
+    "heading": "Payment",
+    "heldExplainer": "We hold a maximum now and charge the exact amount once your fish is weighed.",
+    "captured": "Charged after weighing. This is the exact amount taken.",
+    "cashDue": "Have the exact amount ready for the driver. Nothing is charged before delivery.",
+    "cashCollected": "Collected at the door."
   },
   "order": {
     "confirmedTitle": "Order placed",
@@ -335,7 +342,16 @@
       "unavailable": "Your device could not get a position. Try again, or type your address below.",
       "timeout": "That took too long. Try again, or type your address below.",
       "unsupported": "This browser cannot share a location. Type your address below."
-    }
+    },
+    "destinationHeading": "Destination",
+    "addressHeading": "Address",
+    "handoverHeading": "At the door",
+    "currentLocation": "Current location",
+    "currentLocationHelp": "One tap, and the driver has the building.",
+    "enable": "Enable",
+    "updatePin": "Update",
+    "checking": "Checking whether we deliver there",
+    "checkFailed": "We could not check just now. Your address is saved either way, and we confirm it at checkout."
   },
   "auth": {
     "title": "Sign in or sign up",
