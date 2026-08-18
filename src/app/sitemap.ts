@@ -2,8 +2,9 @@ import type { MetadataRoute } from 'next';
 
 import { staticParamsOr } from '@/db/build-time';
 import { listCatalog } from '@/db/repositories/catalog';
+import { readShopIdentity } from '@/db/repositories/settings';
 import { LOCALES } from '@/i18n';
-import { deliveryTowns, siteOrigin } from '@/ui/shop-config';
+import { siteOrigin } from '@/ui/shop-config';
 
 /**
  * The sitemap, built from the catalog rather than maintained by hand.
@@ -28,6 +29,14 @@ import { deliveryTowns, siteOrigin } from '@/ui/shop-config';
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const origin = siteOrigin();
   const catalog = await staticParamsOr('the catalog for the sitemap', () => listCatalog(null));
+  /*
+   * ⚠ GUARDED THE SAME WAY, because this file is prerendered. `sitemap.xml` is
+   * static output: it holds the towns the last BUILD saw, so a town added in
+   * the console appears here only after the next deploy. That is acceptable
+   * for a crawler hint and it is not acceptable for the page itself, which is
+   * why `/delivery/[town]` is dynamic.
+   */
+  const { towns } = await readShopIdentity();
 
   /** One entry per locale, each naming the other as its alternate. */
   const localised = (
@@ -51,7 +60,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...localised('/shop', 'daily', 0.9),
     ...localised('/delivery', 'monthly', 0.7),
     ...localised('/how-weighing-works', 'monthly', 0.6),
-    ...deliveryTowns().flatMap((t) => localised(`/delivery/${t.slug}`, 'weekly', 0.7)),
+    ...towns.flatMap((town) => localised(`/delivery/${town.slug}`, 'weekly', 0.7)),
     ...catalog.flatMap((c) => localised(`/p/${c.slug}`, 'daily', 0.8)),
   ];
 }

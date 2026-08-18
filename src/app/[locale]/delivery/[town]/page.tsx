@@ -3,8 +3,9 @@ import { notFound } from 'next/navigation';
 
 import { currentBusinessDay } from '@/db/repositories/availability';
 import { listCatalog } from '@/db/repositories/catalog';
+import { readShopIdentity } from '@/db/repositories/settings';
 import { isLocale, t, type Locale } from '@/i18n';
-import { deliveryTowns, shopName } from '@/ui/shop-config';
+import { shopName } from '@/ui/shop-config';
 
 import { PostcodeCheck } from '../../_components/postcode-check';
 
@@ -36,7 +37,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale, town } = await params;
   const l: Locale = isLocale(locale) ? locale : 'fr';
-  const found = deliveryTowns().find((x) => x.slug === town);
+  const { towns } = await readShopIdentity();
+  const found = towns.find((x) => x.slug === town);
   if (found === undefined) return {};
 
   return {
@@ -56,10 +58,11 @@ export async function generateMetadata({
  * are on the counter today, and a build-time snapshot of that is a lie by the
  * next morning.
  *
- * `generateStaticParams` was removed rather than guarded. The town list comes
- * from an environment variable and would have survived a database outage
- * happily, which is exactly the trap: the paths would have been generated and
- * then failed to render.
+ * `generateStaticParams` was removed rather than guarded, and the reason got
+ * STRONGER when the town list moved out of the environment and into
+ * `shop_setting` (2026-08-18): the list and the availability now come from the
+ * same database, so prerendering the paths would mean generating a page for a
+ * town the owner deleted this morning.
  */
 export const dynamic = 'force-dynamic';
 
@@ -71,7 +74,8 @@ export default async function TownPage({
   const { locale, town } = await params;
   if (!isLocale(locale)) notFound();
 
-  const found = deliveryTowns().find((x) => x.slug === town);
+  const { towns } = await readShopIdentity();
+  const found = towns.find((x) => x.slug === town);
   if (found === undefined) notFound();
 
   const day = await currentBusinessDay();

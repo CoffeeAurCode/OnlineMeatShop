@@ -175,6 +175,7 @@ function ManageNav() {
     { href: '/admin/partners', label: 'Drivers', hint: 'who carries the boxes' },
     { href: '/admin/delivery-area', label: 'Delivery area', hint: 'how far, and the fee' },
     { href: '/admin/catalog', label: 'Catalog', hint: 'names and prices' },
+    { href: '/admin/shop', label: 'Shop details', hint: 'address, hours, phone' },
     { href: '/admin/settings', label: 'Console settings', hint: 'the new-order sound' },
   ];
 

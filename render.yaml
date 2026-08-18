@@ -127,12 +127,17 @@ services:
       # restart, or the SEO surfaces keep pointing at example.invalid.
       - key: NEXT_PUBLIC_SITE_ORIGIN
         sync: false
-      # The remaining presentation variables (NEXT_PUBLIC_SHOP_NAME, the shop's
-      # own address, DELIVERY_TOWNS, SHOP_OPENING_HOURS) are documented in
-      # `.env.example` and are NOT listed here, because this file mirrors what
-      # the dashboard actually has and they are not set yet. Unset, each shows
-      # a deliberately implausible fallback — the site currently calls itself
-      # "Test Butcher Ltd".
+      # ⚠ NEXT_PUBLIC_SHOP_NAME IS STILL UNSET, and the site therefore calls
+      # itself "Test Butcher Ltd" — the deliberately fictional fallback. It is
+      # not listed as a key here because this file mirrors what the dashboard
+      # actually has.
+      #
+      # ⭐ THE SHOP'S ADDRESS, PHONE, OPENING HOURS AND DELIVERY TOWNS ARE NOT
+      # ENVIRONMENT VARIABLES ANY MORE (2026-08-18). They are `shop_setting`
+      # rows, edited by the owner at /admin/shop. Do not add SHOP_STREET,
+      # SHOP_LOCALITY, SHOP_REGION, SHOP_POSTAL_CODE, SHOP_PHONE,
+      # SHOP_OPENING_HOURS or DELIVERY_TOWNS here: nothing reads them, and a
+      # value the owner changes on a Tuesday must not need a deploy.
       - key: SHOP_TIMEZONE
         sync: false
       - key: SHOP_CURRENCY

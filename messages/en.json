@@ -269,7 +269,10 @@
     "heading": "Cut here. Delivered nearby.",
     "body": "Home delivery only, within our local radius. Everything is cut the day it goes out.",
     "priceNote": "Prices in Canadian dollars. Per-kilogram prices stay estimated until your order is cut and weighed.",
-    "rights": "All rights reserved."
+    "rights": "All rights reserved.",
+    "hours": "Opening hours",
+    "address": "Come and see us",
+    "dayRange": "{from} to {to}"
   },
   "common": {
     "loading": "Loading",
@@ -341,5 +344,14 @@
     "signOut": "Sign out",
     "required": "Please sign in to place your order.",
     "close": "Close"
+  },
+  "day": {
+    "mon": "Mon",
+    "tue": "Tue",
+    "wed": "Wed",
+    "thu": "Thu",
+    "fri": "Fri",
+    "sat": "Sat",
+    "sun": "Sun"
   }
 }

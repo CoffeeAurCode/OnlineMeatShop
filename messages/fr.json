@@ -269,7 +269,10 @@
     "heading": "Coupé ici. Livré tout près.",
     "body": "Livraison à domicile seulement, dans notre rayon local. Tout est coupé le jour de la livraison.",
     "priceNote": "Prix en dollars canadiens. Les prix au kilogramme restent estimés jusqu'à la coupe et la pesée.",
-    "rights": "Tous droits réservés."
+    "rights": "Tous droits réservés.",
+    "hours": "Heures d'ouverture",
+    "address": "Venez nous voir",
+    "dayRange": "{from} au {to}"
   },
   "common": {
     "loading": "Chargement",
@@ -341,5 +344,14 @@
     "signOut": "Se déconnecter",
     "required": "Connectez-vous pour passer votre commande.",
     "close": "Fermer"
+  },
+  "day": {
+    "mon": "lun",
+    "tue": "mar",
+    "wed": "mer",
+    "thu": "jeu",
+    "fri": "ven",
+    "sat": "sam",
+    "sun": "dim"
   }
 }

@@ -3,6 +3,9 @@ import { notFound } from 'next/navigation';
 
 import { LOCALES, htmlLang, isLocale, t } from '@/i18n';
 import { CustomerSessionProvider } from '@/ui/customer-session';
+import { readShopIdentity } from '@/db/repositories/settings';
+import { formatPostalCode } from '@/domain/serviceability';
+import { hasAddress, openingHoursSpecification } from '@/domain/shop';
 import { shopName, siteOrigin } from '@/ui/shop-config';
 
 import '../globals.css';
@@ -85,6 +88,23 @@ export default async function LocaleRootLayout({
   // page at an infinite number of URLs.
   if (!isLocale(locale)) notFound();
 
+  /*
+   * ⭐ ONE READ OF THE SHOP'S OWN DETAILS, HERE, FOR THE WHOLE STOREFRONT.
+   *
+   * The `Store` node below and the footer both need it, and both render on
+   * every page. Reading it in each would be two queries per page for two
+   * copies of the same seven values.
+   *
+   * ⚠ THIS LAYOUT PRERENDERS. `readShopIdentity` therefore swallows a database
+   * failure into an empty identity instead of throwing: `next build` runs
+   * against an unreachable database in CI on purpose, and an unguarded read
+   * here would turn that into a failed deployment of otherwise correct code.
+   * `/api/admin/shop` calls `revalidatePath` on save, so an edit reaches these
+   * pages without waiting for a deploy.
+   */
+  const identity = await readShopIdentity();
+  const hours = openingHoursSpecification(identity.hours);
+
   return (
     <html lang={htmlLang(locale)}>
       <head>
@@ -120,6 +140,30 @@ export default async function LocaleRootLayout({
               name: shopName(),
               url: `${siteOrigin()}/${locale}`,
               currenciesAccepted: 'CAD',
+              /*
+                ⚠ EVERY FIELD BELOW IS OMITTED WHEN UNSET, never emitted empty.
+                A `PostalAddress` with blank streets is worse than no address
+                at all: Google reads it, finds nothing, and the shop competes
+                with its own incomplete listing.
+              */
+              ...(hasAddress(identity)
+                ? {
+                    address: {
+                      '@type': 'PostalAddress',
+                      streetAddress: identity.street,
+                      addressLocality: identity.locality,
+                      addressRegion: identity.region,
+                      // ⚠ THE DISPLAY FORM, WITH THE SPACE. `H3K1W6` is how it
+                      // is stored so that two spellings cannot become two
+                      // values; `H3K 1W6` is how Canada Post writes it and
+                      // what a consumer of this node should be handed.
+                      postalCode: formatPostalCode(identity.postalCode),
+                      addressCountry: 'CA',
+                    },
+                  }
+                : {}),
+              ...(identity.phone === '' ? {} : { telephone: identity.phone }),
+              ...(hours.length === 0 ? {} : { openingHoursSpecification: hours }),
             }),
           }}
         />
@@ -149,7 +193,7 @@ export default async function LocaleRootLayout({
             <main id="main" className="flex-1">
               {children}
             </main>
-            <ShopFooter locale={locale} />
+            <ShopFooter locale={locale} identity={identity} />
           </div>
           {/*
             Every overlay is mounted once at the root rather than per page, so

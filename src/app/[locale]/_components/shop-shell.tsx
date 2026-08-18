@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/ssr';
 
+import { EMPTY_IDENTITY, addressLines, groupHours, type ShopIdentity } from '@/domain/shop';
+import { formatPhone } from '@/domain/phone';
 import { t, type Locale } from '@/i18n';
 import { shopName } from '@/ui/shop-config';
 
@@ -137,8 +139,28 @@ export function ShopHeader({ locale }: { locale: Locale }) {
   );
 }
 
-export function ShopFooter({ locale }: { locale: Locale }) {
+/**
+ * ⭐ THE SHOP'S ADDRESS, PHONE AND HOURS ARE PASSED IN, NOT READ HERE.
+ *
+ * They are `shop_setting` rows now (`/admin/shop`), and this component renders
+ * inside the root layout of a mostly PRERENDERED storefront. One read in the
+ * layout, passed down, is one query per render; a read in here would be a
+ * second one for the same values on the same page.
+ *
+ * ⚠ EVERY BLOCK BELOW DISAPPEARS WHEN ITS VALUE IS UNSET, and none of them
+ * falls back to a placeholder. A fictional address in a footer is a wrong
+ * address in a footer, and it is the kind of wrong nobody reports.
+ */
+export function ShopFooter({
+  locale,
+  identity = EMPTY_IDENTITY,
+}: {
+  locale: Locale;
+  identity?: ShopIdentity;
+}) {
   const home = `/${locale}`;
+  const address = addressLines(identity);
+  const week = groupHours(identity.hours);
 
   return (
     <footer className="mt-20 bg-accent-solid text-accent-solid-ink">
@@ -163,6 +185,61 @@ export function ShopFooter({ locale }: { locale: Locale }) {
             </Link>
           </nav>
         </div>
+        {(address.length > 0 || week.length > 0 || identity.phone !== '') && (
+          <div className="grid gap-10 border-b border-white/25 py-12 sm:grid-cols-2">
+            {address.length > 0 && (
+              <div>
+                <h2 className="text-meta font-semibold uppercase tracking-wide text-white/65">
+                  {t(locale, 'footer.address')}
+                </h2>
+                <address className="mt-3 grid gap-1 text-body not-italic text-white">
+                  {address.map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
+                  {identity.phone !== '' && (
+                    <a
+                      href={`tel:${identity.phone}`}
+                      className="mt-2 underline-offset-4 hover:underline"
+                    >
+                      {formatPhone(identity.phone)}
+                    </a>
+                  )}
+                </address>
+              </div>
+            )}
+
+            {week.length > 0 && (
+              <div>
+                <h2 className="text-meta font-semibold uppercase tracking-wide text-white/65">
+                  {t(locale, 'footer.hours')}
+                </h2>
+                {/*
+                  Runs of identical days are collapsed by `groupHours`, so a
+                  shop open the same hours all week is ONE line and not seven.
+                  Closed days break a run rather than joining one.
+                */}
+                <dl className="mt-3 grid gap-1 text-body text-white">
+                  {week.map((run) => (
+                    <div key={run.from} className="flex flex-wrap justify-between gap-x-6">
+                      <dt>
+                        {run.from === run.to
+                          ? t(locale, `day.${run.from}`)
+                          : t(locale, 'footer.dayRange', {
+                              from: t(locale, `day.${run.from}`),
+                              to: t(locale, `day.${run.to}`),
+                            })}
+                      </dt>
+                      <dd className="tnum">
+                        {run.opens}-{run.closes}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="grid gap-4 pt-6 text-meta text-white/65 sm:grid-cols-2">
           <p className="font-semibold text-white">{shopName()}</p>
           <p className="sm:text-right">{t(locale, 'footer.priceNote')}</p>
