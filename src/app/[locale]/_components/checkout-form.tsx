@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FlameIcon, MapPinIcon, PencilSimpleIcon } from '@phosphor-icons/react/dist/ssr';
 
@@ -10,7 +10,8 @@ import { useCustomerSession } from '@/ui/customer-session';
 import { money, weight } from '@/ui/format';
 import { isDeliverable, useDeliveryLocation } from '@/ui/location';
 
-import { openLocationSheet, openSignIn } from './drawer-state';
+import { useDialog } from './dialog';
+import { openCart, openLocationSheet, openSignIn } from './drawer-state';
 import { MoneySentence, TestOrderBanner } from './money-sentence';
 
 /**
@@ -115,11 +116,53 @@ export function CheckoutForm({
   const [failure, setFailure] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const signature = cart.lines.map((l) => `${lineKey(l)}@${l.requestedG}`).join('|');
-  const destinationKey =
-    location.lat !== null && location.lng !== null
-      ? `${location.lat},${location.lng}`
-      : location.postalCode.trim().toUpperCase();
+  /*
+   * ⭐ P8, ON SCREEN. `priceChanged` is the one refusal that must not read as
+   * an error, because nothing went wrong: the shop repriced something while
+   * this page was open, the server caught it before touching a card, and the
+   * customer now has to see both numbers and decide.
+   *
+   * ⚠ IT WAS A SENTENCE IN A RED BOX, which is the failure the design system
+   * names in so many words: "Never silently accept a changed total. Show old
+   * and new totals side by side in a blocking dialog with two explicit
+   * actions." A one-line error asks the customer to press the same button
+   * again and hope, and the number they would be agreeing to was never shown
+   * to them.
+   */
+  const [priceChange, setPriceChange] = useState<{ oldCents: number; newCents: number } | null>(
+    null,
+  );
+  /*
+   * Bumped to force a re-quote when nothing the effect watches has changed.
+   * A repricing happens on the SHOP's side, so the basket and the destination
+   * are both identical and the effect would otherwise never re-run.
+   */
+  const [quoteNonce, setQuoteNonce] = useState(0);
+
+  /*
+   * ⚠ THE REQUEST BODY IS A DERIVED STRING AND THE EFFECT DEPENDS ON IT.
+   *
+   * It used to be built inside the effect, with `cart.lines` and `location` in
+   * the dependency array. Both are objects; a replaced identity re-runs the
+   * effect, and the cleanup aborts a request that had already succeeded. The
+   * basket drawer is where that was caught — see the long note in
+   * `cart-drawer.tsx` for the CDP trace — and this screen carried the same
+   * hazard with the same silent symptom: totals that never arrive.
+   *
+   * A string cannot have an unstable identity, and it states the rule exactly:
+   * re-ask the server when, and only when, the question changes.
+   */
+  const quoteBody = JSON.stringify({
+    lines: cart.lines.map((l) => ({
+      productId: l.productId,
+      requestedG: l.requestedG,
+      prepOptionId: l.prepOptionId,
+    })),
+    lat: location.lat,
+    lng: location.lng,
+    postalCode: location.postalCode.trim() === '' ? null : location.postalCode,
+    locale,
+  });
 
   // Re-quoted whenever the basket or the destination changes, because the
   // delivery fee depends on the second and every amount depends on the first.
@@ -133,17 +176,7 @@ export function CheckoutForm({
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       signal: controller.signal,
-      body: JSON.stringify({
-        lines: cart.lines.map((l) => ({
-          productId: l.productId,
-          requestedG: l.requestedG,
-          prepOptionId: l.prepOptionId,
-        })),
-        lat: location.lat,
-        lng: location.lng,
-        postalCode: location.postalCode.trim() === '' ? null : location.postalCode,
-        locale,
-      }),
+      body: quoteBody,
     })
       .then((r) => (r.ok ? (r.json() as Promise<Quote>) : Promise.reject(new Error('quote'))))
       .then(setQuote)
@@ -151,7 +184,7 @@ export function CheckoutForm({
         if (e instanceof Error && e.name === 'AbortError') return;
       });
     return () => controller.abort();
-  }, [signature, destinationKey, locale, cart.lines, location]);
+  }, [quoteBody, cart.lines.length, quoteNonce]);
 
   /*
    * Derived, not stored. An emptied basket must not keep showing the totals of
@@ -270,6 +303,8 @@ export function CheckoutForm({
         ok?: boolean;
         publicToken?: string;
         reason?: string;
+        // Sent by `/api/checkout` alongside `priceChanged`, and by nothing else.
+        estTotalCents?: number;
         detail?: { productName?: string };
       };
 
@@ -285,6 +320,18 @@ export function CheckoutForm({
       // wrong" on a checkout is what makes a customer try again and place two
       // orders.
       const reason = body.reason ?? 'generic';
+
+      /*
+       * ⚠ THE OLD TOTAL IS READ OFF THE QUOTE THIS SCREEN WAS SHOWING, not
+       * echoed back by the server, because the server never saw it. That is
+       * also what makes the comparison honest: it is the number this customer
+       * actually looked at, beside the number the catalog now says.
+       */
+      if (res.status === 409 && reason === 'priceChanged' && body.estTotalCents != null) {
+        setPriceChange({ oldCents: quote.estTotalCents ?? 0, newCents: body.estTotalCents });
+        setSubmitting(false);
+        return;
+      }
       /*
        * A thirty-day cookie can expire between loading this page and pressing
        * the button. Reopening the sheet turns that into two taps instead of a
@@ -393,50 +440,6 @@ export function CheckoutForm({
         />
       </Section>
 
-      {/*
-        ⭐ THE PAYMENT CHOICE, AFTER THE ADDRESS AND BEFORE THE WINDOW.
-
-        Placed here because it is the last thing that changes the TOTAL story —
-        a cash customer needs to know the driver arrives with an exact figure —
-        and because burying it under the slot list would put it below the fold
-        on a phone, where the customer's thumb is already on the place button.
-
-        The whole section disappears when the shop is not taking cash. A single
-        disabled radio explaining why is a worse screen than one option
-        presented plainly.
-      */}
-      {codEnabled && (
-        <Section heading={t(locale, 'checkout.payHeading')}>
-          <div className="grid gap-2">
-            {(['PREPAID', 'COD'] as const).map((mode) => (
-              <label
-                key={mode}
-                className={`flex cursor-pointer items-start gap-3 rounded-sm border px-4 py-3 ${
-                  payMode === mode ? 'border-accent bg-soft' : 'border-line'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="payMode"
-                  value={mode}
-                  checked={payMode === mode}
-                  onChange={() => setPayMode(mode)}
-                  className="mt-1 size-5 shrink-0"
-                />
-                <span className="min-w-0">
-                  <span className="block text-body font-semibold">
-                    {t(locale, mode === 'PREPAID' ? 'checkout.payNow' : 'checkout.payCash')}
-                  </span>
-                  <span className="mt-1 block text-meta text-muted">
-                    {t(locale, mode === 'PREPAID' ? 'checkout.payNowHelp' : 'checkout.payCashHelp')}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </Section>
-      )}
-
       <Section heading={t(locale, 'checkout.slotHeading')}>
         {hot && (
           <p className="flex items-start gap-2 rounded-sm border border-line bg-soft px-3 py-2 text-body">
@@ -481,6 +484,53 @@ export function CheckoutForm({
           ))}
         </div>
       </Section>
+
+      {/*
+        ⭐ THE PAYMENT CHOICE, AFTER THE WINDOW AND DIRECTLY ABOVE THE SUMMARY.
+
+        ⚠ IT USED TO SIT ABOVE THE WINDOW, on the reasoning that burying it
+        under the slot list put it below the fold. §8 orders the review screen
+        address, contact, window, payment, summary, money sentence, action —
+        and following it turns out to read better than the old order rather
+        than worse, because it makes the whole money story contiguous: how you
+        pay, what it comes to, what that number means, place the order. The
+        window is a scheduling decision and belongs with the address.
+
+        The whole section disappears when the shop is not taking cash. A single
+        disabled radio explaining why is a worse screen than one option
+        presented plainly.
+      */}
+      {codEnabled && (
+        <Section heading={t(locale, 'checkout.payHeading')}>
+          <div className="grid gap-2">
+            {(['PREPAID', 'COD'] as const).map((mode) => (
+              <label
+                key={mode}
+                className={`flex cursor-pointer items-start gap-3 rounded-sm border px-4 py-3 ${
+                  payMode === mode ? 'border-accent bg-soft' : 'border-line'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="payMode"
+                  value={mode}
+                  checked={payMode === mode}
+                  onChange={() => setPayMode(mode)}
+                  className="mt-1 size-5 shrink-0"
+                />
+                <span className="min-w-0">
+                  <span className="block text-body font-semibold">
+                    {t(locale, mode === 'PREPAID' ? 'checkout.payNow' : 'checkout.payCash')}
+                  </span>
+                  <span className="mt-1 block text-meta text-muted">
+                    {t(locale, mode === 'PREPAID' ? 'checkout.payNowHelp' : 'checkout.payCashHelp')}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </Section>
+      )}
 
       <Section heading={t(locale, 'basket.title')}>
         <ul className="grid gap-2">
@@ -558,7 +608,7 @@ export function CheckoutForm({
         <button
           type="submit"
           disabled={submitting || hasProblem || quote?.estTotalCents == null}
-          className="tap-lg inline-flex items-center justify-center rounded-sm bg-accent px-6 text-lead font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover disabled:opacity-60 active:scale-[0.99]"
+          className="tap-lg inline-flex items-center justify-center rounded-sm bg-accent px-6 text-lead font-semibold text-accent-ink transition-colors duration-(--duration-fast) hover:bg-accent-hover disabled:opacity-60 active:scale-[0.99]"
         >
           {/*
             ⚠ THE LABEL CHANGES BEFORE THE ACTION DOES. A button that says
@@ -574,7 +624,148 @@ export function CheckoutForm({
               : t(locale, 'checkout.place')}
         </button>
       </div>
+
+      {priceChange !== null && (
+        <PriceChangeDialog
+          locale={locale}
+          oldCents={priceChange.oldCents}
+          newCents={priceChange.newCents}
+          onAccept={() => {
+            // Re-quote from the catalog rather than patching the old quote with
+            // the number the 409 carried. The refusal proved this screen's
+            // catalog version was stale, and a stale version with one amount
+            // corrected is still stale: the line breakdown, the fee and the
+            // hot-food flag all come from the same read.
+            setQuoteNonce((n) => n + 1);
+            setPriceChange(null);
+          }}
+          onReview={() => {
+            setPriceChange(null);
+            setQuoteNonce((n) => n + 1);
+            openCart();
+          }}
+        />
+      )}
     </form>
+  );
+}
+
+/**
+ * ⭐ THE PRICE-CHANGE DIALOG. Both numbers, side by side, and two ways out.
+ *
+ * ⚠ IT IS THE ONLY BLOCKING DIALOG IN THE STOREFRONT, and it is blocking for a
+ * reason that is not urgency: the customer is about to authorise an amount,
+ * and the amount changed. Everything else on this screen can be scrolled past.
+ * This cannot, because scrolling past it would mean agreeing to a figure
+ * nobody showed them.
+ *
+ * ⚠ NEITHER BUTTON PLACES THE ORDER. That is P8: "make the customer
+ * re-confirm". Accepting re-quotes and returns them to a live Place order
+ * button carrying the new total, so the tap that authorises money is always a
+ * tap on a number they have read. A single "Confirm and pay" here would be the
+ * silent acceptance the rule exists to prevent.
+ *
+ * ⚠ IT IS NOT AN ERROR AND IS NOT STYLED AS ONE. `--danger` is reserved for
+ * things that went wrong; nothing went wrong here. A red box would tell the
+ * customer the shop broke, when what happened is that the shop caught a stale
+ * price before charging it.
+ */
+function PriceChangeDialog({
+  locale,
+  oldCents,
+  newCents,
+  onAccept,
+  onReview,
+}: {
+  locale: Locale;
+  oldCents: number;
+  newCents: number;
+  onAccept: () => void;
+  onReview: () => void;
+}) {
+  const panel = useRef<HTMLDivElement>(null);
+  const accept = useRef<HTMLButtonElement>(null);
+
+  /*
+   * ⚠ ESCAPE IS WIRED TO "BACK TO MY BASKET", NOT TO A BARE DISMISS. Closing
+   * a dialog is normally cancelling, and cancelling here has to mean the
+   * cautious branch. Dismissing it into the old, refused quote would leave a
+   * Place order button showing a number the server has already rejected.
+   */
+  useDialog(panel, onReview, accept);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center p-4"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="price-change-title"
+      aria-describedby="price-change-body"
+    >
+      {/*
+        ⚠ NOT A BUTTON. Every other overlay in this storefront has a clickable
+        scrim, because every other overlay is safe to abandon. This one is a
+        decision, so the only ways out are the two labelled controls and
+        Escape, all of which say what they do.
+      */}
+      <div aria-hidden className="absolute inset-0 bg-midnight/60" />
+
+      <div
+        ref={panel}
+        className="
+          relative grid w-full max-w-[26rem] gap-5 rounded-md border border-line bg-surface p-5
+          elev-sheet animate-[fade-in_var(--duration-standard)_ease-out]
+        "
+      >
+        <div className="grid gap-2">
+          <h2
+            id="price-change-title"
+            className="!font-sans !text-section !pb-0 !tracking-normal font-semibold"
+          >
+            {t(locale, 'payment.priceChangedTitle')}
+          </h2>
+          <p id="price-change-body" className="text-body text-muted">
+            {t(locale, 'payment.priceChangedBody')}
+          </p>
+        </div>
+
+        {/*
+          Side by side, in tabular figures, on one baseline. The comparison IS
+          the content of this dialog, so the two amounts are the largest thing
+          in it and neither is styled to look like the recommended answer.
+        */}
+        <dl className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1 rounded-sm border border-line bg-raised px-3 py-3">
+            <dt className="text-meta text-muted">{t(locale, 'payment.priceChangedOld')}</dt>
+            <dd className="tnum text-section font-semibold text-muted line-through">
+              {money(oldCents, locale)}
+            </dd>
+          </div>
+          <div className="grid gap-1 rounded-sm border border-accent bg-raised px-3 py-3">
+            <dt className="text-meta text-muted">{t(locale, 'payment.priceChangedNew')}</dt>
+            <dd className="tnum text-section font-semibold text-ink">{money(newCents, locale)}</dd>
+          </div>
+        </dl>
+
+        <div className="grid gap-2">
+          <button
+            ref={accept}
+            type="button"
+            onClick={onAccept}
+            className="tap-lg inline-flex items-center justify-center rounded-sm bg-accent px-5 text-body font-semibold text-accent-ink transition-colors duration-(--duration-fast) hover:bg-accent-hover active:scale-[0.99]"
+          >
+            {t(locale, 'payment.priceChangedAccept')}
+          </button>
+          <button
+            type="button"
+            onClick={onReview}
+            className="tap-lg inline-flex items-center justify-center rounded-sm border border-line bg-raised px-5 text-body font-semibold text-ink transition-colors duration-(--duration-fast) hover:border-accent"
+          >
+            {t(locale, 'payment.priceChangedReview')}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -104,6 +104,23 @@ export function ShopHeader({ locale }: { locale: Locale }) {
           </form>
 
           <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2 lg:ml-0">
+            {/*
+              ⚠ TWO LINKS, NOT THE SIX THE TAXONOMY LISTS, and the arithmetic
+              is why. The design system names Shop, Delivery, How weighing
+              works, Orders, FR/EN and Basket as the primary set, and then
+              specifies a desktop header of `Wordmark | Address | Search |
+              Orders | Language | Basket` — which has no room for the other
+              two. The layout wins over the list: the address and the basket
+              are named as the things the collapse must preserve, and French
+              labels ("Comment fonctionne la pesée") are half again as long as
+              English ones, so a six-item bar wraps to two lines in the locale
+              the shop is legally required to serve first.
+
+              Delivery and the weighing explainer are reachable from the
+              footer of every page, from both home bands, and from the money
+              sentence at checkout — which is where somebody actually asks
+              those questions, rather than while scanning a header.
+            */}
             <Link
               href={`${home}/shop`}
               className="nav-link tap hidden items-center text-meta font-semibold xl:inline-flex"
@@ -163,7 +180,7 @@ export function ShopFooter({
   const week = groupHours(identity.hours);
 
   return (
-    <footer className="mt-20 bg-accent-solid text-accent-solid-ink">
+    <footer className="mt-20 bg-brand-ground text-brand-ground-ink">
       <div className="mx-auto max-w-[80rem] px-4 py-14 sm:px-6 sm:py-20">
         <div className="grid gap-12 border-b border-white/25 pb-12 lg:grid-cols-[1.4fr_1fr]">
           <div>

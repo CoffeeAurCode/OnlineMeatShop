@@ -5,6 +5,8 @@
     "switchToShort": "FR"
   },
   "nav": {
+    "home": "Home",
+    "primary": "Main navigation",
     "shop": "Shop",
     "delivery": "Delivery",
     "howItWorks": "Weighing and payment",
@@ -21,10 +23,7 @@
   "home": {
     "heroHeading": "Today's catch, at your door",
     "heroBody": "Cut to order and weighed after cutting. You pay the exact weight, never a rounded guess.",
-    "heroCta": "Shop today's counter",
-    "heroSecondary": "How weighing works",
     "categoriesHeading": "Shop by counter",
-    "categoriesBody": "Restocked every trading morning.",
     "viewAll": "View everything",
     "weighingHeading": "You pay for what you get",
     "weighingBody": "Fish is cut to order, so the weight is never exact until it is on the scale. We show an estimate while you shop and charge the weight we actually cut.",
@@ -44,10 +43,25 @@
         "title": "Delivered from our door",
         "body": "One shop, one van, a local radius."
       }
+    },
+    "deliveryFact": {
+      "area": {
+        "title": "Home delivery only",
+        "body": "One shop, one van, a local radius. Set your address and the site tells you whether we reach you before you build a basket."
+      },
+      "fee": {
+        "title": "The fee is exact, not a guess",
+        "body": "Once we know where you are, every screen carries the real delivery fee and how much more earns free delivery."
+      },
+      "hot": {
+        "title": "Hot kitchen food picks the window",
+        "body": "If anything in your basket is cooked to order, only a delivery window that can carry it is offered."
+      }
     }
   },
   "shop": {
     "title": "The counter",
+    "more": "More",
     "allCategories": "Everything",
     "empty": "Nothing on this counter today.",
     "emptyBody": "Stock is declared fresh each trading morning. Try another counter, or check back tomorrow.",
@@ -102,7 +116,8 @@
     "relatedHeading": "Also on this counter",
     "minimumOrder": "Minimum {amount}",
     "stepNote": "In steps of {amount}",
-    "aboutAmount": "about {amount}"
+    "aboutAmount": "about {amount}",
+    "unitPack": "pack"
   },
   "basket": {
     "title": "Your basket",
@@ -168,7 +183,13 @@
     "moneySentenceEstimate": "Your estimated total is {amount}.",
     "moneySentenceRest": "We hold that as a maximum, then charge the exact amount once your fish is cut and weighed.",
     "heldMax": "Maximum held",
-    "exactCharged": "Exact amount charged"
+    "exactCharged": "Exact amount charged",
+    "priceChangedTitle": "The price changed while you were shopping",
+    "priceChangedBody": "Nothing has been charged and your basket is untouched. Check the new total before you place your order.",
+    "priceChangedOld": "Total when you started",
+    "priceChangedNew": "Total now",
+    "priceChangedAccept": "Update my total",
+    "priceChangedReview": "Back to my basket"
   },
   "order": {
     "confirmedTitle": "Order placed",
@@ -299,8 +320,6 @@
     "setAddress": "Set your address",
     "changeFrom": "Change delivery address, currently {address}",
     "change": "Change",
-    "heroPrompt": "Enter your delivery address",
-    "heroCta": "Start",
     "served": "We deliver to you. Delivery is {fee}.",
     "servedFree": "We deliver to you, and delivery is free.",
     "freeAbove": "Free over {amount}.",

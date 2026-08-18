@@ -3,31 +3,53 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { FlameIcon, HeartIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
+import { HeartIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
 import type { Locale } from '@/i18n';
 import { t } from '@/i18n';
 import { isFavourite, toggleFavourite, useFavourites } from '@/ui/favourites';
-import { money, ratePerKg, weight } from '@/ui/format';
+import { pricePerUnit, ratePerKg, weight } from '@/ui/format';
 
+import { FallbackTile, HandlingLabel } from './handling';
 import { ItemSheet, type SheetProduct } from './item-sheet';
 
 /**
  * ⭐ THE UNIT THE GRID IS MADE OF.
  *
- * ── WHAT CHANGED, AND WHY ─────────────────────────────────────────────────
+ * ── THE SCAN ORDER IS THE SPEC, AND IT IS NOT NEGOTIABLE ──────────────────
  *
- * The card is now media-led with its controls ON the image, which is the
- * delivery-app pattern: a floating quick-add in the bottom-right corner, a
- * favourite in the top-right, status badges in the top-left. That buys back
- * roughly 48px of vertical space per card, which at two columns on a 360px
- * phone is the difference between seeing three rows and seeing two.
+ * The design system numbers it: image, handling, save, name, price and unit,
+ * availability, add. Every one of those is a question a customer asks in that
+ * order, and the card is laid out in that order rather than in the order the
+ * data happened to arrive.
  *
- * The quick-add no longer adds. It OPENS THE SHEET, and that is the important
- * change rather than a cosmetic one: the old button silently chose the default
- * cut and the minimum weight, which for a shop whose whole proposition is
- * "cut to order, billed on actual weight" is the two decisions that matter
- * being made for the customer. One tap still, but it now asks.
+ * ── WHAT MOVED OFF THE PHOTOGRAPH, AND WHY ────────────────────────────────
+ *
+ * The card used to carry three things on top of the image: a hot pill, a
+ * sold-out badge and a "nearly gone" badge, plus a floating quick-add
+ * overhanging its bottom edge. All of that is now BELOW the image, and there
+ * are two separate reasons.
+ *
+ * ⚠ THE FIRST IS LEGIBILITY. "Do not put important copy or pills over busy
+ * food photography." A translucent chip on a plate of shellfish is legible in
+ * the mock-up and unreadable on the one photograph where the highlights land
+ * under it, and "Sold out today" is exactly the sentence that must not be the
+ * one that fails.
+ *
+ * 🔴 THE SECOND IS A REAL DEFECT AND IT WAS SILENT. The card title carries a
+ * stretched link (`after:absolute after:inset-0`) so the whole card is a click
+ * target. That pseudo-element is absolutely positioned, has no `z-index`, and
+ * sits LATER IN THE DOM than the favourite and quick-add buttons, which are
+ * also absolutely positioned with no `z-index`. Painting order within a
+ * stacking context is tree order, so the invisible overlay was drawn ON TOP OF
+ * BOTH BUTTONS: tapping the heart or the plus opened the product page instead.
+ * Nothing catches this. It typechecks, it lints, it renders correctly in a
+ * screenshot, and it fails only under a finger.
+ *
+ * The favourite control now carries `relative z-10` to sit above the overlay,
+ * and the add control is placed after the link in the tree, where it is above
+ * it for free. **If you add another control to this card, one of those two is
+ * the pattern to copy.**
  *
  * ── WHAT DELIBERATELY DID NOT CHANGE ──────────────────────────────────────
  *
@@ -37,22 +59,6 @@ import { ItemSheet, type SheetProduct } from './item-sheet';
  * stops a customer comparing two prices at a glance. VARIANCE stays at 4 here
  * even though the marketing surfaces run at 7.
  */
-
-export function HotPill({ locale, compact = false }: { locale: Locale; compact?: boolean }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full bg-hot font-semibold uppercase tracking-[0.06em] text-hot-ink ${
-        compact ? 'px-2 py-0.5 text-[0.625rem]' : 'px-2.5 py-1 text-[0.6875rem]'
-      }`}
-      // The glyph is decoration; the words carry the meaning. Colour alone was
-      // never an accessible way to express a food-safety constraint.
-      title={t(locale, 'handling.hotExplainer')}
-    >
-      <FlameIcon size={compact ? 11 : 12} weight="fill" aria-hidden />
-      {t(locale, 'handling.hotPillLabel')}
-    </span>
-  );
-}
 
 export interface CardItem {
   readonly id: string;
@@ -112,9 +118,12 @@ export function ProductCard({
 
   return (
     <>
-      <article className="group relative flex h-full flex-col">
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-soft">
-          {item.imagePath !== null && (
+      <article className="group relative flex h-full flex-col gap-1">
+        {/* 1. The photograph, or an honest tile in its place. */}
+        <div className="relative mb-2 aspect-[4/3] w-full overflow-hidden rounded-md bg-soft">
+          {item.imagePath === null ? (
+            <FallbackTile name={item.name} handling={item.handling} locale={locale} />
+          ) : (
             <Image
               src={item.imagePath}
               alt=""
@@ -123,26 +132,20 @@ export function ProductCard({
               // Getting this wrong is how a 360px phone downloads a 1280px photo.
               sizes="(max-width: 639px) 50vw, (max-width: 1023px) 50vw, (max-width: 1279px) 33vw, 25vw"
               priority={priority}
-              className={`object-cover transition-transform duration-500 ease-brand group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100 ${
+              className={`object-cover transition-transform duration-(--duration-image) ease-brand group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100 ${
                 soldOut ? 'opacity-45 saturate-[0.4]' : ''
               }`}
             />
           )}
 
-          <div className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
-            {item.handling === 'COOKED_HOT' && <HotPill locale={locale} compact />}
-            {soldOut && (
-              <span className="rounded-full bg-surface/95 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-[0.06em] text-ink">
-                {t(locale, 'shop.soldOut')}
-              </span>
-            )}
-            {scarce && (
-              <span className="rounded-full bg-danger px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-[0.06em] text-danger-ink">
-                {t(locale, 'shop.nearlyGone')}
-              </span>
-            )}
-          </div>
+          {/*
+            3. Save. The one control the system allows on top of the image,
+            because it is a control rather than copy: it carries its meaning in
+            its shape and its `aria-pressed` state, not in a word that has to
+            stay readable over a photograph.
 
+            ⚠ `z-10` IS LOAD-BEARING. See the header of this file.
+          */}
           <button
             type="button"
             onClick={() => toggleFavourite(item.id)}
@@ -151,9 +154,9 @@ export function ProductCard({
               name: item.name,
             })}
             className="
-              absolute right-2 top-2 grid size-9 place-items-center rounded-full bg-surface/90
-              text-ink backdrop-blur-sm transition-transform duration-200 ease-brand
-              hover:bg-surface active:scale-[0.9]
+              absolute right-2 top-2 z-10 grid size-10 place-items-center rounded-full
+              bg-surface text-ink transition-transform duration-(--duration-fast)
+              ease-brand hover:bg-soft active:scale-[0.9]
             "
           >
             <HeartIcon
@@ -163,76 +166,86 @@ export function ProductCard({
               className={favourite ? 'text-danger' : 'text-muted'}
             />
           </button>
+        </div>
 
+        {/* 2. Handling, in words, before the name. */}
+        <HandlingLabel handling={item.handling} locale={locale} />
+
+        {/* 4. The name, and the link that makes the whole card a target. */}
+        <h3 className="!font-sans !text-body !leading-snug !tracking-normal !pb-0 font-semibold">
           {/*
-            The quick-add sits on the image, half-overlapping its bottom edge,
-            so it reads as belonging to the photo rather than to the text
-            block. 44px, because it is the most-tapped control on the page.
+            ⚠ Manrope, not Bodoni, and the overrides say so loudly. `h3`
+            carries the display face and a 28px floor from the base layer,
+            which is right for a section heading and wrong for a card title in
+            a 164px column. A didone at 16px has no hairlines left.
           */}
+          <Link
+            href={`/${locale}/p/${item.slug}`}
+            className="after:absolute after:inset-0 hover:underline hover:underline-offset-4"
+          >
+            {item.name}
+          </Link>
+        </h3>
+
+        {/*
+          5. Price AND UNIT. ⚠ NEVER A BARE AMOUNT.
+          "$18.99" against a pack of scallops and "$18.99" against a kilo of
+          cod are the same three characters and completely different offers.
+          Both modes state their unit, in the same position, so the column is
+          comparable at a glance.
+        */}
+        <p className="tnum text-body font-semibold">
+          {perKg
+            ? ratePerKg(item.unitPriceCents, locale)
+            : pricePerUnit(item.unitPriceCents, t(locale, 'product.unitPack'), locale)}
+        </p>
+
+        {/*
+          6. Availability, and 7. the add control, on one row. The add sits
+          last in the tree, which is what puts it above the stretched link
+          without needing a `z-index` of its own.
+        */}
+        <div className="mt-auto flex items-end justify-between gap-2 pt-1">
+          <p className="min-w-0 text-meta text-muted">
+            {soldOut ? (
+              <span className="font-semibold text-ink">{t(locale, 'shop.soldOut')}</span>
+            ) : (
+              <>
+                {perKg
+                  ? t(locale, 'product.estimated')
+                  : item.packMaxG !== null
+                    ? weight(item.packMaxG, locale)
+                    : weight(item.minOrderG, locale)}
+                {!notDeclared && (
+                  <>
+                    {' · '}
+                    <span className={scarce ? 'font-semibold text-ink' : undefined}>
+                      {scarce
+                        ? t(locale, 'shop.nearlyGone')
+                        : t(locale, 'shop.leftToday', {
+                            amount: weight(item.availableG ?? 0, locale),
+                          })}
+                    </span>
+                  </>
+                )}
+              </>
+            )}
+          </p>
+
           {!soldOut && (
             <button
               type="button"
               onClick={() => setSheetOpen(true)}
               aria-label={`${t(locale, 'product.addToBasket')}: ${item.name}`}
               className="
-                absolute -bottom-3 right-2 grid size-11 place-items-center rounded-full
-                bg-accent text-accent-ink shadow-[0_4px_14px_-4px_rgb(3_25_35/0.5)]
-                transition-transform duration-200 ease-brand hover:scale-[1.06]
-                active:scale-[0.94]
+                relative z-10 grid size-11 shrink-0 place-items-center rounded-full
+                bg-accent text-accent-ink transition-transform duration-(--duration-fast)
+                ease-brand hover:scale-[1.06] active:scale-[0.94]
               "
             >
               <PlusIcon size={19} weight="bold" aria-hidden />
             </button>
           )}
-        </div>
-
-        <div className="flex flex-1 flex-col gap-0.5 pt-3">
-          {/*
-            ⚠ `pr-12` IS ON THE TITLE ALONE. The quick-add overhangs the bottom
-            of the photo by half its height, so it covers the first line of
-            text and nothing below it. Reserving that gutter down the whole
-            block cost the price and the stock line 48px they had no reason to
-            give up, and at a 164px card that is the difference between
-            "9.75 kg left today" fitting on one line and wrapping onto two.
-          */}
-          <h3 className="!font-sans !text-body !leading-snug !tracking-normal !pb-0 pr-12 font-semibold">
-            {/*
-              ⚠ Manrope, not Bodoni, and the overrides say so loudly. `h3`
-              carries the display face and a 28px floor from the base layer,
-              which is right for a section heading and wrong for a card title
-              in a 164px column. A didone at 16px has no hairlines left.
-            */}
-            <Link
-              href={`/${locale}/p/${item.slug}`}
-              className="after:absolute after:inset-0 hover:underline hover:underline-offset-4"
-            >
-              {item.name}
-            </Link>
-          </h3>
-
-          <p className="tnum text-body font-semibold">
-            {perKg ? ratePerKg(item.unitPriceCents, locale) : money(item.unitPriceCents, locale)}
-          </p>
-
-          {/*
-            One meta line, dot-separated, in the delivery-app register: what
-            you are buying, and what is left. Never more than two facts.
-          */}
-          <p className="text-meta text-muted">
-            {perKg
-              ? t(locale, 'product.estimated')
-              : item.packMaxG !== null
-                ? weight(item.packMaxG, locale)
-                : weight(item.minOrderG, locale)}
-            {!notDeclared && !soldOut && (
-              <>
-                {' · '}
-                {t(locale, 'shop.leftToday', {
-                  amount: weight(item.availableG ?? 0, locale),
-                })}
-              </>
-            )}
-          </p>
         </div>
       </article>
 
@@ -245,13 +258,16 @@ export function ProductCard({
 
 /** Shaped like the real card, never a spinner. Used by `loading.tsx`. */
 export function ProductCardSkeleton() {
+  const bar = 'animate-pulse rounded-sm bg-soft motion-reduce:animate-none';
   return (
-    <div className="flex h-full flex-col">
-      <div className="aspect-[4/3] w-full animate-pulse rounded-md bg-soft motion-reduce:animate-none" />
-      <div className="flex flex-1 flex-col gap-2 pt-3">
-        <div className="h-4 w-4/5 animate-pulse rounded-sm bg-soft motion-reduce:animate-none" />
-        <div className="h-4 w-1/2 animate-pulse rounded-sm bg-soft motion-reduce:animate-none" />
-        <div className="h-3 w-2/3 animate-pulse rounded-sm bg-soft motion-reduce:animate-none" />
+    <div className="flex h-full flex-col gap-1">
+      <div className="mb-2 aspect-[4/3] w-full animate-pulse rounded-md bg-soft motion-reduce:animate-none" />
+      <div className={`h-3 w-1/3 ${bar}`} />
+      <div className={`h-4 w-4/5 ${bar}`} />
+      <div className={`h-4 w-1/2 ${bar}`} />
+      <div className="mt-auto flex items-end justify-between gap-2 pt-1">
+        <div className={`h-3 w-2/3 ${bar}`} />
+        <div className="size-11 shrink-0 animate-pulse rounded-full bg-soft motion-reduce:animate-none" />
       </div>
     </div>
   );

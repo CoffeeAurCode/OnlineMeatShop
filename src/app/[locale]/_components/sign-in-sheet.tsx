@@ -6,6 +6,7 @@ import { SpinnerGapIcon, XIcon } from '@phosphor-icons/react/dist/ssr';
 import { t, type Locale } from '@/i18n';
 import { useCustomerSession, type HistoryOrder } from '@/ui/customer-session';
 
+import { useDialog } from './dialog';
 import { closeSignIn, useSignInOpen } from './drawer-state';
 
 /**
@@ -74,13 +75,19 @@ function Sheet({ locale }: { locale: Locale }) {
     return () => clearTimeout(timer);
   }, [cooldown]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeSignIn();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
+  /*
+   * Escape, the Tab trap this sheet did not have at all, and the return.
+   *
+   * ⚠ THE RETURN IS THE ONE THAT CHANGES BEHAVIOUR AT CHECKOUT. This sheet is
+   * opened by pressing "Place order" while signed out, over a filled-in
+   * checkout page. Closing it has to put the customer back on that button,
+   * because the button is what they were trying to press.
+   *
+   * The `initial` argument is deliberately omitted: the step effect below
+   * already moves focus to the phone field and then to the code field, and
+   * passing a ref here would fight it on the first render.
+   */
+  useDialog(panel, closeSignIn);
 
   async function send(e?: React.FormEvent) {
     e?.preventDefault();
@@ -162,14 +169,29 @@ function Sheet({ locale }: { locale: Locale }) {
         type="button"
         onClick={closeSignIn}
         aria-label={t(locale, 'auth.close')}
-        className="absolute inset-0 animate-[fade-in_200ms_ease-out] bg-midnight/55 backdrop-blur-[2px]"
+        className="absolute inset-0 animate-[fade-in_var(--duration-standard)_ease-out] bg-midnight/60"
       />
 
       <div
         ref={panel}
+        /*
+          ⚠ THIS SHEET DID NOT ANIMATE, AND HAD NOT SINCE IT WAS WRITTEN. It
+          named `sheet-up`, a keyframe that has never existed in `globals.css`
+          — an unresolvable animation name is not an error in CSS, it simply
+          does nothing, so the panel appeared instantly while the other three
+          slid. It also carried `.elev`, which is the sticky-bar shadow rather
+          than the sheet one.
+
+          Both now match the item sheet and the address sheet exactly: same
+          keyframe, same duration token, same easing, same elevation. `rounded-md`
+          rather than `rounded-lg` for the same reason — §5 has two container
+          radii and `lg` is not one of them.
+        */
         className="
-          elev relative z-10 max-h-[92dvh] w-full max-w-[28rem] animate-[sheet-up_220ms_cubic-bezier(0.22,1,0.36,1)]
-          overflow-hidden rounded-t-lg bg-raised sm:rounded-lg
+          elev-sheet relative z-10 max-h-[92dvh] w-full max-w-[28rem]
+          animate-[slide-up_var(--duration-standard)_var(--ease-brand)]
+          overflow-hidden rounded-t-md bg-raised
+          sm:rounded-md sm:animate-[fade-in_var(--duration-standard)_ease-out]
         "
       >
         <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">

@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import Image from 'next/image';
 import { CheckIcon, XIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { t, type Locale } from '@/i18n';
 import { addLine } from '@/ui/cart';
-import { money, ratePerKg, weight } from '@/ui/format';
+import { money, pricePerUnit, ratePerKg, weight } from '@/ui/format';
 
+import { useDialog } from './dialog';
+import { displayEstimateCents } from './estimate';
+import { HandlingLabel, HotPill } from './handling';
 import { openCart } from './drawer-state';
 import { QtyStepper, WeightStepper } from './steppers';
 
@@ -74,54 +77,15 @@ export function ItemSheet({
   const prep = product.preps.find((p) => p.id === prepId) ?? null;
   const soldOut = product.availableG !== null && product.availableG < product.minOrderG;
 
-  useEffect(() => {
-    closeButton.current?.focus();
-  }, []);
+  // Escape, the Tab trap, and — new — putting focus back on the card's add
+  // button when the sheet closes. See `dialog.ts` for why the last of those
+  // was the half that was missing everywhere.
+  useDialog(panel, onClose, closeButton);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab' || panel.current === null) return;
-
-      const focusable = panel.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select, textarea',
-      );
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (first === undefined || last === undefined) return;
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  /*
-   * ⚠ DISPLAY ONLY, AND IT NEVER LEAVES THIS COMPONENT.
-   *
-   * The rule is that the client never computes a price. This is the one place
-   * that looks like a violation and is not, because of what happens to the
-   * number: it is rendered on a button and then discarded. The basket stores
-   * INTENT — a product, a weight, a cut — and `/api/quote` prices it from the
-   * catalog the moment the sheet closes, so the amount the customer actually
-   * sees anywhere that matters came from the server.
-   *
-   * `Math.ceil` matches `lineEst`, which rounds UP. Rounding differently here
-   * would show an estimate a cent under the one that appears in the drawer two
-   * seconds later, which reads as the shop quietly adding a cent.
-   */
-  const estimate = perKg
-    ? Math.ceil((product.unitPriceCents * grams) / 1000)
-    : product.unitPriceCents * qty;
+  // Display only, and it never leaves this component. `estimate.ts` carries
+  // the full reasoning and is shared with the product page, which shows the
+  // same amount on the same kind of button.
+  const estimate = displayEstimateCents(product.pricingMode, product.unitPriceCents, grams, qty);
 
   function add() {
     addLine({
@@ -147,22 +111,32 @@ export function ItemSheet({
         type="button"
         onClick={onClose}
         aria-label={t(locale, 'nav.close')}
-        className="absolute inset-0 animate-[fade-in_200ms_ease-out] bg-midnight/55 backdrop-blur-[2px]"
+        className="absolute inset-0 animate-[fade-in_var(--duration-standard)_ease-out] bg-midnight/60"
       />
 
       <div
         ref={panel}
         className="
           relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-md border
-          border-line bg-surface shadow-[0_-8px_40px_-12px_rgb(3_25_35/0.45)]
-          animate-[slide-up_260ms_var(--ease-brand)]
+          border-line bg-surface elev-sheet
+          animate-[slide-up_var(--duration-standard)_var(--ease-brand)]
           sm:max-h-[88dvh] sm:max-w-[32rem] sm:rounded-md
-          sm:animate-[fade-in_200ms_ease-out]
+          sm:animate-[fade-in_var(--duration-standard)_ease-out]
         "
       >
         <div className="relative shrink-0">
-          {product.imagePath !== null && (
-            <div className="relative aspect-[16/9] w-full overflow-hidden bg-soft">
+          <div className="relative aspect-[16/9] w-full overflow-hidden bg-soft">
+            {product.imagePath === null ? (
+              // The same honest tile the grid uses. A sheet with a blank grey
+              // band at the top reads as a photograph that failed to load,
+              // which is a different and worse message than "no photograph".
+              <div className="fallback-tile absolute inset-0">
+                <p className="text-lead font-semibold text-ink">{product.name}</p>
+                <p className="text-meta text-muted">
+                  {t(locale, `handling.${product.handling}`)}
+                </p>
+              </div>
+            ) : (
               <Image
                 src={product.imagePath}
                 alt=""
@@ -170,8 +144,8 @@ export function ItemSheet({
                 sizes="(max-width: 639px) 100vw, 32rem"
                 className="object-cover"
               />
-            </div>
-          )}
+            )}
+          </div>
           <button
             ref={closeButton}
             type="button"
@@ -179,8 +153,8 @@ export function ItemSheet({
             aria-label={t(locale, 'nav.close')}
             className="
               absolute right-3 top-3 grid size-10 place-items-center rounded-full
-              bg-surface/90 text-ink backdrop-blur-sm transition-transform duration-200
-              hover:bg-surface active:scale-[0.94]
+              bg-surface text-ink transition-transform duration-(--duration-fast)
+              hover:bg-soft active:scale-[0.94]
             "
           >
             <XIcon size={18} weight="bold" aria-hidden />
@@ -189,6 +163,20 @@ export function ItemSheet({
 
         <div className="grid gap-5 overflow-y-auto px-5 py-5">
           <div className="grid gap-2">
+            {/*
+              ⭐ THE HANDLING CLASS IS THE FIRST THING IN THE SHEET, above the
+              name. §8 orders it "name/rate/description, handling/availability"
+              and this reads one line earlier than that on purpose: hot food
+              constrains the delivery window for the WHOLE ORDER, so a customer
+              adding it has to meet that fact before they choose a weight, not
+              after. The three non-hot classes cost one quiet line to say the
+              same way.
+            */}
+            {product.handling === 'COOKED_HOT' ? (
+              <HotPill locale={locale} />
+            ) : (
+              <HandlingLabel handling={product.handling} locale={locale} />
+            )}
             <h2
               id="item-sheet-title"
               className="!font-sans !text-section !pb-0 !tracking-normal font-semibold"
@@ -198,7 +186,7 @@ export function ItemSheet({
             <p className="tnum text-lead font-semibold">
               {perKg
                 ? ratePerKg(product.unitPriceCents, locale)
-                : money(product.unitPriceCents, locale)}
+                : pricePerUnit(product.unitPriceCents, t(locale, 'product.unitPack'), locale)}
             </p>
             {product.description !== null && (
               <p className="max-w-[52ch] text-body text-muted">{product.description}</p>
@@ -215,7 +203,7 @@ export function ItemSheet({
                 {product.preps.map((p) => (
                   <label
                     key={p.id}
-                    className={`tap inline-flex cursor-pointer items-center rounded-full border px-4 text-meta font-semibold transition-colors duration-200 ${
+                    className={`tap inline-flex cursor-pointer items-center rounded-full border px-4 text-meta font-semibold transition-colors duration-(--duration-fast) ${
                       prepId === p.id
                         ? 'border-accent bg-accent text-accent-ink'
                         : 'border-line bg-raised hover:border-accent'
@@ -283,7 +271,7 @@ export function ItemSheet({
             className="
               tap-lg flex w-full items-center justify-center gap-3 rounded-sm bg-accent px-6
               text-body font-semibold text-accent-ink transition-[transform,background-color]
-              duration-200 ease-brand hover:bg-accent-hover active:scale-[0.99]
+              duration-(--duration-fast) ease-brand hover:bg-accent-hover active:scale-[0.99]
               disabled:pointer-events-none disabled:opacity-40
             "
           >

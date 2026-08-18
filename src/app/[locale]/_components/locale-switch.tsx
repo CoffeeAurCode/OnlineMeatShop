@@ -41,7 +41,7 @@ export function LocaleSwitch({ current }: { current: Locale }) {
             prefetch={false}
             hrefLang={locale}
             aria-current={active ? 'true' : undefined}
-            className={`grid min-h-9 min-w-10 place-items-center rounded-full px-2 text-[0.6875rem] font-bold uppercase tracking-[0.06em] transition-colors duration-200 ${
+            className={`grid min-h-9 min-w-10 place-items-center rounded-full px-2 text-[0.6875rem] font-bold uppercase tracking-[0.06em] transition-colors duration-(--duration-fast) ${
               active ? 'bg-accent text-accent-ink' : 'text-muted hover:text-ink'
             }`}
           >

@@ -13,12 +13,12 @@ import {
 } from '@/db/repositories/catalog';
 import { staticParamsOr } from '@/db/build-time';
 import { LOCALES, htmlLang, isLocale, t, type Locale } from '@/i18n';
-import { decimalString, money, ratePerKg, weight } from '@/ui/format';
+import { decimalString, money, pricePerUnit, ratePerKg, weight } from '@/ui/format';
 import { siteOrigin } from '@/ui/shop-config';
 
 import { AddToBasket } from '../../_components/add-to-basket';
 import { ProductGrid } from '../../_components/product-grid';
-import { HotPill } from '../../_components/product-card';
+import { FallbackTile, HandlingLabel, HotPill } from '../../_components/handling';
 
 /**
  * One product. The deep dive, not the only way to buy: the grid's card can add
@@ -151,8 +151,19 @@ export default async function ProductPage({
       </Link>
 
       <div className="mt-6 grid gap-8 lg:grid-cols-2 lg:gap-14">
-        <div className="relative aspect-4/3 overflow-hidden rounded-md bg-soft">
-          {item.imagePath !== null && (
+        {/*
+          ⚠ STICKY ON A LAPTOP, AND IT IS NOT DECORATION. The right column is
+          taller than a 4:3 photograph in a half-width track, so the media
+          column ended in about 250px of empty page. Pinning it means the
+          customer can still see the fish while they choose how it is cut,
+          which is the one decision this page exists for. `self-start` is what
+          lets a grid item be shorter than its row; without it the item
+          stretches and `sticky` has nothing to move within.
+        */}
+        <div className="relative aspect-4/3 self-start overflow-hidden rounded-md bg-soft lg:sticky lg:top-[6rem]">
+          {item.imagePath === null ? (
+            <FallbackTile name={name} handling={item.handling} locale={locale} />
+          ) : (
             <Image
               src={item.imagePath}
               alt={name}
@@ -170,9 +181,7 @@ export default async function ProductPage({
           {item.handling === 'COOKED_HOT' ? (
             <HotPill locale={locale} />
           ) : (
-            <p className="text-meta font-semibold uppercase tracking-[0.12em] text-muted">
-              {t(locale, `handling.${item.handling}`)}
-            </p>
+            <HandlingLabel handling={item.handling} locale={locale} />
           )}
 
           <h1 className="!text-display-xl">{name}</h1>
@@ -181,7 +190,7 @@ export default async function ProductPage({
             <p className="tnum text-section font-semibold">
               {item.pricing.mode === 'perKg'
                 ? ratePerKg(item.pricing.ratePerKg, locale)
-                : money(item.pricing.price, locale)}
+                : pricePerUnit(item.pricing.price, t(locale, 'product.unitPack'), locale)}
             </p>
             <p className="text-meta text-muted">
               {item.pricing.mode === 'perKg'
@@ -225,13 +234,14 @@ export default async function ProductPage({
           )}
 
           <AddToBasket
-            variant="page"
             locale={locale}
             product={{
               productId: item.id,
               slug: item.slug,
               name,
               pricingMode: item.pricing.mode,
+              unitPriceCents:
+                item.pricing.mode === 'perKg' ? item.pricing.ratePerKg : item.pricing.price,
               minOrderG,
               stepG: item.pricing.mode === 'perKg' ? item.pricing.step : minOrderG,
               availableG: item.availableG,

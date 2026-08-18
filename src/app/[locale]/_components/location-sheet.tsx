@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   CheckCircleIcon,
   CrosshairIcon,
@@ -20,6 +20,7 @@ import {
   type DropOff,
 } from '@/ui/location';
 
+import { useDialog, useScrollLock } from './dialog';
 import { closeLocationSheet, useLocationSheetOpen } from './drawer-state';
 
 /**
@@ -79,38 +80,18 @@ function Sheet({
   const set = <K extends keyof DeliveryLocation>(key: K, value: DeliveryLocation[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
 
-  useEffect(() => {
-    firstField.current?.focus();
-  }, []);
-
-  // Escape closes, and focus is trapped inside the panel. Both are what makes
-  // this a dialog rather than a div that looks like one.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        closeLocationSheet();
-        return;
-      }
-      if (e.key !== 'Tab' || panel.current === null) return;
-
-      const focusable = panel.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select, textarea',
-      );
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (first === undefined || last === undefined) return;
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
+  /*
+   * Escape, the Tab trap, and putting focus back where it came from.
+   *
+   * ⚠ THE LAST ONE MATTERS MORE HERE THAN ANYWHERE ELSE IN THE STOREFRONT,
+   * because this sheet is opened from FOUR places — the header pill, the hero,
+   * the basket strip and the checkout review card — and the checkout one is
+   * the expensive case. A customer who opens it to fix a typo in their street
+   * and closes it used to land back at the top of the document, having to walk
+   * a form they had already filled in.
+   */
+  useDialog(panel, closeLocationSheet, firstField);
+  useScrollLock();
 
   async function locate() {
     setLocating(true);
@@ -151,7 +132,7 @@ function Sheet({
         type="button"
         onClick={closeLocationSheet}
         aria-label={t(locale, 'nav.close')}
-        className="absolute inset-0 animate-[fade-in_200ms_ease-out] bg-midnight/55 backdrop-blur-[2px]"
+        className="absolute inset-0 animate-[fade-in_var(--duration-standard)_ease-out] bg-midnight/60"
       />
 
       {/*
@@ -164,10 +145,10 @@ function Sheet({
         ref={panel}
         className="
           relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-md border
-          border-line bg-surface shadow-[0_-8px_40px_-12px_rgb(3_25_35/0.45)]
-          animate-[slide-up_260ms_var(--ease-brand)]
+          border-line bg-surface elev-sheet
+          animate-[slide-up_var(--duration-standard)_var(--ease-brand)]
           sm:max-h-[86dvh] sm:max-w-[34rem] sm:rounded-md
-          sm:animate-[fade-in_200ms_ease-out]
+          sm:animate-[fade-in_var(--duration-standard)_ease-out]
         "
       >
         <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
@@ -200,7 +181,7 @@ function Sheet({
               className="
                 tap-lg inline-flex items-center justify-center gap-2 rounded-sm bg-accent px-5
                 text-body font-semibold text-accent-ink transition-[transform,background-color]
-                duration-200 ease-brand hover:bg-accent-hover active:scale-[0.99]
+                duration-(--duration-fast) ease-brand hover:bg-accent-hover active:scale-[0.99]
                 disabled:opacity-60
               "
             >
@@ -337,7 +318,7 @@ function Sheet({
             disabled={!canSave || !ready}
             className="
               tap-lg inline-flex items-center justify-center rounded-sm bg-accent px-6 text-body
-              font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover
+              font-semibold text-accent-ink transition-colors duration-(--duration-fast) hover:bg-accent-hover
               disabled:opacity-50
             "
           >
@@ -385,7 +366,7 @@ function DropOffChoice({
   const active = chosen === option;
   return (
     <label
-      className={`tap flex cursor-pointer items-center gap-3 rounded-sm border px-4 py-2 transition-colors duration-200 ${
+      className={`tap flex cursor-pointer items-center gap-3 rounded-sm border px-4 py-2 transition-colors duration-(--duration-fast) ${
         active ? 'border-accent bg-soft' : 'border-line bg-raised hover:border-accent'
       }`}
     >

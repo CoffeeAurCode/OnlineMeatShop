@@ -10,6 +10,7 @@ import { lineKey, removeLine, setLineWeight, useCart, type CartLine } from '@/ui
 import { money } from '@/ui/format';
 import { hasDestination, locationLabel, useDeliveryLocation } from '@/ui/location';
 
+import { useDialog, useScrollLock } from './dialog';
 import { closeCart, openLocationSheet, useCartOpen } from './drawer-state';
 import { WeightStepper } from './steppers';
 
@@ -65,8 +66,29 @@ interface QuoteResponse {
   businessDayId: string | null;
 }
 
+/**
+ * The gate. Renders nothing at all until the basket is opened, so the panel
+ * below genuinely mounts and unmounts.
+ */
 export function CartDrawer({ locale }: { locale: Locale }) {
-  const open = useCartOpen();
+  return useCartOpen() ? <Panel locale={locale} /> : null;
+}
+
+/**
+ * ⚠ THE PANEL IS A SEPARATE COMPONENT SO THAT IT MOUNTS AND UNMOUNTS, and
+ * that is not tidying.
+ *
+ * `useDialog` captures the invoking control on mount and puts focus back on
+ * unmount. The previous version gated the same work behind an early return
+ * INSIDE an effect on a component that stayed mounted forever, so there was no
+ * unmount for the restore to hang off and the drawer dropped focus onto
+ * `<body>` every time a customer closed it. On a keyboard that means the next
+ * Tab starts again at the skip link.
+ *
+ * It also means the quote request lives here rather than being guarded by
+ * `if (!open)`, which is one fewer condition to get wrong.
+ */
+function Panel({ locale }: { locale: Locale }) {
   const cart = useCart();
   const { location, ready } = useDeliveryLocation();
   const [fetchedQuote, setQuote] = useState<QuoteResponse | null>(null);
@@ -74,36 +96,56 @@ export function CartDrawer({ locale }: { locale: Locale }) {
   const panel = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
 
-  const signature = cart.lines.map((l) => `${lineKey(l)}@${l.requestedG}`).join('|');
-  const destinationKey =
-    location.lat !== null && location.lng !== null
-      ? `${location.lat},${location.lng}`
-      : location.postalCode.trim().toUpperCase();
+  useDialog(panel, closeCart, closeButton);
+  useScrollLock();
 
-  // Re-quote whenever the basket or the destination changes, and only while
-  // the drawer is open: a closed drawer has nothing to show and the request
-  // would be wasted.
+  /*
+   * 🔴 THE REQUEST BODY IS DERIVED AS A STRING, AND THE EFFECT DEPENDS ON THAT
+   * STRING. Getting this wrong makes the basket show skeletons for ever.
+   *
+   * It used to be built inside the effect, whose dependency array carried
+   * `cart.lines` and `location`. Both are OBJECTS: any re-render that replaces
+   * either identity re-runs the effect, and the cleanup calls
+   * `controller.abort()`. Measured over CDP: one request sent, one 200
+   * received, one `net::ERR_ABORTED`. The abort landed between the response
+   * headers and `.json()` resolving, so `setQuote` never ran, the `.catch`
+   * swallowed the `AbortError` by design, and every amount in the drawer
+   * stayed a pulsing grey bar with no error anywhere.
+   *
+   * ⚠ IT ONLY SURFACED WHEN THE PANEL STARTED MOUNTING ON OPEN. While the
+   * drawer was permanently mounted behind `if (!open) return`, the stores had
+   * settled long before anybody could press the basket, so the effect's first
+   * run was also its last. The dependencies were always wrong; the old mount
+   * timing hid it.
+   *
+   * A string cannot have an unstable identity. It also states the rule
+   * exactly: RE-ASK THE SERVER WHEN, AND ONLY WHEN, THE QUESTION CHANGES. Edit
+   * the buzzer code or the delivery notes and nothing re-quotes, because
+   * neither is in here.
+   */
+  const quoteBody = JSON.stringify({
+    lines: cart.lines.map((l) => ({
+      productId: l.productId,
+      requestedG: l.requestedG,
+      prepOptionId: l.prepOptionId,
+    })),
+    lat: location.lat,
+    lng: location.lng,
+    postalCode: location.postalCode.trim() === '' ? null : location.postalCode,
+    locale,
+  });
+
   useEffect(() => {
     // See `checkout-form.tsx`: the empty case is DERIVED below rather than
     // written back into state from inside the effect.
-    if (!open || cart.lines.length === 0) return;
+    if (cart.lines.length === 0) return;
     const controller = new AbortController();
 
     void fetch('/api/quote', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       signal: controller.signal,
-      body: JSON.stringify({
-        lines: cart.lines.map((l) => ({
-          productId: l.productId,
-          requestedG: l.requestedG,
-          prepOptionId: l.prepOptionId,
-        })),
-        lat: location.lat,
-        lng: location.lng,
-        postalCode: location.postalCode.trim() === '' ? null : location.postalCode,
-        locale,
-      }),
+      body: quoteBody,
     })
       .then((r) => (r.ok ? (r.json() as Promise<QuoteResponse>) : Promise.reject(new Error('quote'))))
       .then((q) => {
@@ -118,25 +160,7 @@ export function CartDrawer({ locale }: { locale: Locale }) {
       });
 
     return () => controller.abort();
-  }, [open, signature, destinationKey, locale, cart.lines, location]);
-
-  // Escape closes, and the body does not scroll behind the panel.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeCart();
-    };
-    document.addEventListener('keydown', onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    closeButton.current?.focus();
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = previous;
-    };
-  }, [open]);
-
-  if (!open) return null;
+  }, [quoteBody, cart.lines.length]);
 
   const empty = cart.lines.length === 0;
   // Derived, so removing the last line cannot leave a stale subtotal on screen.
@@ -156,7 +180,7 @@ export function CartDrawer({ locale }: { locale: Locale }) {
         type="button"
         aria-label={t(locale, 'nav.close')}
         onClick={closeCart}
-        className="absolute inset-0 bg-[rgb(3_25_35/0.55)] motion-safe:animate-[fade-in_200ms_ease-out]"
+        className="absolute inset-0 bg-[rgb(3_25_35/0.55)] motion-safe:animate-[fade-in_var(--duration-standard)_ease-out]"
       />
       <div
         ref={panel}
@@ -168,8 +192,27 @@ export function CartDrawer({ locale }: { locale: Locale }) {
           `100vh`: on iOS Safari the address bar makes `vh` taller than the
           visible viewport, which puts the checkout button under the chrome.
         */
-        className="absolute inset-y-0 right-0 flex h-[100dvh] w-full flex-col bg-surface shadow-2xl motion-safe:animate-[slide-in_260ms_var(--ease-brand)] lg:w-[420px]"
+        className="absolute inset-y-0 right-0 flex h-[100dvh] w-full flex-col bg-surface elev-drawer motion-safe:animate-[slide-in_var(--duration-standard)_var(--ease-brand)] lg:w-[420px]"
       >
+        {/*
+          ⭐ THE ONE POLITE ANNOUNCEMENT IN THE BASKET, and there is exactly one
+          on purpose. §12 asks for result counts, quote refreshes and basket
+          changes to be announced politely; three separate live regions in one
+          panel would talk over each other every time a stepper moves, because
+          removing a line changes the count AND re-quotes.
+
+          So it is a single sentence carrying both facts, `aria-live="polite"`
+          so it waits for a pause, and visually hidden because the same two
+          numbers are already on screen for everyone who can see them.
+        */}
+        <p aria-live="polite" className="sr-only">
+          {t(locale, cart.lines.length === 1 ? 'basket.itemCountOne' : 'basket.itemCount', {
+            count: cart.lines.length,
+          })}
+          {quote?.estTotalCents != null &&
+            `. ${t(locale, 'basket.total')} ${money(quote.estTotalCents, locale)}`}
+        </p>
+
         <header className="flex items-center justify-between border-b border-line px-4 py-4 sm:px-6">
           <h2 className="!text-display">{t(locale, 'basket.title')}</h2>
           <button
@@ -280,7 +323,7 @@ export function CartDrawer({ locale }: { locale: Locale }) {
                 <Link
                   href={`/${locale}/checkout`}
                   onClick={closeCart}
-                  className="tap-lg flex items-center justify-center gap-3 rounded-sm bg-accent px-5 text-lead font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover active:scale-[0.99]"
+                  className="tap-lg flex items-center justify-center gap-3 rounded-sm bg-accent px-5 text-lead font-semibold text-accent-ink transition-colors duration-(--duration-fast) hover:bg-accent-hover active:scale-[0.99]"
                 >
                   <span>{t(locale, 'basket.checkout')}</span>
                   {quote?.estTotalCents != null && (
@@ -409,7 +452,7 @@ function FreeDeliveryGap({
         aria-label={t(locale, 'basket.toFreeDelivery', { amount: money(gapCents, locale) })}
       >
         <div
-          className="h-full rounded-full bg-accent transition-[width] duration-500 ease-brand"
+          className="h-full rounded-full bg-accent transition-[width] duration-(--duration-standard) ease-brand"
           style={{ width: `${pct}%` }}
         />
       </div>

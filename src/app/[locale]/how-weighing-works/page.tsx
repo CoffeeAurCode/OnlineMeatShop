@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 
 import { isLocale, t, type Locale } from '@/i18n';
@@ -50,6 +51,25 @@ export default async function HowWeighingWorksPage({
     <div className="mx-auto max-w-[46rem] px-4 py-14 sm:px-6 sm:py-20">
       <h1 className="!text-display-xl">{t(locale, 'weighing.title')}</h1>
       <p className="mt-6 max-w-[56ch] text-lead text-muted">{t(locale, 'weighing.intro')}</p>
+
+      {/*
+        ⚠ ONE IMAGE, AND IT IS THE SHOP'S OWN COUNTER. §9 allows at most one
+        supporting image per major section here and warns against restyling
+        these explainers as promotional pages, so this is the only one on the
+        page: it shows the place the weighing actually happens, which is the
+        thing the words are about. Empty `alt` because the three steps below
+        say everything a screen reader needs.
+      */}
+      <div className="relative mt-10 aspect-[16/9] w-full overflow-hidden rounded-md bg-soft">
+        <Image
+          src="/sherbrooke/market-counter.webp"
+          alt=""
+          fill
+          sizes="(max-width: 767px) 100vw, 46rem"
+          priority
+          className="object-cover"
+        />
+      </div>
 
       {/*
         An ordered list, not three cards. The steps are a sequence and the

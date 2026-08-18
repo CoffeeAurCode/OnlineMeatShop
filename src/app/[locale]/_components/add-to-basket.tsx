@@ -5,24 +5,27 @@ import { CheckIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
 import type { Locale } from '@/i18n';
 import { t } from '@/i18n';
-import { addLine, lineKey, useCart } from '@/ui/cart';
+import { addLine } from '@/ui/cart';
+import { money } from '@/ui/format';
 
 import { openCart } from './drawer-state';
+import { displayEstimateCents } from './estimate';
 import { QtyStepper, WeightStepper } from './steppers';
 
 /**
- * Adding to the basket, in the two places it happens.
+ * Adding to the basket, from the product page.
  *
- * `variant="card"` is the one-tap control that sits on a product card in the
- * grid. `variant="page"` is the fuller control on the product page, with the
- * stepper and the cut preference.
+ * ⚠ THE `variant="card"` BRANCH IS GONE. It was the one-tap control that used
+ * to sit on a product card, and it chose the default cut and the minimum
+ * weight silently — the two decisions this shop exists to let a customer make.
+ * The card has opened the item sheet since the 2026-08-16 rebuild, so the
+ * branch had no caller; it is deleted rather than kept "in case", because a
+ * second way to add a line is a second definition of what a line IS, and
+ * FR-4 keys a line on product AND prep option.
  *
- * They are one component because they must agree about what a line IS: the
- * grid's quick-add and the product page's considered add have to produce the
- * same basket line, or a customer who used both ends up with two lines for one
- * fish. FR-4 keys a line on product AND prep option, so the quick-add on the
- * card deliberately adds the DEFAULT prep, never a null one that would later
- * merge with a chosen one.
+ * The sheet and this control therefore stay deliberately parallel: the same
+ * prep chips, the same steppers, and the same estimate on the same button.
+ * `estimate.ts` is shared so the two cannot disagree about the amount.
  */
 
 export interface AddableProduct {
@@ -30,6 +33,8 @@ export interface AddableProduct {
   readonly slug: string;
   readonly name: string;
   readonly pricingMode: 'pack' | 'perKg';
+  /** perKg: the rate per kilogram. pack: the fixed price of one pack. */
+  readonly unitPriceCents: number;
   /** perKg: the catalog minimum and step. pack: the declared weight. */
   readonly minOrderG: number;
   readonly stepG: number;
@@ -40,21 +45,22 @@ export interface AddableProduct {
 export function AddToBasket({
   product,
   locale,
-  variant,
 }: {
   product: AddableProduct;
   locale: Locale;
-  variant: 'card' | 'page';
 }) {
-  const cart = useCart();
   const [grams, setGrams] = useState(product.minOrderG);
   const [qty, setQty] = useState(1);
   const [prepId, setPrepId] = useState<string | null>(product.preps[0]?.id ?? null);
   const [justAdded, setJustAdded] = useState(false);
 
   const prep = product.preps.find((p) => p.id === prepId) ?? null;
-  const alreadyIn = cart.lines.some(
-    (l) => lineKey(l) === lineKey({ productId: product.productId, prepOptionId: prepId }),
+  // Display only. See `estimate.ts`; the server prices every basket.
+  const estimate = displayEstimateCents(
+    product.pricingMode,
+    product.unitPriceCents,
+    grams,
+    qty,
   );
 
   // Sold out today. `availableG === null` is NOT this: it means the shop has
@@ -71,39 +77,13 @@ export function AddToBasket({
       prepLabel: prep?.label ?? null,
     });
     setJustAdded(true);
-    // The card variant does not steal focus into the drawer: a customer
-    // quick-adding down a grid is mid-flow, and opening a panel over the grid
-    // on every tap is the single most irritating thing a shop can do. The page
-    // variant does open it, because adding there IS the end of the flow.
-    if (variant === 'page') openCart();
+    // Adding from the product page IS the end of the flow, so the drawer
+    // opens. The grid does not do this: quick-adding down a list of fish is
+    // mid-flow, and a panel over the grid on every tap is the single most
+    // irritating thing a shop can do — which is why the item sheet opens the
+    // drawer only after the customer has committed to a weight.
+    openCart();
     window.setTimeout(() => setJustAdded(false), 1600);
-  }
-
-  if (variant === 'card') {
-    return (
-      <button
-        type="button"
-        onClick={add}
-        disabled={soldOut}
-        aria-label={`${t(locale, 'product.addToBasket')}: ${product.name}`}
-        className="tap inline-flex w-full items-center justify-center gap-2 rounded-sm bg-accent px-3 text-meta font-semibold text-accent-ink transition-[transform,background-color] duration-200 ease-brand hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-40 active:scale-[0.98]"
-      >
-        {justAdded ? (
-          <CheckIcon size={16} weight="bold" aria-hidden />
-        ) : (
-          <PlusIcon size={16} weight="bold" aria-hidden />
-        )}
-        <span>
-          {justAdded
-            ? t(locale, 'product.added')
-            : soldOut
-              ? t(locale, 'shop.soldOut')
-              : alreadyIn
-                ? t(locale, 'product.addMore')
-                : t(locale, 'product.addToBasket')}
-        </span>
-      </button>
-    );
   }
 
   return (
@@ -117,7 +97,7 @@ export function AddToBasket({
             {product.preps.map((p) => (
               <label
                 key={p.id}
-                className={`tap inline-flex cursor-pointer items-center rounded-sm border px-4 text-body transition-colors duration-200 ${
+                className={`tap inline-flex cursor-pointer items-center rounded-sm border px-4 text-body transition-colors duration-(--duration-fast) ${
                   prepId === p.id
                     ? 'border-accent bg-accent text-accent-ink'
                     : 'border-line bg-raised hover:border-accent'
@@ -168,22 +148,40 @@ export function AddToBasket({
         )}
       </div>
 
+      {/*
+        ⭐ THE AMOUNT IS ON THE BUTTON, aligned right, exactly as it is in the
+        item sheet. The customer commits to a number rather than to a verb, and
+        the number sits beside their thumb rather than scrolled off the top.
+
+        ⚠ It is an ESTIMATE and the copy above says so. `product.aboutAmount`
+        wraps it in "about" for per-kilogram items, which is the whole point:
+        a bare figure on the button would read as the price.
+      */}
       <button
         type="button"
         onClick={add}
         disabled={soldOut}
-        className="tap-lg inline-flex items-center justify-center gap-2 rounded-sm bg-accent px-6 text-lead font-semibold text-accent-ink transition-[transform,background-color] duration-200 ease-brand hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-40 active:scale-[0.99]"
+        className="tap-lg flex w-full items-center justify-center gap-3 rounded-sm bg-accent px-6 text-lead font-semibold text-accent-ink transition-[transform,background-color] duration-(--duration-fast) ease-brand hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-40 active:scale-[0.99]"
       >
         {justAdded ? (
           <CheckIcon size={20} weight="bold" aria-hidden />
         ) : (
           <PlusIcon size={20} weight="bold" aria-hidden />
         )}
-        {justAdded
-          ? t(locale, 'product.added')
-          : soldOut
-            ? t(locale, 'shop.soldOut')
-            : t(locale, 'product.addToBasket')}
+        <span>
+          {justAdded
+            ? t(locale, 'product.added')
+            : soldOut
+              ? t(locale, 'shop.soldOut')
+              : t(locale, 'product.addToBasket')}
+        </span>
+        {!soldOut && !justAdded && (
+          <span className="tnum ml-auto">
+            {product.pricingMode === 'perKg'
+              ? t(locale, 'product.aboutAmount', { amount: money(estimate, locale) })
+              : money(estimate, locale)}
+          </span>
+        )}
       </button>
     </div>
   );

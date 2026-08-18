@@ -22,48 +22,128 @@ import type { Handling } from '@/domain/types';
  * a filter.
  */
 
-/** The counter rail on the landing page. Scroll-snaps on a phone. */
-export function CategoryRail({
+/**
+ * ⭐ THE COUNTER TILES ON THE HOME FEED. Figma parity, Phase 2.
+ *
+ * Modelled on the reference home screen's category block (`163:838`): two wide
+ * tiles carrying their label inside, then a row of small tiles carrying it
+ * underneath, all on the same soft ground at the 20px feed radius.
+ *
+ * ⚠ THIS REPLACED A ROW OF CIRCLES, and the circles were the problem. A circle
+ * crops a whole fish to its middle, gives a long counter name nowhere to sit,
+ * and scroll-snapped horizontally so the counters past the third were a
+ * gesture nobody makes. The reference's answer is a two-tier grid that fits
+ * six counters in one viewport without scrolling, which is the density Phase 2
+ * asks for.
+ *
+ * ⚠ THE TILES CARRY NO PROMO BADGE. The reference puts a green `Promo` pill on
+ * its Grocery tile; there is no promotion domain here and inventing one to
+ * fill the slot is exactly what the plan forbids.
+ */
+export function CategoryTiles({
   categories,
   locale,
 }: {
   categories: readonly CategoryView[];
   locale: Locale;
 }) {
+  const wide = categories.slice(0, 2);
+  /*
+   * Four small slots. If there are more counters than fit, the last slot
+   * becomes the way to the rest rather than silently dropping them — which is
+   * what the reference's `More` tile does, and the only reason it exists.
+   */
+  const overflows = categories.length > 6;
+  const small = categories.slice(2, overflows ? 5 : 6);
+
   return (
-    <ul
-      className="
-        -mx-4 flex min-w-0 snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2
-        [scrollbar-width:none] [&::-webkit-scrollbar]:hidden
-        sm:mx-0 sm:px-0
-        lg:grid lg:grid-cols-4 lg:overflow-visible
-        xl:grid-cols-8
-      "
-    >
-      {categories.map((c) => (
-        <li key={c.slug} className="w-[38vw] shrink-0 snap-start sm:w-[26vw] lg:w-auto">
-          <Link
-            href={`/${locale}/shop/${c.slug}`}
-            className="group grid gap-2 rounded-md focus-visible:outline-none"
-          >
-            <div className="relative aspect-square overflow-hidden rounded-full bg-soft">
-              {c.imagePath !== null && (
-                <Image
-                  src={c.imagePath}
-                  alt=""
-                  fill
-                  sizes="(max-width: 639px) 38vw, (max-width: 1023px) 26vw, (max-width: 1279px) 22vw, 11vw"
-                  className="object-cover transition-transform duration-500 ease-brand group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-                />
-              )}
-            </div>
-            <span className="text-center text-meta font-semibold leading-snug group-hover:underline group-hover:underline-offset-4">
-              {c.name}
-            </span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <div className="grid gap-3">
+      {wide.length > 0 && (
+        <ul className="grid grid-cols-2 gap-3">
+          {wide.map((c) => (
+            <li key={c.slug}>
+              <Link
+                href={`/${locale}/shop/${c.slug}`}
+                className="group relative flex h-28 items-end overflow-hidden rounded-lg bg-soft p-3 sm:h-32"
+              >
+                {c.imagePath !== null && (
+                  <Image
+                    src={c.imagePath}
+                    alt=""
+                    /*
+                      ⚠ SIZED AS A PERCENTAGE OF THE TILE, NOT IN PIXELS, and
+                      the label is bounded by the complement. A fixed 96px
+                      square against a `max-w-[60%]` label overlapped as soon
+                      as a counter name wrapped to two lines — "Salmon and
+                      tuna" ran underneath the photograph. 42 + 50 leaves 8%
+                      of clear ground between them at every tile width.
+                    */
+                    width={160}
+                    height={160}
+                    sizes="(max-width: 639px) 42vw, 20vw"
+                    className="pointer-events-none absolute right-0 top-1/2 aspect-square w-[42%] -translate-y-1/2 rounded-l-md object-cover transition-transform duration-(--duration-image) ease-brand group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                  />
+                )}
+                <span className="relative max-w-[50%] text-body font-semibold leading-tight">
+                  {c.name}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {(small.length > 0 || overflows) && (
+        <ul className="grid grid-cols-4 gap-3">
+          {small.map((c) => (
+            <li key={c.slug}>
+              <Link
+                href={`/${locale}/shop/${c.slug}`}
+                className="group grid gap-1.5 focus-visible:outline-none"
+              >
+                <div className="relative aspect-square overflow-hidden rounded-lg bg-soft">
+                  {c.imagePath !== null && (
+                    <Image
+                      src={c.imagePath}
+                      alt=""
+                      fill
+                      sizes="(max-width: 639px) 22vw, 12vw"
+                      className="object-cover transition-transform duration-(--duration-image) ease-brand group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                    />
+                  )}
+                </div>
+                <span className="text-center text-meta font-semibold leading-snug group-hover:underline group-hover:underline-offset-4">
+                  {c.name}
+                </span>
+              </Link>
+            </li>
+          ))}
+
+          {overflows && (
+            <li>
+              <Link
+                href={`/${locale}/shop`}
+                className="group grid gap-1.5 focus-visible:outline-none"
+              >
+                <span className="grid aspect-square place-items-center rounded-lg bg-soft text-lead font-bold leading-none">
+                  {/* The reference's ellipsis tile. A glyph, so it needs no icon. */}
+                  <span aria-hidden>···</span>
+                </span>
+                {/*
+                  ⚠ `shop.more`, NOT `home.viewAll`. "View everything" and
+                  "Tout voir" both wrap to two lines in a quarter-width tile
+                  and shove the row out of alignment with the three beside it.
+                  The reference's own word here is "More".
+                */}
+                <span className="text-center text-meta font-semibold leading-snug group-hover:underline group-hover:underline-offset-4">
+                  {t(locale, 'shop.more')}
+                </span>
+              </Link>
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -82,7 +162,7 @@ export function CategoryTabs({
       key={href}
       href={href}
       aria-current={active ? 'page' : undefined}
-      className={`inline-flex h-10 shrink-0 snap-start items-center whitespace-nowrap rounded-full border px-4 text-meta font-semibold transition-colors duration-200 ${
+      className={`inline-flex h-10 shrink-0 snap-start items-center whitespace-nowrap rounded-full border px-4 text-meta font-semibold transition-colors duration-(--duration-fast) ${
         active
           ? 'border-accent bg-accent text-accent-ink'
           : 'border-line bg-raised text-ink hover:border-accent'
@@ -192,9 +272,19 @@ export function FilterBar({
       href={href}
       scroll={false}
       aria-pressed={active}
-      className={`inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-meta transition-colors duration-200 ${
+      /*
+        ⚠ A SELECTED CHIP IS FILLED, NOT TINTED. It used to be cream with an
+        accent hairline, which on the cream section bands this strip sometimes
+        sits above is very nearly no change at all. §4 asks for "a filled
+        high-contrast treatment" for exactly that reason.
+
+        Three things move together — fill, border and text weight — so the
+        state survives greyscale, a dimmed phone and a customer who cannot
+        separate the two blues. Colour alone is never the signal here.
+      */
+      className={`inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-meta transition-colors duration-(--duration-fast) ${
         active
-          ? 'border-accent bg-soft font-semibold text-ink'
+          ? 'border-accent bg-accent font-semibold text-accent-ink'
           : 'border-line bg-raised text-ink hover:border-accent'
       }`}
     >

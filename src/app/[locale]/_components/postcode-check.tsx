@@ -90,7 +90,7 @@ export function PostcodeCheck({ locale }: { locale: Locale }) {
         <button
           type="submit"
           disabled={busy}
-          className="tap inline-flex items-center justify-center rounded-sm bg-accent px-6 text-body font-semibold text-accent-ink transition-colors duration-200 hover:bg-accent-hover disabled:opacity-60 active:scale-[0.98]"
+          className="tap inline-flex items-center justify-center rounded-sm bg-accent px-6 text-body font-semibold text-accent-ink transition-colors duration-(--duration-fast) hover:bg-accent-hover disabled:opacity-60 active:scale-[0.98]"
         >
           {busy ? t(locale, 'common.loading') : t(locale, 'delivery.checkCta')}
         </button>

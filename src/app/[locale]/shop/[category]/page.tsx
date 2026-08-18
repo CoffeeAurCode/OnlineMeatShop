@@ -111,10 +111,24 @@ export default async function CategoryPage({
         <DeliveryStrip locale={locale} />
       </header>
 
-      <div className="sticky top-[6.5rem] z-30 -mx-4 mt-4 grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-line bg-surface/95 px-4 py-3 backdrop-blur-sm sm:top-[4.5rem] sm:mx-0 sm:rounded-md sm:border sm:px-4">
+      <div className="sticky top-[6.5rem] z-30 -mx-4 mt-4 grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-line bg-raised px-4 py-3 sm:top-[4.5rem] sm:mx-0 sm:rounded-md sm:border sm:px-4">
         <CategoryTabs categories={categories} locale={locale} activeSlug={found.slug} />
         <FilterBar locale={locale} basePath={`/${locale}/shop/${found.slug}`} filters={filters} />
       </div>
+
+      {/*
+        ⚠ THE CLOSED-DAY NOTICE WAS ON `/shop` AND NOT HERE, which is the wrong
+        way round: a customer arriving from search lands on a CATEGORY page far
+        more often than on the whole counter, and without this they read an
+        empty grid as "this shop has no lobster" rather than as "the shop has
+        not opened today". §9 asks for the notice before the grid on both.
+      */}
+      {day === null && (
+        <p className="mt-6 rounded-md border border-line bg-soft px-4 py-3 text-body">
+          <strong className="font-semibold">{t(locale, 'shop.shopClosed')}</strong>{' '}
+          {t(locale, 'shop.shopClosedBody')}
+        </p>
+      )}
 
       <div className="mt-6">
         <ProductGrid

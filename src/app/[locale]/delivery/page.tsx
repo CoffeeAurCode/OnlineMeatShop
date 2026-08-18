@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -46,6 +47,22 @@ export default async function DeliveryPage({
     <div className="mx-auto max-w-[46rem] px-4 py-14 sm:px-6 sm:py-20">
       <h1 className="!text-display-xl">{t(locale, 'delivery.title')}</h1>
       <p className="mt-6 max-w-[58ch] text-lead text-muted">{t(locale, 'home.deliveryBody')}</p>
+
+      {/*
+        The provenance band, wide, as §6 assigns `atlantic-water` to. It is the
+        one image on the page: the postal-code check below is what this page is
+        for, and an explainer that leads with pictures buries its own control.
+      */}
+      <div className="relative mt-10 aspect-[16/6] w-full overflow-hidden rounded-md bg-soft">
+        <Image
+          src="/sherbrooke/atlantic-water.webp"
+          alt=""
+          fill
+          sizes="(max-width: 767px) 100vw, 46rem"
+          priority
+          className="object-cover"
+        />
+      </div>
 
       <div className="mt-10">
         <PostcodeCheck locale={locale} />

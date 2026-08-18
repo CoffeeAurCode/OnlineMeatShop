@@ -89,8 +89,30 @@
   --accent: var(--atlantic);
   --accent-hover: var(--midnight);
   --accent-ink: var(--ice);
-  --accent-solid: var(--atlantic);
-  --accent-solid-ink: var(--ice);
+
+  /*
+   * 🔴 THE BRAND GROUND DOES NOT FLIP, AND THIS TOKEN EXISTS BECAUSE THE ONE
+   * THAT DID WAS SHIPPING AN UNREADABLE FOOTER.
+   *
+   * It was called `--accent-solid` and it followed `--accent`: atlantic on
+   * light, CYAN on dark. Its three consumers are the home hero, the storefront
+   * footer and the order-tracking status card, and all three are the same
+   * thing — a large dark brand panel with light copy on it — so all three
+   * hard-code `text-white/75`-ish body text inside. In dark mode that became
+   * WHITE ON CYAN, about 1.7:1, on the hero paragraph, the whole footer and
+   * the sentence a customer opens the tracking page to read.
+   *
+   * ⚠ IT WAS INVISIBLE IN LIGHT MODE AND INVISIBLE TO THE GATES. Contrast is
+   * not something typecheck, lint or the 140-render responsive sweep measures,
+   * and nobody develops in dark mode. It was found by looking at a screenshot.
+   *
+   * Atlantic in BOTH schemes. On ice it is a dark panel; on midnight it is the
+   * same lift `--surface-raised` gives a card, which is the correct reading —
+   * these ARE raised panels. The brand is natively dark, so this is the one
+   * role that has no business swapping.
+   */
+  --brand-ground: var(--atlantic);
+  --brand-ground-ink: var(--ice);
 
   /*
    * ⭐ CORAL IS AN INTERACTION COLOUR AND NOTHING ELSE.
@@ -170,8 +192,8 @@
     --accent: var(--brand);
     --accent-hover: var(--glass);
     --accent-ink: var(--midnight);
-    --accent-solid: var(--brand);
-    --accent-solid-ink: var(--midnight);
+
+    /* ⚠ `--brand-ground` IS DELIBERATELY NOT REDEFINED HERE. See above. */
 
     --hot: var(--brand);
     --hot-ink: var(--midnight);
@@ -213,8 +235,8 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-ink: var(--accent-ink);
-  --color-accent-solid: var(--accent-solid);
-  --color-accent-solid-ink: var(--accent-solid-ink);
+  --color-brand-ground: var(--brand-ground);
+  --color-brand-ground-ink: var(--brand-ground-ink);
   --color-soft: var(--surface-soft);
   --color-hot: var(--hot);
   --color-hot-ink: var(--hot-ink);
@@ -247,9 +269,19 @@
   --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  /* One radius system. 6 interactive, 10 container, full ONLY the pill. */
+  /*
+   * One radius system. 6 interactive, 10 container, 20 app-feed tile, full
+   * ONLY the pill.
+   *
+   * ⚠ `--radius-lg` IS THE FIGMA PARITY RADIUS and is not a free choice. The
+   * reference file's own radii fall in two clusters — 20px on cards and tiles,
+   * 99-100px on controls — and its feed reads the way it does partly because
+   * every tile in it is the same generous 20. Measured, not guessed: see
+   * `08-A-figma-frame-inventory.md` §5 in the private parent repo.
+   */
   --radius-sm: 6px;
   --radius-md: 10px;
+  --radius-lg: 20px;
 
   /* The whole scale. Anything not here is an ad-hoc value and a bug. */
   --text-meta: 0.875rem;
@@ -273,6 +305,25 @@
 
   /* The landing page's own easing, so motion here feels like motion there. */
   --ease-brand: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /*
+   * ⚠ THREE DURATIONS, AND THERE IS DELIBERATELY NO FOURTH.
+   *
+   * §10 budgets exactly these. They exist as tokens rather than as numbers
+   * typed into each component because the failure mode is drift, not a wrong
+   * value: a 200ms here and a 300ms there, and the interface stops feeling
+   * like one object. Tailwind emits `duration-fast` / `duration-standard` /
+   * `duration-image` from them.
+   *
+   *   fast      colour, focus, pressed feedback. Below this it is not seen.
+   *   standard  dropdown, sheet, drawer, modal. A surface arriving.
+   *   image     product and category hover only, and NOTHING else. It is slow
+   *             enough to read as a photograph settling rather than as a UI
+   *             control lagging, which is why it may not be used on one.
+   */
+  --duration-fast: 150ms;
+  --duration-standard: 240ms;
+  --duration-image: 500ms;
 }
 
 @layer base {
@@ -377,16 +428,35 @@
   }
 }
 
+
 @layer utilities {
   /*
-   * The one shadow in the system, tinted rather than black, on the sticky bar
-   * and the dialog only. Elevation is not decoration.
+   * The one shadow in the system, tinted rather than black. §5 rations it to
+   * four places: drawers, sheets, the price-change dialog, and a sticky action
+   * that needs separating from the content scrolling under it. Elevation is
+   * not decoration, and everything else in this interface is flat surfaces,
+   * hairlines and space.
    */
   .elev {
     box-shadow: 0 -1px 0 var(--line), 0 -8px 24px -12px rgb(20 24 26 / 0.18);
   }
 
-  /* §11 — the console's floor for anything a thumb has to hit. */
+  /* The sheet and drawer shadow. Directional, so the panel reads as having
+     come from the edge it slid in from. */
+  .elev-sheet {
+    box-shadow: 0 -8px 40px -12px rgb(3 25 35 / 0.45);
+  }
+
+  .elev-drawer {
+    box-shadow: -8px 0 40px -12px rgb(3 25 35 / 0.45);
+  }
+
+  /*
+   * §7 — the floor for anything a thumb has to hit. The system asks for 44px
+   * everywhere and 48-56px on primary commerce actions; `.tap` is 48 rather
+   * than 44 because every control that carries it is on the buying path, and
+   * a single floor is one fewer decision at each call site.
+   */
   .tap {
     min-height: 48px;
   }
@@ -395,23 +465,28 @@
     min-height: 56px;
   }
 
+  /*
+   * ⚠ THE HEADER IS A RAISED SURFACE WITH ONE HAIRLINE, NOT GLASS.
+   *
+   * It was a translucent `backdrop-filter: blur(18px) saturate(1.15)` bar. The
+   * design system bans glassmorphism outright and asks for a "sticky raised
+   * header with one hairline", and the reason is legibility rather than taste:
+   * this bar carries the delivery address over a page of seafood photography,
+   * so at exactly the moment a customer scrolls a salmon fillet under it the
+   * text loses its background. An opaque raised surface cannot do that.
+   *
+   * It also costs nothing to paint, which matters on the cheap Android phones
+   * this shop's customers actually hold: a full-width blurred layer repaints
+   * on every scroll frame.
+   */
   .storefront-header {
-    background: color-mix(in srgb, var(--surface) 84%, transparent);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 64%, transparent);
-    backdrop-filter: blur(18px) saturate(1.15);
-    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    background: var(--surface-raised);
   }
 
-  .brand-mark {
-    box-shadow: inset 0 1px 0 rgb(252 253 253 / 0.22);
-    transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  a:hover .brand-mark,
-  a:focus-visible .brand-mark {
-    transform: rotate(-4deg) scale(1.04);
-  }
-
+  /*
+   * The two text-link affordances. Both draw a hairline in the accent and both
+   * animate `transform` only, so they run on the compositor.
+   */
   .nav-link {
     position: relative;
   }
@@ -426,63 +501,13 @@
     content: '';
     transform: scaleX(0);
     transform-origin: right;
-    transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform var(--duration-standard) var(--ease-brand);
   }
 
   .nav-link:hover::after,
   .nav-link:focus-visible::after {
     transform: scaleX(1);
     transform-origin: left;
-  }
-
-  .basket-link {
-    transition:
-      border-color 220ms ease,
-      background-color 220ms ease,
-      transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .basket-link:hover,
-  .basket-link:focus-visible {
-    border-color: var(--accent);
-    background: var(--surface-soft);
-    transform: translateY(-1px);
-  }
-
-  .basket-link:active {
-    transform: translateY(1px) scale(0.99);
-  }
-
-  .editorial-frame {
-    isolation: isolate;
-  }
-
-  .editorial-frame::before {
-    position: absolute;
-    z-index: 1;
-    inset: 14px;
-    border: 1px solid rgb(252 253 253 / 0.48);
-    border-radius: 6px;
-    content: '';
-    pointer-events: none;
-  }
-
-  .hero-stage {
-    background:
-      radial-gradient(circle at 18% 26%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 26rem),
-      var(--surface);
-  }
-
-  .hero-media {
-    box-shadow: 0 28px 80px -48px color-mix(in srgb, var(--accent) 42%, transparent);
-  }
-
-  .hero-media::after {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, transparent 72%, rgb(8 20 16 / 0.22));
-    content: '';
-    pointer-events: none;
   }
 
   .arrow-link {
@@ -500,7 +525,7 @@
     content: '';
     transform: scaleX(0.28);
     transform-origin: left;
-    transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform var(--duration-standard) var(--ease-brand);
   }
 
   .arrow-link:hover::after,
@@ -508,274 +533,41 @@
     transform: scaleX(1);
   }
 
-  .arrow-link > span,
-  .category-arrow {
-    transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
 
-  .arrow-link:hover > span,
-  .arrow-link:focus-visible > span,
-  .category-cell:hover .category-arrow,
-  .category-cell:focus-visible .category-arrow {
-    transform: translateX(0.35rem);
-  }
-
-  .arrow-link-light::after {
-    background: color-mix(in srgb, var(--accent-solid-ink) 76%, transparent);
-  }
-
-  .primary-link {
-    box-shadow: 0 18px 40px -26px color-mix(in srgb, var(--accent) 72%, transparent);
-    transition:
-      transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
-      background-color 240ms ease,
-      box-shadow 240ms ease;
-  }
-
-  .primary-link:hover,
-  .primary-link:focus-visible {
-    background: var(--accent-hover);
-    box-shadow: 0 22px 48px -24px color-mix(in srgb, var(--accent) 82%, transparent);
-    transform: translateY(-2px);
-  }
-
-  .primary-link:active {
-    transform: translateY(1px) scale(0.99);
-  }
-
-  .fact-marquee {
-    overflow: hidden;
-  }
-
-  .fact-marquee-track {
-    display: flex;
-    width: max-content;
-  }
-
-  .fact-marquee-group {
-    display: flex;
-    align-items: center;
-    min-width: max-content;
-  }
-
-  .fact-marquee-group span {
-    display: inline-flex;
-    align-items: center;
-    gap: 1.5rem;
-    padding: 1.15rem 2.25rem;
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-  }
-
-  .fact-marquee-group span::after {
-    width: 2.5rem;
-    height: 1px;
-    background: var(--accent);
-    content: '';
-  }
-
-  .process-media {
-    border: 1px solid rgb(252 253 253 / 0.28);
-  }
-
-  .category-cell::after {
-    position: absolute;
-    right: -12%;
-    bottom: -30%;
-    width: 52%;
-    aspect-ratio: 1;
+  /*
+   * ⭐ THE HONEST FALLBACK TILE. §6: "Do not use generated images as product
+   * photography." A generated fillet misrepresents the cut, the portion and
+   * the preparation the customer will actually receive, and a customer who
+   * ordered from a picture and got something else is a refund and a lost
+   * regular. So a product with no photograph gets a branded surface with its
+   * own name on it, and no fake photograph, gradient, texture or illustration.
+   */
+  .fallback-tile {
+    display: grid;
+    place-content: center;
+    gap: 0.375rem;
+    padding: 1rem;
     border: 1px solid var(--line);
-    border-radius: 50%;
-    content: '';
-    transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .category-cell:hover::after,
-  .category-cell:focus-visible::after {
-    transform: scale(1.14) translate(-5%, -5%);
-  }
-
-  .category-letter {
-    position: absolute;
-    top: -0.2em;
-    right: 0.02em;
-    color: var(--surface-soft);
-    font-size: clamp(7rem, 18vw, 15rem);
-    font-weight: 600;
-    line-height: 1;
-    letter-spacing: -0.09em;
-    user-select: none;
-  }
-
-  .delivery-callout {
-    position: relative;
-    isolation: isolate;
-  }
-
-  .delivery-callout::before,
-  .delivery-callout::after {
-    position: absolute;
-    z-index: -1;
-    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
-    border-radius: 50%;
-    content: '';
-    pointer-events: none;
-  }
-
-  .delivery-callout::before {
-    top: 50%;
-    left: -6rem;
-    width: 18rem;
-    aspect-ratio: 1;
-    transform: translateY(-50%);
-  }
-
-  .delivery-callout::after {
-    right: -4rem;
-    bottom: -8rem;
-    width: 22rem;
-    aspect-ratio: 1;
-  }
-
-  .product-tile {
-    position: relative;
-    isolation: isolate;
-    overflow: hidden;
-  }
-
-  .product-tile::after {
-    position: absolute;
-    z-index: -1;
-    right: -10%;
-    bottom: -18%;
-    width: 62%;
-    aspect-ratio: 1;
-    border: 1px solid var(--line);
-    border-radius: 50%;
-    content: '';
-  }
-
-  .product-mark {
-    position: absolute;
-    z-index: -1;
-    top: -0.18em;
-    right: 0.08em;
-    color: var(--surface-soft);
-    font-size: clamp(5rem, 14vw, 9rem);
-    font-weight: 600;
-    line-height: 1;
-    letter-spacing: -0.08em;
-    user-select: none;
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .hero-kicker,
-    .hero-copy > div,
-    .hero-copy > a {
-      animation: hero-enter 720ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    }
-
-    .hero-copy > div {
-      animation-delay: 80ms;
-    }
-
-    .hero-copy > a {
-      animation-delay: 150ms;
-    }
-
-    .fact-marquee-track {
-      animation: fact-marquee 34s linear infinite;
-    }
-
-    .fact-marquee:hover .fact-marquee-track {
-      animation-play-state: paused;
-    }
-
-    @supports (animation-timeline: view()) {
-      .reveal-section {
-        animation: section-reveal linear both;
-        animation-range: entry 8% cover 28%;
-        animation-timeline: view();
-      }
-
-      .process-media img {
-        animation: process-image linear both;
-        animation-range: entry 0% cover 42%;
-        animation-timeline: view();
-      }
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .fact-marquee-group[aria-hidden='true'] {
-      display: none;
-    }
-
-    .fact-marquee-track {
-      max-width: 100%;
-      overflow-x: auto;
-    }
-  }
-
-  @media (max-width: 767px) {
-    .fact-marquee-group span {
-      padding-inline: 1.25rem;
-    }
-
-    .delivery-callout::before {
-      left: -11rem;
-    }
-
-    .delivery-callout::after {
-      right: -13rem;
-    }
-  }
-}
-
-@keyframes hero-enter {
-  from {
-    transform: translateY(1.25rem);
-  }
-
-  to {
-    transform: translateY(0);
-  }
-}
-
-@keyframes fact-marquee {
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@keyframes section-reveal {
-  from {
-    transform: translateY(2.5rem);
-  }
-
-  to {
-    transform: translateY(0);
-  }
-}
-
-@keyframes process-image {
-  from {
-    transform: scale(1.05);
-  }
-
-  to {
-    transform: scale(1);
+    background: var(--surface-raised);
+    text-align: center;
   }
 }
 
 /*
- * The drawer's two entrances. Transform and opacity only, so they run on the
- * compositor, and both are inert under `prefers-reduced-motion` because the
- * global reduce block collapses every animation to 0.01ms.
+ * ── MOTION ────────────────────────────────────────────────────────────────
+ *
+ * §10 budgets three durations and nothing else, and every animation below
+ * moves `transform` or `opacity` only so it runs on the compositor. There is
+ * no animation library, no page transition, no scroll-driven reveal and no
+ * marquee: this is a transactional interface, and motion here is feedback
+ * rather than expression.
+ *
+ * ⚠ ALL OF IT IS INERT UNDER `prefers-reduced-motion`, because the base layer
+ * collapses every animation and transition to 0.01ms. Nothing below carries
+ * meaning that is only in the movement.
  */
+
+/* The drawer's two entrances. */
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -797,11 +589,9 @@
 }
 
 /*
- * The bottom sheet's entrance, on a phone. The same pair of properties as the
- * drawer above, for the same reason: transform and opacity run on the
- * compositor, and the global reduce block collapses both to 0.01ms.
+ * The bottom sheet's entrance, on a phone.
  *
- * Above `sm` the sheets become centred dialogs and use `fade-in` instead — a
+ * Above `sm` the sheets become centred dialogs and use `fade-in` instead: a
  * panel that slides up from the bottom of a 1440px display has travelled
  * further than the eye can follow and lands nowhere near where it started.
  */

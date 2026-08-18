@@ -85,7 +85,7 @@ export default async function ShopPage({
         <DeliveryStrip locale={locale} />
       </header>
 
-      <div className="sticky top-[6.5rem] z-30 -mx-4 mt-4 grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-line bg-surface/95 px-4 py-3 backdrop-blur-sm sm:top-[4.5rem] sm:mx-0 sm:rounded-md sm:border sm:px-4">
+      <div className="sticky top-[6.5rem] z-30 -mx-4 mt-4 grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-line bg-raised px-4 py-3 sm:top-[4.5rem] sm:mx-0 sm:rounded-md sm:border sm:px-4">
         <CategoryTabs categories={categories} locale={locale} activeSlug={null} />
         <FilterBar locale={locale} basePath={`/${locale}/shop`} filters={filters} />
       </div>

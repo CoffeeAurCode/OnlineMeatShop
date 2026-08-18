@@ -100,7 +100,7 @@ export default async function TrackOrderPage({
         customer opened this page to ask. Everything else on the screen is
         detail they may or may not want.
       */}
-      <header className="grid gap-2 rounded-md bg-accent-solid px-5 py-6 text-accent-solid-ink">
+      <header className="grid gap-2 rounded-md bg-brand-ground px-5 py-6 text-brand-ground-ink">
         <p className="text-meta uppercase tracking-[0.1em] text-white/70">
           {t(locale, 'order.statusHeading')}
         </p>

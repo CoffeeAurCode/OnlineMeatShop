@@ -111,7 +111,7 @@ const PAIRS: readonly { fg: string; bg: string; min: number; why: string }[] = [
   { fg: '--accent', bg: '--surface', min: 4.5, why: 'a link on the page' },
   { fg: '--accent', bg: '--surface-raised', min: 4.5, why: 'a link on a card' },
   { fg: '--accent-ink', bg: '--accent', min: 4.5, why: 'THE PRIMARY BUTTON' },
-  { fg: '--accent-solid-ink', bg: '--accent-solid', min: 4.5, why: 'the footer and the hero' },
+  { fg: '--brand-ground-ink', bg: '--brand-ground', min: 4.5, why: 'the footer and the hero' },
   { fg: '--hot-ink', bg: '--hot', min: 4.5, why: 'the hot kitchen pill' },
   { fg: '--danger', bg: '--surface', min: 4.5, why: 'an inline error' },
   { fg: '--danger', bg: '--danger-wash', min: 4.5, why: 'an error in its own box' },
@@ -148,6 +148,43 @@ describe.each(['light', 'dark'] as const)('the %s palette', (scheme) => {
     // can be reconsidered on purpose rather than dropped by accident.
     const ratio = contrast(resolve(map, '--focus'), resolve(map, '--surface'));
     if (scheme === 'light') expect(ratio).toBeLessThan(3);
+  });
+
+  /**
+   * 🔴 THE ASSERTION THAT WOULD HAVE CAUGHT THE UNREADABLE FOOTER, and the
+   * reason the existing pair did not.
+   *
+   * `--brand-ground-ink on --brand-ground` passed in both schemes the whole
+   * time it was broken, because the token pair was never the problem: when the
+   * ground flipped to cyan the ink flipped to midnight with it, and midnight
+   * on cyan is about 11:1.
+   *
+   * ⚠ WHAT ACTUALLY SHIPPED WAS `text-white/75`, HARD-CODED. The home hero,
+   * the storefront footer and the tracking status card all paint their body
+   * copy, their hairlines and their secondary labels in literal white with an
+   * alpha, because on a dark brand panel that is the obvious thing to write.
+   * So the real dependency is not "the ink token suits the ground", it is
+   * "WHITE suits the ground" — and nothing asserted that.
+   *
+   * 0.75 alpha over the ground is composited here rather than assumed, because
+   * `text-white/75` is what the markup says and 4.5:1 is a threshold the
+   * difference straddles.
+   */
+  it('🔴 keeps HARD-CODED WHITE readable on the brand ground, in both schemes', () => {
+    const ground = resolve(map, '--brand-ground');
+    const [bgR, bgG, bgB] = toRgb(ground);
+
+    for (const alpha of [1, 0.8, 0.75, 0.65]) {
+      const composited = `#${[bgR, bgG, bgB]
+        .map((c) => Math.round(255 * alpha + c * (1 - alpha)))
+        .map((c) => c.toString(16).padStart(2, '0'))
+        .join('')}`;
+      const ratio = contrast(composited, ground);
+      expect(
+        ratio,
+        `white at ${alpha} alpha on --brand-ground in ${scheme} is ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('keeps selected text readable on the selection highlight', () => {

@@ -156,7 +156,25 @@ export function weight(grams: number, locale: Locale): string {
  * the non-breaking space already sits inside the currency part on fr.
  */
 export function ratePerKg(cents: number, locale: Locale): string {
-  return `${money(cents, locale)}/kg`;
+  return pricePerUnit(cents, 'kg', locale);
+}
+
+/**
+ * `1899`, `"pack"` → `"$18.99/pack"`. The same shape as `ratePerKg`, for the
+ * unit that has to be translated.
+ *
+ * ⚠ A BARE AMOUNT ON A PRODUCT CARD IS A DEFECT, not a tidier layout. "$18.99"
+ * against a pack of scallops and "$18.99" against a kilo of cod are the same
+ * three characters and completely different offers, and the customer comparing
+ * them is scanning a two-column grid on a phone. The design system says it
+ * outright: `"$32.99 / kg"` or `"$18.99 / pack"`, never a bare amount.
+ *
+ * The unit WORD is passed in rather than looked up here. `kg` is the same in
+ * both locales and needs no dictionary; `pack` is `paquet` in French, and
+ * `src/ui/format.ts` is a formatter, not a second place translations live.
+ */
+export function pricePerUnit(cents: number, unit: string, locale: Locale): string {
+  return `${money(cents, locale)}/${unit}`;
 }
 
 /**

@@ -24,7 +24,7 @@ export function BasketButton({ locale }: { locale: Locale }) {
     <button
       type="button"
       onClick={openCart}
-      className="tap inline-flex items-center gap-2 rounded-sm border border-line bg-raised px-3 text-body font-semibold transition-[transform,border-color] duration-200 ease-brand hover:border-accent active:scale-[0.98]"
+      className="tap inline-flex items-center gap-2 rounded-sm border border-line bg-raised px-3 text-body font-semibold transition-[transform,border-color] duration-(--duration-fast) ease-brand hover:border-accent active:scale-[0.98]"
       aria-label={
         cart.ready && count > 0
           ? `${t(locale, 'nav.openBasket')}, ${t(locale, count === 1 ? 'basket.itemCountOne' : 'basket.itemCount', { count })}`

@@ -37,7 +37,7 @@ function StepButton({
       aria-label={label}
       // 44px minimum on both axes. This is a wet-handed, one-thumbed control
       // and the WCAG target-size floor is not a suggestion here.
-      className="grid size-11 shrink-0 place-items-center rounded-sm border border-line bg-raised text-ink transition-[transform,background-color,border-color] duration-200 ease-brand hover:border-accent disabled:pointer-events-none disabled:opacity-40 active:scale-[0.94]"
+      className="grid size-11 shrink-0 place-items-center rounded-sm border border-line bg-raised text-ink transition-[transform,background-color,border-color] duration-(--duration-fast) ease-brand hover:border-accent disabled:pointer-events-none disabled:opacity-40 active:scale-[0.94]"
     >
       {children}
     </button>

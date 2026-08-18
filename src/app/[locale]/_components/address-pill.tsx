@@ -27,41 +27,23 @@ import { openLocationSheet } from './drawer-state';
  * and the first client render show. Skipping that would flash "Set your
  * address" over a saved one on every page load.
  */
+/*
+ * ⚠ THE `hero` VARIANT IS GONE, with the hero that was its only caller.
+ * It was a large white-on-brand form for the home page's brand panel; Phase 2
+ * of the Figma parity plan deleted that panel, and the header pill — which was
+ * always visible on the same screen — is the one that survived. One control,
+ * one appearance.
+ */
 export function AddressPill({
   locale,
-  variant = 'header',
   full = false,
 }: {
   locale: Locale;
-  /** `hero` is the large form on the landing page. Same control, same store. */
-  variant?: 'header' | 'hero';
   /** Fills its container instead of capping. The phone row uses this. */
   full?: boolean;
 }) {
   const { location, ready } = useDeliveryLocation();
   const label = ready ? locationLabel(location) : null;
-
-  if (variant === 'hero') {
-    return (
-      <button
-        type="button"
-        onClick={openLocationSheet}
-        className="
-          tap-lg group flex w-full items-center gap-3 rounded-sm border border-white/25
-          bg-white/10 px-4 text-left text-body text-white backdrop-blur-[2px]
-          transition-colors duration-200 hover:border-white/60
-        "
-      >
-        <MapPinIcon size={20} weight="fill" aria-hidden className="shrink-0 text-brand" />
-        <span className="min-w-0 flex-1 truncate font-semibold">
-          {label ?? t(locale, 'location.heroPrompt')}
-        </span>
-        <span className="shrink-0 rounded-sm bg-brand px-3 py-1.5 text-meta font-semibold text-midnight">
-          {label === null ? t(locale, 'location.heroCta') : t(locale, 'location.change')}
-        </span>
-      </button>
-    );
-  }
 
   return (
     <button
@@ -69,7 +51,7 @@ export function AddressPill({
       onClick={openLocationSheet}
       className={`
         flex h-10 min-w-0 items-center gap-1.5 rounded-full border border-line bg-raised px-3
-        text-meta transition-colors duration-200 hover:border-accent
+        text-meta transition-colors duration-(--duration-fast) hover:border-accent
         ${full ? 'w-full' : 'max-w-[13rem] sm:max-w-[18rem]'}
       `}
       // The visible label is the street; the accessible name says what the

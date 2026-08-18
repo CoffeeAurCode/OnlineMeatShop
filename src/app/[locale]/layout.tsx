@@ -9,6 +9,7 @@ import { hasAddress, openingHoursSpecification } from '@/domain/shop';
 import { shopName, siteOrigin } from '@/ui/shop-config';
 
 import '../globals.css';
+import { BottomNav } from './_components/bottom-nav';
 import { CartDrawer } from './_components/cart-drawer';
 import { LocationSheet } from './_components/location-sheet';
 import { SignInSheet } from './_components/sign-in-sheet';
@@ -188,13 +189,20 @@ export default async function LocaleRootLayout({
           not hear about the sign-in would keep saying "sign in".
         */}
         <CustomerSessionProvider>
-          <div className="flex min-h-[100dvh] flex-col">
+          {/*
+            ⚠ THE BOTTOM PADDING IS NOT DECORATION — the tab bar is `fixed`, so
+            without it the bar sits on top of the last ~64px of every page, and
+            what it covers is the footer, which is where `delivery` and
+            `how-weighing-works` live. It clears at `lg`, where the bar hides.
+          */}
+          <div className="flex min-h-[100dvh] flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
             <ShopHeader locale={locale} />
             <main id="main" className="flex-1">
               {children}
             </main>
             <ShopFooter locale={locale} identity={identity} />
           </div>
+          <BottomNav locale={locale} />
           {/*
             Every overlay is mounted once at the root rather than per page, so
             opening one never unmounts the page behind it and a customer can
