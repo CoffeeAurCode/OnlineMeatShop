@@ -1,5 +1,6 @@
 import { smsConfigured } from '@/adapters/sms';
 import { listPartners } from '@/db/repositories/partners';
+import { portalOrigin } from '@/ui/shop-config';
 
 import { PartnerList } from '../_components/partner-list';
 import { Screen } from '../_components/shell';
@@ -16,6 +17,16 @@ import { Screen } from '../_components/shell';
  * rather than failing closed). That is a defensible default and an
  * indefensible surprise. Saying it here, on the screen that lists the people
  * who would not be receiving the messages, is what stops it being one.
+ *
+ * ⭐ THE SECOND BANNER IS THE SAME DEFECT CLASS AND COST A REAL DAY.
+ *
+ * With no `NEXT_PUBLIC_SITE_ORIGIN`, dispatch still works, still marks the
+ * order sent, and still texts the driver — it just silently drops the sign-in
+ * link, because a URL built on the `example.invalid` fallback would be a dead
+ * link and omitting the line is the honest failure. Omitting it QUIETLY was
+ * not: on 2026-08-17 every dispatch went out link-free and the shop found out
+ * from a driver. Both banners state the same thing — this deployment can do
+ * less than the screen implies, and here is the variable that fixes it.
  */
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +34,7 @@ export const dynamic = 'force-dynamic';
 export default async function PartnersPage() {
   const partners = await listPartners(false);
   const real = smsConfigured();
+  const portal = portalOrigin() !== null;
 
   return (
     <Screen title="Drivers" back={{ href: '/admin', label: 'Today' }}>
@@ -31,6 +43,15 @@ export default async function PartnersPage() {
           Text messages are NOT being sent from this deployment. Dispatch is recorded and written to
           the server log, but no driver receives anything. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
           and TWILIO_FROM_NUMBER to turn it on.
+        </p>
+      )}
+
+      {!portal && (
+        <p className="mt-4 rounded-sm border border-line bg-soft px-3 py-2 text-meta">
+          Dispatch texts from this deployment carry NO sign-in link. Drivers receive the job and can
+          deliver it, but cannot open their job list, see the rest of their day, or close a cash
+          order from their phone. Set NEXT_PUBLIC_SITE_ORIGIN to the site&rsquo;s address to turn it
+          on.
         </p>
       )}
 

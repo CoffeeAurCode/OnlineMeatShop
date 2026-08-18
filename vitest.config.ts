@@ -21,7 +21,14 @@ export default defineConfig({
      * it — which costs more than it catches, because the domain tests find
      * most defects.
      */
-    include: ['tests/domain/**/*.test.ts', 'tests/lint/**/*.test.ts', 'tests/db/**/*.test.ts'],
+    include: [
+      'tests/domain/**/*.test.ts',
+      'tests/lint/**/*.test.ts',
+      'tests/db/**/*.test.ts',
+      // Pure config predicates. `tests/ui` is env reads and string logic only —
+      // anything needing a browser or a database belongs in the other suites.
+      'tests/ui/**/*.test.ts',
+    ],
     exclude: ['node_modules/**', '.next/**', 'tests/integration/**', 'tests/concurrency/**'],
   },
 });

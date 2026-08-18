@@ -83,7 +83,7 @@ export function AdvanceButton({
             : reason === 'weighingIncomplete'
               ? 'Something on this order still has no weight.'
               : reason === 'notAssigned'
-                ? 'Give this order to a driver before sending it out.'
+                ? 'Nobody is assigned to this order. Pick a driver in the Driver section above, then send it out.'
                 : reason === 'cashRequired'
                   ? 'This is a cash order. It cannot be closed until the money is recorded.'
                   : reason === 'cashMismatch'

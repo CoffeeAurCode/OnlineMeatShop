@@ -31,6 +31,12 @@ import { SecondaryButton } from './shell';
  * ⚠ A SECOND TAP OF "SEND" IS A REPLAY, NOT AN ERROR. Same rule as the payment
  * capture. The server answers `replay: true` with the original time and this
  * shows that, rather than an error that would invite a third tap.
+ *
+ * ⚠ AND THE MIRROR IMAGE: UNASSIGNING AFTER A DISPATCH TAKES TWO TAPS. It is
+ * the one control here that destroys something already spent, it sits directly
+ * under the send button, and it fails LATER and ELSEWHERE — as "Give this order
+ * to a driver" on the advance button at the bottom of the screen. See the
+ * comment on `armed` below.
  */
 
 const REFUSALS: Record<string, string> = {
@@ -60,7 +66,17 @@ export function DispatchPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  /*
+   * ⭐ THE SECOND TAP EXISTS BECAUSE THE FIRST ONE UNDOES A TEXT THAT HAS
+   * ALREADY GONE, and only then. Before dispatch, taking an order off somebody
+   * costs nothing and asking about it is noise; after it, the same tap wipes
+   * the assignment AND the dispatch flag, and the console then refuses to send
+   * the order out with a message about assigning a driver — which is what
+   * happened to two live orders on 2026-08-17 and read as a broken button.
+   */
+  const [armed, setArmed] = useState(false);
 
   const finished = status === 'DELIVERED' || status === 'CANCELLED';
 
@@ -68,6 +84,8 @@ export function DispatchPanel({
     setBusy(true);
     setError(null);
     setNote(null);
+    setWarning(null);
+    setArmed(false);
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -168,6 +186,20 @@ export function DispatchPanel({
                 setNote(
                   `Sent by ${String(body.provider ?? 'unknown')} · ${String(body.segments ?? '?')} SMS segment(s).`,
                 );
+                /*
+                 * ⚠ THE JOB WENT; THE SIGN-IN LINK DID NOT. Said here because
+                 * the owner is the only person who can see both this screen
+                 * and the driver's phone, and because the alternative — which
+                 * ran in production for a day — is a driver who cannot open
+                 * their job list and a shop with no way to know why.
+                 */
+                if (body.jobLink === false) {
+                  setWarning(
+                    'That text carried no sign-in link, so the driver cannot open their job list, ' +
+                      'see the rest of their day, or close a cash order from their phone. This ' +
+                      'deployment has no site address set (NEXT_PUBLIC_SITE_ORIGIN).',
+                  );
+                }
                 if (typeof body.preview === 'string') setPreview(body.preview);
               })
             }
@@ -178,15 +210,29 @@ export function DispatchPanel({
           <button
             type="button"
             disabled={busy}
-            onClick={() => void post('/api/admin/assign', { orderId, partnerId: null })}
-            className="tap justify-self-start text-meta text-muted underline underline-offset-4 disabled:opacity-50"
+            onClick={() => {
+              if (assignment.dispatchedAtMs !== null && !armed) {
+                setArmed(true);
+                return;
+              }
+              void post('/api/admin/assign', { orderId, partnerId: null });
+            }}
+            className={`tap justify-self-start text-meta underline underline-offset-4 disabled:opacity-50 ${
+              armed ? 'font-semibold text-danger' : 'text-muted'
+            }`}
           >
-            Take this order off {assignment.partnerName}
+            {armed
+              ? `${assignment.partnerName} has already been texted this job. Tap again to take it off them`
+              : `Take this order off ${assignment.partnerName}`}
           </button>
         </div>
       )}
 
       {note !== null && <p className="mt-3 text-body text-muted">{note}</p>}
+
+      {warning !== null && (
+        <p className="mt-3 rounded-sm border border-line bg-soft px-3 py-2 text-meta">{warning}</p>
+      )}
 
       {preview !== null && (
         <details className="mt-3 rounded-sm border border-line bg-soft px-3 py-2">

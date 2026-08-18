@@ -13,29 +13,9 @@ import {
 } from '@/db/repositories/dispatch';
 import { markDispatched, orderForDispatch } from '@/db/repositories/orders';
 import { buildDispatchMessage, forbiddenFieldIn, type DispatchLine } from '@/domain/dispatch';
-import { shopName, siteOrigin } from '@/ui/shop-config';
+import { portalOrigin, shopName } from '@/ui/shop-config';
 
 import { guarded } from '../_guard';
-
-/**
- * The driver portal's absolute URL, or null when no origin is configured.
- *
- * ⚠ NULL RATHER THAN A RELATIVE PATH. A relative link in an SMS is not a link;
- * it is text that looks like one, and the driver taps it and nothing happens.
- * Omitting the line entirely is the honest failure.
- */
-function portalOrigin(): string | null {
-  const origin = siteOrigin();
-  /*
-   * ⚠ `siteOrigin()` NEVER RETURNS EMPTY — it falls back to
-   * `https://example.invalid`, which is a real string and a dead link. The
-   * placeholder has to be recognised here, or an unconfigured deployment texts
-   * every driver a URL that cannot resolve and the failure is invisible from
-   * the shop's side.
-   */
-  if (origin === '' || origin.includes('example.invalid')) return null;
-  return origin;
-}
 
 /**
  * Mint the driver's one-tap sign-in link for this dispatch.
@@ -47,6 +27,11 @@ function portalOrigin(): string | null {
  *
  * Returns null when there is no configured origin — the message then simply
  * omits the line rather than carrying a URL that cannot resolve.
+ *
+ * ⚠ A NULL HERE IS REPORTED TO THE CONSOLE (`jobLink` in the response), not
+ * swallowed. Omitting the line is correct; leaving the shop unaware that
+ * their driver was texted a job they cannot open is not — that state ran
+ * unnoticed in production for a full day on 2026-08-17.
  */
 async function mintJobLink(
   partnerId: string,
@@ -129,6 +114,14 @@ export async function POST(request: Request) {
       hot: l.hot,
     }));
 
+    /*
+     * ⚠ MINTED BEFORE THE MESSAGE IS BUILT, so its absence can be REPORTED as
+     * well as rendered. Inlined into the object below, the one fact the shop
+     * needs — "that driver cannot open their job list" — existed only inside
+     * an argument expression and reached nobody.
+     */
+    const jobUrl = await mintJobLink(snapshot.partnerId, orderId, Date.now());
+
     const message = buildDispatchMessage({
       reference: snapshot.reference,
       shopName: shopName(),
@@ -157,7 +150,7 @@ export async function POST(request: Request) {
        * sitting in a forwardable message. The link solves the same problem
        * without either failure — and dies the moment it is used.
        */
-      jobUrl: await mintJobLink(snapshot.partnerId, orderId, Date.now()),
+      jobUrl,
     });
 
     const forbidden = forbiddenFieldIn(message.text);
@@ -207,6 +200,17 @@ export async function POST(request: Request) {
       replay: false,
       provider: sender.name,
       segments: message.segments,
+      /**
+       * Whether the text carried the driver's sign-in link.
+       *
+       * ⚠ FALSE IS NOT AN ERROR AND IS NOT SILENCE EITHER. The job still went
+       * and the driver can still deliver it from the message alone; they just
+       * cannot open the portal, close a cash order or see the rest of their
+       * day. The console says so rather than letting a deployment quietly
+       * dispatch link-free jobs for a day, which is what happened on
+       * 2026-08-17. Cause: no `NEXT_PUBLIC_SITE_ORIGIN`.
+       */
+      jobLink: jobUrl !== null,
       /**
        * Returned so the console can show what actually went out. The owner is
        * the only person who ever sees both this and the driver's phone, and

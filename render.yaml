@@ -115,6 +115,24 @@ services:
         sync: false
       - key: TWILIO_FROM_NUMBER
         sync: false
+      # 🔴 ADDED TO THE DASHBOARD 2026-08-18, AND IT IS LOAD-BEARING.
+      # The app's own origin, e.g. https://<service>.onrender.com. Without it
+      # `portalOrigin()` is null and every dispatch SMS goes out with the
+      # driver's sign-in link SILENTLY OMITTED — which it did, in production,
+      # for a day. `sync: false` because it changes when the real domain
+      # arrives, not because it is a secret.
+      #
+      # ⚠ ALSO BAKED INTO THE BUILD. robots.txt and sitemap.xml are
+      # prerendered, so changing this value needs a REDEPLOY and not just a
+      # restart, or the SEO surfaces keep pointing at example.invalid.
+      - key: NEXT_PUBLIC_SITE_ORIGIN
+        sync: false
+      # The remaining presentation variables (NEXT_PUBLIC_SHOP_NAME, the shop's
+      # own address, DELIVERY_TOWNS, SHOP_OPENING_HOURS) are documented in
+      # `.env.example` and are NOT listed here, because this file mirrors what
+      # the dashboard actually has and they are not set yet. Unset, each shows
+      # a deliberately implausible fallback — the site currently calls itself
+      # "Test Butcher Ltd".
       - key: SHOP_TIMEZONE
         sync: false
       - key: SHOP_CURRENCY

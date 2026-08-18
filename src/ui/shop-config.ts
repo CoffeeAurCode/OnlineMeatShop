@@ -76,7 +76,24 @@ export function openingHours(): readonly string[] {
     .filter((s) => s !== '');
 }
 
-/** True once the deployment has been given the real shop's details. */
-export function isConfigured(): boolean {
-  return process.env.NEXT_PUBLIC_SHOP_NAME !== undefined && process.env.NEXT_PUBLIC_SITE_ORIGIN !== undefined;
+/**
+ * The origin to build a real, tappable link from — or null when there is none.
+ *
+ * ⚠ NULL RATHER THAN A STRING, and every caller must handle it. `siteOrigin()`
+ * NEVER returns empty: unconfigured, it returns `https://example.invalid`,
+ * which is a perfectly well-formed URL and a dead link. Anything that puts an
+ * origin in front of a customer or a driver has to be able to tell the
+ * difference, and a `string` cannot say "I do not know".
+ *
+ * 🔴 THIS COST A LIVE DISPATCH ON 2026-08-17. `NEXT_PUBLIC_SITE_ORIGIN` was
+ * never set on Render, so every driver SMS went out with the sign-in line
+ * silently omitted, and nothing anywhere said so. Omitting the line is still
+ * the right behaviour — a URL that cannot resolve is worse — but the SILENCE
+ * was the defect. Callers now report it: see `/api/admin/dispatch` and the
+ * banner on `/admin/partners`.
+ */
+export function portalOrigin(): string | null {
+  const origin = siteOrigin();
+  if (origin === '' || origin.includes('example.invalid')) return null;
+  return origin;
 }
