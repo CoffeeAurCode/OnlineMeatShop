@@ -7,6 +7,7 @@ import { CheckIcon, XIcon } from '@phosphor-icons/react/dist/ssr';
 import { t, type Locale } from '@/i18n';
 import { addLine } from '@/ui/cart';
 import { money, pricePerUnit, ratePerKg, weight } from '@/ui/format';
+import { isPainted } from '@/ui/art';
 
 import { useDialog } from './dialog';
 import { displayEstimateCents } from './estimate';
@@ -142,7 +143,25 @@ export function ItemSheet({
                 alt=""
                 fill
                 sizes="(max-width: 639px) 100vw, 32rem"
-                className="object-cover"
+                /*
+                  ⭐ A PAINTING IS CONTAINED HERE, NOT COVERED, and this is the
+                  one place in the app where that is true. The sheet's band is
+                  16:9 and the artwork is 4:3, so covering would throw away a
+                  quarter of the picture off the top and bottom — on a sheet
+                  whose whole job is to show the customer what they are adding.
+
+                  Containing normally costs a letterbox, but not here: the
+                  paintings are made on `--surface` and `.painted` paints that
+                  same colour behind them, so the bars are the paper. The result
+                  is the entire artwork with no visible frame in light mode, and
+                  a correctly-dimmed one in dark.
+
+                  ⚠ A PHOTOGRAPH MUST STILL COVER. Its background is whatever
+                  the camera saw, so containing one really would letterbox.
+                */
+                className={
+                  isPainted(product.imagePath) ? 'painted object-contain' : 'object-cover'
+                }
               />
             )}
           </div>

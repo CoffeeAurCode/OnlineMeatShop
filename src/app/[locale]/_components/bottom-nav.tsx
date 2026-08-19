@@ -41,9 +41,8 @@ import { openCart, useCartOpen } from './drawer-state';
  * which is what the reference does too — its `Baskets` tab opens a sheet.
  *
  * ⚠ HIDDEN FROM `lg` UP, AND ADDITIVE BELOW IT. The header keeps every
- * destination it had; this bar does not replace it. The footer still carries
- * `delivery` and `how-weighing-works`, which have no tab, so the page must
- * stay scrollable past this bar — hence the bottom padding in the layout.
+ * destination it had; this bar does not replace it. The page content must
+ * remain clear of this fixed bar, hence the bottom padding in the layout.
  */
 
 export function BottomNav({ locale }: { locale: Locale }) {

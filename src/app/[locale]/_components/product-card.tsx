@@ -7,6 +7,7 @@ import { HeartIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
 import type { Locale } from '@/i18n';
 import { t } from '@/i18n';
+import { isPainted, thumb } from '@/ui/art';
 import { isFavourite, toggleFavourite, useFavourites } from '@/ui/favourites';
 import { pricePerUnit, ratePerKg, weight } from '@/ui/format';
 
@@ -148,8 +149,19 @@ export function ProductCard({
               // Getting this wrong is how a 360px phone downloads a 1280px photo.
               sizes="(max-width: 639px) 50vw, (max-width: 1023px) 50vw, (max-width: 1279px) 33vw, 25vw"
               priority={priority}
+              /*
+                ⚠ THE SOLD-OUT TREATMENT FORKS ON WHETHER THIS IS A PAINTING,
+                and it is not a style preference: `.painted` and Tailwind's
+                `saturate-*` both compile to `filter`, so an element may carry
+                one or the other and never both. See `.painted-out` in
+                `globals.css` for what goes wrong when that is ignored.
+              */
               className={`object-cover transition-transform duration-(--duration-image) ease-brand group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100 ${
-                soldOut ? 'opacity-45 saturate-[0.4]' : ''
+                isPainted(item.imagePath)
+                  ? `painted ${soldOut ? 'painted-out' : ''}`
+                  : soldOut
+                    ? 'opacity-45 saturate-[0.4]'
+                    : ''
               }`}
             />
           )}
@@ -377,13 +389,25 @@ export function ProductRow({
               <FallbackTile name={item.name} handling={item.handling} locale={locale} compact />
             ) : (
               <Image
-                src={item.imagePath}
+                /*
+                  ⭐ THE SMALL VARIANT, NOT THE CARD'S. `images.unoptimized` is
+                  set, so `next/image` resizes nothing and `sizes` cannot save a
+                  byte — this row drew a 96px square and was handed the full
+                  file. On a banded catalog page that is one oversized download
+                  per product, all of it thrown away by the rasteriser. See
+                  `src/ui/art.ts`.
+                */
+                src={thumb(item.imagePath)}
                 alt=""
                 fill
                 sizes="(max-width: 639px) 96px, 112px"
                 priority={priority}
                 className={`object-cover transition-transform duration-(--duration-image) ease-brand group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100 ${
-                  soldOut ? 'opacity-45 saturate-[0.4]' : ''
+                  isPainted(item.imagePath)
+                    ? `painted ${soldOut ? 'painted-out' : ''}`
+                    : soldOut
+                      ? 'opacity-45 saturate-[0.4]'
+                      : ''
                 }`}
               />
             )}

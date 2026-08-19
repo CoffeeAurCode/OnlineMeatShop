@@ -15,6 +15,7 @@ import { staticParamsOr } from '@/db/build-time';
 import { LOCALES, htmlLang, isLocale, t, type Locale } from '@/i18n';
 import { decimalString, money, pricePerUnit, ratePerKg, weight } from '@/ui/format';
 import { siteOrigin } from '@/ui/shop-config';
+import { isPainted } from '@/ui/art';
 
 import { AddToBasket } from '../../_components/add-to-basket';
 import { ProductGrid } from '../../_components/product-grid';
@@ -172,7 +173,9 @@ export default async function ProductPage({
               // are honest: full width on a phone, half above 1024.
               sizes="(max-width: 1023px) 100vw, 50vw"
               priority
-              className="object-cover"
+              // `object-cover` is lossless here: the container is 4:3 and so is
+              // every painting, so nothing is actually cropped.
+              className={`object-cover ${isPainted(item.imagePath) ? 'painted' : ''}`}
             />
           )}
         </div>

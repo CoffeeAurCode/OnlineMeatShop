@@ -38,6 +38,9 @@ coverage/
 dumps/
 
 # OS / editor
+# Machine-local dev-server config: it pins an absolute node path, so it is
+# right on exactly one machine and wrong on every other one and in CI.
+.claude/launch.json
 .DS_Store
 Thumbs.db
 Desktop.ini

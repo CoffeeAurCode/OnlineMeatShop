@@ -20,44 +20,34 @@
     "skipToContent": "Skip to content",
     "tagline": "Fresh fish, delivered"
   },
+  "voice": {
+    "start": "Order with your voice",
+    "stop": "Stop listening",
+    "listening": "Listening. Say a product and quantity, for example 2 kg salmon.",
+    "searching": "Looking for {query}",
+    "unavailable": "Voice search is not supported in this browser. You can still type your search.",
+    "permissionDenied": "Microphone access is blocked. Allow it in your browser settings and try again.",
+    "noSpeech": "I did not hear a product. Tap the microphone and try again.",
+    "noMicrophone": "No working microphone was found on this device.",
+    "failed": "Voice search did not start. Try again or type your search.",
+    "noMatch": "I could not find that product. Try saying its name again.",
+    "ambiguous": "I found {count} matching products. Choose the one you meant below.",
+    "usePackCount": "{name} is sold by the pack. Say a number of packs instead of a weight.",
+    "invalidQuantity": "That quantity is not available for {name}. Choose one of the amounts shown on its product page.",
+    "insufficientStock": "There is not enough {name} left today for that quantity.",
+    "onePack": "1 pack",
+    "packCount": "{count} packs",
+    "added": "Added {amount} of {name} to your basket.",
+    "addedWithPrep": "Added {amount} of {name} to your basket with the default preparation: {prep}."
+  },
   "home": {
     "heroHeading": "Today's catch, at your door",
     "heroBody": "Cut to order and weighed after cutting. You pay the exact weight, never a rounded guess.",
     "categoriesHeading": "Shop by counter",
     "viewAll": "View everything",
-    "weighingHeading": "You pay for what you get",
-    "weighingBody": "Fish is cut to order, so the weight is never exact until it is on the scale. We show an estimate while you shop and charge the weight we actually cut.",
-    "deliveryHeading": "Delivered across the island",
-    "deliveryBody": "Home delivery only, within our local radius. Choose the window that suits you at checkout.",
     "todayHeading": "On the counter today",
-    "promise": {
-      "weighed": {
-        "title": "Billed on actual weight",
-        "body": "You see an estimate, we charge what the scale says."
-      },
-      "sameDay": {
-        "title": "Choose your window",
-        "body": "Two-hour delivery windows, booked at checkout."
-      },
-      "radius": {
-        "title": "Delivered from our door",
-        "body": "One shop, one van, a local radius."
-      }
-    },
-    "deliveryFact": {
-      "area": {
-        "title": "Home delivery only",
-        "body": "One shop, one van, a local radius. Set your address and the site tells you whether we reach you before you build a basket."
-      },
-      "fee": {
-        "title": "The fee is exact, not a guess",
-        "body": "Once we know where you are, every screen carries the real delivery fee and how much more earns free delivery."
-      },
-      "hot": {
-        "title": "Hot kitchen food picks the window",
-        "body": "If anything in your basket is cooked to order, only a delivery window that can carry it is offered."
-      }
-    }
+    "deliveryHeading": "We come to you",
+    "deliveryBody": "Home delivery only, inside our own radius. Put in your address and we will tell you straight away whether we reach you, before you choose anything."
   },
   "shop": {
     "title": "The counter",
@@ -293,15 +283,6 @@
     "step3Heading": "You pay the exact weight",
     "step3Body": "Once your order is cut and weighed we charge the exact amount, and never more than the maximum we held."
   },
-  "footer": {
-    "heading": "Cut here. Delivered nearby.",
-    "body": "Home delivery only, within our local radius. Everything is cut the day it goes out.",
-    "priceNote": "Prices in Canadian dollars. Per-kilogram prices stay estimated until your order is cut and weighed.",
-    "rights": "All rights reserved.",
-    "hours": "Opening hours",
-    "address": "Come and see us",
-    "dayRange": "{from} to {to}"
-  },
   "common": {
     "loading": "Loading",
     "back": "Back",
@@ -325,6 +306,7 @@
     "needOne": "Share your location or enter a postal code so we can check we deliver there.",
     "forget": "Forget this address",
     "setAddress": "Set your address",
+    "headerPrompt": "Tell us where to deliver",
     "changeFrom": "Change delivery address, currently {address}",
     "change": "Change",
     "served": "We deliver to you. Delivery is {fee}.",
