@@ -20,44 +20,34 @@
     "skipToContent": "Aller au contenu",
     "tagline": "Poisson frais, livré"
   },
+  "voice": {
+    "start": "Commander avec votre voix",
+    "stop": "Arrêter l’écoute",
+    "listening": "Je vous écoute. Dites un produit et une quantité, par exemple 2 kg de saumon.",
+    "searching": "Recherche de {query}",
+    "unavailable": "La recherche vocale n’est pas prise en charge par ce navigateur. Vous pouvez toujours écrire votre recherche.",
+    "permissionDenied": "L’accès au microphone est bloqué. Autorisez-le dans les réglages du navigateur et réessayez.",
+    "noSpeech": "Je n’ai pas entendu de produit. Touchez le microphone et réessayez.",
+    "noMicrophone": "Aucun microphone fonctionnel n’a été trouvé sur cet appareil.",
+    "failed": "La recherche vocale n’a pas démarré. Réessayez ou écrivez votre recherche.",
+    "noMatch": "Je n’ai pas trouvé ce produit. Essayez de redire son nom.",
+    "ambiguous": "J’ai trouvé {count} produits correspondants. Choisissez celui que vous vouliez ci-dessous.",
+    "usePackCount": "{name} est vendu au paquet. Dites un nombre de paquets plutôt qu’un poids.",
+    "invalidQuantity": "Cette quantité n’est pas offerte pour {name}. Choisissez l’une des quantités affichées sur sa page.",
+    "insufficientStock": "Il ne reste pas assez de {name} aujourd’hui pour cette quantité.",
+    "onePack": "1 paquet",
+    "packCount": "{count} paquets",
+    "added": "{amount} de {name} a été ajouté à votre panier.",
+    "addedWithPrep": "{amount} de {name} a été ajouté à votre panier avec la préparation par défaut : {prep}."
+  },
   "home": {
     "heroHeading": "L'arrivage du jour, chez vous",
     "heroBody": "Coupé sur commande et pesé après la coupe. Vous payez le poids exact, jamais une estimation arrondie.",
     "categoriesHeading": "Nos comptoirs",
     "viewAll": "Tout voir",
-    "weighingHeading": "Vous payez ce que vous recevez",
-    "weighingBody": "Le poisson est coupé sur commande, donc le poids n'est jamais exact avant la balance. Nous affichons une estimation pendant vos achats et facturons le poids réellement coupé.",
-    "deliveryHeading": "Livré partout sur l'île",
-    "deliveryBody": "Livraison à domicile seulement, dans notre rayon local. Choisissez la plage horaire qui vous convient au paiement.",
     "todayHeading": "Au comptoir aujourd’hui",
-    "promise": {
-      "weighed": {
-        "title": "Facturé au poids réel",
-        "body": "Vous voyez une estimation, nous facturons ce que dit la balance."
-      },
-      "sameDay": {
-        "title": "Choisissez votre plage",
-        "body": "Des plages de livraison de deux heures, réservées à la commande."
-      },
-      "radius": {
-        "title": "Livré depuis notre porte",
-        "body": "Une boutique, une camionnette, un rayon local."
-      }
-    },
-    "deliveryFact": {
-      "area": {
-        "title": "Livraison à domicile seulement",
-        "body": "Une boutique, un camion, un rayon local. Indiquez votre adresse et le site vous dit si nous vous rejoignons avant même de composer un panier."
-      },
-      "fee": {
-        "title": "Des frais exacts, pas une estimation",
-        "body": "Dès que nous savons où vous êtes, chaque écran affiche les vrais frais de livraison et le montant restant pour la livraison gratuite."
-      },
-      "hot": {
-        "title": "La cuisine chaude choisit la plage",
-        "body": "Si votre panier contient un plat cuisiné à la commande, seules les plages de livraison qui peuvent le transporter vous sont proposées."
-      }
-    }
+    "deliveryHeading": "Nous venons à vous",
+    "deliveryBody": "Livraison à domicile seulement, dans notre rayon. Entrez votre adresse et nous vous dirons tout de suite si nous vous desservons, avant même que vous choisissiez quoi que ce soit."
   },
   "shop": {
     "title": "Le comptoir",
@@ -293,15 +283,6 @@
     "step3Heading": "Vous payez le poids exact",
     "step3Body": "Une fois votre commande coupée et pesée, nous facturons le montant exact, et jamais plus que le maximum retenu."
   },
-  "footer": {
-    "heading": "Coupé ici. Livré tout près.",
-    "body": "Livraison à domicile seulement, dans notre rayon local. Tout est coupé le jour de la livraison.",
-    "priceNote": "Prix en dollars canadiens. Les prix au kilogramme restent estimés jusqu'à la coupe et la pesée.",
-    "rights": "Tous droits réservés.",
-    "hours": "Heures d'ouverture",
-    "address": "Venez nous voir",
-    "dayRange": "{from} au {to}"
-  },
   "common": {
     "loading": "Chargement",
     "back": "Retour",
@@ -325,6 +306,7 @@
     "needOne": "Partagez votre position ou entrez un code postal pour que nous vérifiions la livraison.",
     "forget": "Oublier cette adresse",
     "setAddress": "Indiquez votre adresse",
+    "headerPrompt": "Dites-nous où livrer",
     "changeFrom": "Changer l’adresse de livraison, actuellement {address}",
     "change": "Modifier",
     "served": "Nous livrons chez vous. La livraison est de {fee}.",

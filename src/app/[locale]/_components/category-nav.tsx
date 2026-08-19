@@ -5,6 +5,7 @@ import { ArrowsDownUpIcon, FlameIcon, HeartIcon, PackageIcon } from '@phosphor-i
 import type { CategoryView } from '@/db/repositories/catalog';
 import { t, type Locale } from '@/i18n';
 import type { Handling } from '@/domain/types';
+import { thumb } from '@/ui/art';
 
 /**
  * The ways into the catalog: counters, and the filter row under them.
@@ -81,7 +82,21 @@ export function CategoryTiles({
                     width={160}
                     height={160}
                     sizes="(max-width: 639px) 42vw, 20vw"
-                    className="pointer-events-none absolute right-0 top-1/2 aspect-square w-[42%] -translate-y-1/2 rounded-l-md object-cover transition-transform duration-(--duration-image) ease-brand group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                    /*
+                      ⭐ `painted-bleed` REPLACED `rounded-l-md`, and the swap is
+                      the point. A rounded corner was an attempt to soften a
+                      seam that should not exist: the painting's pale paper met
+                      the tile's pale ground along a straight vertical line, two
+                      near-identical greys with a visible join between them.
+                      Masking the artwork out over its left third dissolves the
+                      join instead of decorating it, so the counter now looks
+                      painted onto the tile rather than pasted on top of it.
+
+                      ⚠ THE MASK IS FOR WIDE TILES ONLY — the square tiles below
+                      have no label to clear, and there the fade just eats the
+                      subject from one side.
+                    */
+                    className="painted painted-bleed pointer-events-none absolute right-0 top-1/2 aspect-square w-[42%] -translate-y-1/2 object-cover transition-transform duration-(--duration-image) ease-brand group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                   />
                 )}
                 <span className="relative max-w-[50%] text-body font-semibold leading-tight">
@@ -104,11 +119,14 @@ export function CategoryTiles({
                 <div className="relative aspect-square overflow-hidden rounded-lg bg-soft">
                   {c.imagePath !== null && (
                     <Image
-                      src={c.imagePath}
+                      // A 22vw square on a phone. The card-sized file would be
+                      // roughly six times the pixels it can show — see
+                      // `src/ui/art.ts` for why `sizes` cannot fix that here.
+                      src={thumb(c.imagePath)}
                       alt=""
                       fill
                       sizes="(max-width: 639px) 22vw, 12vw"
-                      className="object-cover transition-transform duration-(--duration-image) ease-brand group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                      className="painted object-cover transition-transform duration-(--duration-image) ease-brand group-hover:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                     />
                   )}
                 </div>

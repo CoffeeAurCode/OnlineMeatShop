@@ -13,7 +13,7 @@ import { BottomNav } from './_components/bottom-nav';
 import { CartDrawer } from './_components/cart-drawer';
 import { LocationSheet } from './_components/location-sheet';
 import { SignInSheet } from './_components/sign-in-sheet';
-import { ShopFooter, ShopHeader } from './_components/shop-shell';
+import { ShopHeader } from './_components/shop-shell';
 
 /**
  * ⭐ THE STOREFRONT'S ROOT LAYOUT. It renders `<html>` and `<body>`.
@@ -39,9 +39,16 @@ export const viewport: Viewport = {
   initialScale: 1,
   // No `maximumScale`. A zoom lock is hostile, and this is a shop with a lot
   // of small print about weights.
+  /*
+   * ⚠ THESE TRACK `--surface` IN EACH SCHEME AND MUST BE CHANGED WITH IT. They
+   * paint the browser chrome around the page, so a value left behind after a
+   * palette change draws a visible seam across the top of every screen. This
+   * pair has now been wrong twice in one day — once when the redesign turned
+   * the neutrals warm, and again when the client moved them to cyan.
+   */
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f4f7f5' },
-    { media: '(prefers-color-scheme: dark)', color: '#031923' },
+    { media: '(prefers-color-scheme: light)', color: '#f4f8fa' },
+    { media: '(prefers-color-scheme: dark)', color: '#071319' },
   ],
 };
 
@@ -92,9 +99,8 @@ export default async function LocaleRootLayout({
   /*
    * ⭐ ONE READ OF THE SHOP'S OWN DETAILS, HERE, FOR THE WHOLE STOREFRONT.
    *
-   * The `Store` node below and the footer both need it, and both render on
-   * every page. Reading it in each would be two queries per page for two
-   * copies of the same seven values.
+   * The `Store` node below needs it on every page so product offers always
+   * reference a complete seller record when those details are configured.
    *
    * ⚠ THIS LAYOUT PRERENDERS. `readShopIdentity` therefore swallows a database
    * failure into an empty identity instead of throwing: `next build` runs
@@ -109,16 +115,15 @@ export default async function LocaleRootLayout({
   return (
     <html lang={htmlLang(locale)}>
       <head>
+        {/*
+          ⚠ ONE FACE NOW. The Bodoni preload that sat beside this was deleted
+          with the display face itself on 2026-08-19 — the redesign sets the
+          whole interface in Manrope, so the second preload was a blocking
+          request in the LCP path for a face nothing renders.
+        */}
         <link
           rel="preload"
           href="/fonts/manrope-latin.woff2"
-          as="font"
-          type="font/woff2"
-          crossOrigin="anonymous"
-        />
-        <link
-          rel="preload"
-          href="/fonts/bodoni-moda-latin.woff2"
           as="font"
           type="font/woff2"
           crossOrigin="anonymous"
@@ -191,16 +196,14 @@ export default async function LocaleRootLayout({
         <CustomerSessionProvider>
           {/*
             ⚠ THE BOTTOM PADDING IS NOT DECORATION — the tab bar is `fixed`, so
-            without it the bar sits on top of the last ~64px of every page, and
-            what it covers is the footer, which is where `delivery` and
-            `how-weighing-works` live. It clears at `lg`, where the bar hides.
+            without it the bar sits on top of the last ~64px of every page.
+            It clears at `lg`, where the bar hides.
           */}
           <div className="flex min-h-[100dvh] flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
             <ShopHeader locale={locale} />
             <main id="main" className="flex-1">
               {children}
             </main>
-            <ShopFooter locale={locale} identity={identity} />
           </div>
           <BottomNav locale={locale} />
           {/*

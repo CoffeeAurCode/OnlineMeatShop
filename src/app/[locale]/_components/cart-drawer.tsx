@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { FlameIcon, MapPinIcon, TrashIcon, XIcon } from '@phosphor-icons/react/dist/ssr';
 
 import type { Locale } from '@/i18n';
 import { quoteProblemMessage, t } from '@/i18n';
+import { isPainted, thumb } from '@/ui/art';
 import { lineKey, removeLine, setLineWeight, useCart, type CartLine } from '@/ui/cart';
 import { money } from '@/ui/format';
 import { hasDestination, locationLabel, useDeliveryLocation } from '@/ui/location';
@@ -48,6 +50,7 @@ interface QuoteLine {
   productId: string;
   prepOptionId: string | null;
   name: string;
+  imagePath: string | null;
   amountCents: number;
   isEstimate: boolean;
   problem: 'productUnavailable' | 'invalidQuantity' | 'insufficientStock' | null;
@@ -478,39 +481,62 @@ function DrawerLine({
   const problem = shopClosed ? null : (quoted?.problem ?? null);
 
   return (
-    <li className="grid gap-2 py-4">
-      <div className="flex gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-body font-semibold">{line.name}</p>
-          {line.prepLabel !== null && <p className="text-meta text-muted">{line.prepLabel}</p>}
-          {problem !== null && (
-            <p className="mt-1 text-meta text-danger">
-              {quoteProblemMessage(locale, problem, quoted?.name ?? line.name)}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <span
-            className={
-              problem === null
-                ? 'tnum text-body font-semibold'
-                : 'tnum text-body font-semibold text-muted line-through'
-            }
+    <li className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-3 py-4">
+      <div className="relative row-span-2 size-[4.5rem] overflow-hidden rounded-sm bg-soft">
+        {quoted === null ? (
+          <div className="absolute inset-0 animate-pulse bg-soft motion-reduce:animate-none" />
+        ) : quoted.imagePath === null ? (
+          <div
+            aria-hidden
+            className="absolute inset-0 grid place-items-center bg-soft text-section font-semibold text-muted"
           >
-            {quoted === null ? (
-              <span className="inline-block h-4 w-14 animate-pulse rounded-sm bg-soft motion-reduce:animate-none" />
-            ) : (
-              money(quoted.amountCents, locale)
+            {line.name.trim().charAt(0).toUpperCase()}
+          </div>
+        ) : (
+          <Image
+            src={thumb(quoted.imagePath)}
+            alt=""
+            fill
+            sizes="72px"
+            className={`object-cover ${isPainted(quoted.imagePath) ? 'painted' : ''}`}
+          />
+        )}
+      </div>
+
+      <div className="min-w-0">
+        <div className="flex gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-body font-semibold">{line.name}</p>
+            {line.prepLabel !== null && <p className="text-meta text-muted">{line.prepLabel}</p>}
+            {problem !== null && (
+              <p className="mt-1 text-meta text-danger">
+                {quoteProblemMessage(locale, problem, quoted?.name ?? line.name)}
+              </p>
             )}
-          </span>
-          <button
-            type="button"
-            onClick={() => removeLine(key)}
-            aria-label={t(locale, 'basket.removeItem', { name: line.name })}
-            className="tap grid size-11 place-items-center rounded-sm text-muted transition-colors hover:text-danger active:scale-[0.94]"
-          >
-            <TrashIcon size={16} aria-hidden />
-          </button>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span
+              className={
+                problem === null
+                  ? 'tnum text-body font-semibold'
+                  : 'tnum text-body font-semibold text-muted line-through'
+              }
+            >
+              {quoted === null ? (
+                <span className="inline-block h-4 w-14 animate-pulse rounded-sm bg-soft motion-reduce:animate-none" />
+              ) : (
+                money(quoted.amountCents, locale)
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => removeLine(key)}
+              aria-label={t(locale, 'basket.removeItem', { name: line.name })}
+              className="tap grid size-11 place-items-center rounded-sm text-muted transition-colors hover:text-danger active:scale-[0.94]"
+            >
+              <TrashIcon size={16} aria-hidden />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -523,14 +549,16 @@ function DrawerLine({
         the catalog is the server's, and a copy of `minOrder` in
         `localStorage` would go stale the first time the shop changed it.
       */}
-      <WeightStepper
-        grams={line.requestedG}
-        minG={100}
-        stepG={100}
-        maxG={null}
-        onChange={(g) => setLineWeight(key, g)}
-        locale={locale}
-      />
+      <div className="min-w-0 overflow-x-auto">
+        <WeightStepper
+          grams={line.requestedG}
+          minG={100}
+          stepG={100}
+          maxG={null}
+          onChange={(g) => setLineWeight(key, g)}
+          locale={locale}
+        />
+      </div>
     </li>
   );
 }

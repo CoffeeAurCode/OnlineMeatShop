@@ -1,13 +1,13 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ClockIcon, ScalesIcon, TruckIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { currentBusinessDay } from '@/db/repositories/availability';
 import { listCatalog, listCategories, prepsForProducts } from '@/db/repositories/catalog';
 import { isLocale, t } from '@/i18n';
 
 import { CategoryTiles } from './_components/category-nav';
+import { Hero } from './_components/hero';
 import { ProductGrid } from './_components/product-grid';
 
 /**
@@ -17,24 +17,19 @@ import { ProductGrid } from './_components/product-grid';
  * and today's fish, in the order and at the density the Figma reference's home
  * screen (`163:838`) uses. Phase 2 of `08-PLAN-figma-uber-eats-parity.md`.
  *
- * ── THE FIVE MODULES, IN ORDER ────────────────────────────────────────────
+ * ── THE MODULES, IN ORDER ─────────────────────────────────────────────────
  *
- * 1. counter tiles — the two-tier grid, straight from the reference
- * 2. today's counter — the product grid, above every explanation
- * 3. the three promises — weighing, windows, radius
- * 4. the exact-weight explanation
- * 5. the delivery explanation
+ * 1. the landing band — colour field, headline, search, scattered gouache
+ * 2. counter tiles — the two-tier grid, overlapping the band
+ * 3. today's counter — the product grid
+ * 4. do you come to me — the delivery chart, and the hand-off to the address
  *
- * ⚠ THE EDITORIAL HERO WAS DELETED, NOT MOVED. It was a full-bleed brand panel
- * carrying a `--text-display-xl` heading, a lead paragraph, a second copy of
- * the address control and a 4:3 photograph, and on a phone it WAS the first
- * viewport. The address survives in the sticky header, where it is visible on
- * this screen and on every screen after it; the heading and the photograph do
- * not survive at all.
- *
- * ⚠ MODULES 3-5 MOVED BELOW THE PRODUCTS. They used to sit between the hero
- * and the counters. They answer "why is this shop different", which is a
- * question somebody asks after seeing something they want.
+ * ⚠ THE BAND IS NOT THE EDITORIAL HERO THAT WAS DELETED. That one carried a
+ * display heading, a lead paragraph, a SECOND COPY OF THE ADDRESS CONTROL and a
+ * 4:3 photograph, and on a phone it WAS the entire first viewport. This one is
+ * a shallow fixed strip, it duplicates no control, and it adds the thing that
+ * screen lacked outright: a working search field below 1024px, where the
+ * header's collapses to an icon. See `_components/hero.tsx`.
  *
  * ⚠ NOTHING HERE INVENTS A PROMOTION, A RATING, AN ETA OR A DISCOUNT to fill a
  * slot the reference fills that way. The reference's home screen carries promo
@@ -90,40 +85,30 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   return (
     <>
       {/*
-        ⭐ THE BUYING ENTRY STATE. No hero.
+        ⭐ THE BAND, AND THE `h1` LIVES IN IT NOW. See `hero.tsx` for what was
+        taken from the client's reference and what was refused.
 
-        ⚠ THE EDITORIAL HERO IS GONE — a full-bleed brand panel with a
-        `--text-display-xl` heading, a paragraph, a duplicate address control
-        and a 4:3 photograph. It filled the entire first viewport of a phone
-        with things that are not fish, and the counter, which is what somebody
-        opens this page to see, started below the fold.
-
-        The reference home screen (`163:838`) reaches its first real product
-        card at about 600px on a 375×812 device. That is the density this
-        section exists to match.
-
-        ⚠ THE ADDRESS IS NOT REPEATED HERE, and the reference would put it
-        here. Ours is in the sticky header, on its own full-width row below
-        `sm`, so it is present in this viewport AND in every one after it.
-        Rendering it twice on the one screen where it is already visible is
-        strictly worse than pinning it once.
+        ⚠ THIS IS NOT THE EDITORIAL HERO THAT WAS DELETED, and the difference is
+        the whole argument. That one was a full-bleed brand panel carrying a
+        display heading, a lead paragraph, a SECOND COPY OF THE ADDRESS CONTROL
+        and a 4:3 photograph — it filled a phone's entire first viewport with
+        things that are not fish and pushed the counter below the fold. This
+        band is a fixed, shallow strip that ends well inside the first viewport,
+        it repeats no control, and it carries the one thing that screen was
+        missing outright: a working search field below 1024px.
       */}
-      <section className="mx-auto max-w-[80rem] px-4 pb-6 pt-5 sm:px-6 sm:pt-7">
-        {/*
-          The screen title, at the display face's floor rather than at
-          `--text-display-lg`. The reference sets its one and only screen title
-          at 24/700 and has no editorial type at all; 28px Bodoni is as close
-          to that as this project's type rules allow, and the brand face is an
-          approved difference.
+      <Hero locale={l} />
 
-          ⚠ IT IS STILL `heroHeading` — the page's real subject, not the name
-          of the module under it. The hero is gone; the sentence that told a
-          search engine and a screen reader what this page IS survives it. A
-          home page whose `h1` reads "Shop by counter" has described its first
-          widget instead of itself.
-        */}
-        <h1 className="display !text-display">{t(l, 'home.heroHeading')}</h1>
-        <div className="mt-4">
+      {/*
+        ⚠ THE COUNTERS PULL UP INTO THE BAND. `-mt-8` overlaps the tiles onto
+        the teal, so the two sections read as one surface rather than as a
+        coloured block sitting on top of a white page — which is the reference's
+        own trick, and the cheapest way to stop a hero looking like a bolted-on
+        banner. `relative` is what puts them above the band's own stacking
+        context; the specks inside it are at `z-index: -1` and stay behind.
+      */}
+      <section className="relative mx-auto -mt-8 max-w-[80rem] px-4 pb-6 sm:px-6">
+        <div className="rounded-lg bg-surface p-3 elev-card sm:p-4">
           {/*
             The counters need a heading in the outline, but not one on the
             screen: the reference goes straight from the location row into the
@@ -161,134 +146,45 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
       )}
 
       {/*
-        ⭐ THE THREE PROMISES — the weighing, the windows, the radius.
+        ⭐ THE QUALIFYING QUESTION, LAST. "Do you come to me" is geography, and
+        it is the one thing that can make everything above irrelevant — so it
+        closes the page and hands off to the address control rather than
+        competing with the counter for the first viewport.
 
-        ⚠ THEY USED TO SIT DIRECTLY UNDER THE HERO, ABOVE THE COUNTER. Phase 2
-        of the parity plan says to move trust education out of the first app
-        viewport, and it is right: these are the facts that answer "why is this
-        shop different", which is a question somebody asks AFTER seeing
-        something they want, not before. Uber puts fees and ETAs at the top
-        because those decide whether to continue; ours are explanations.
-      */}
-      <div aria-hidden className="h-2 bg-soft" />
-      <section className="border-y border-line bg-raised">
-        <ul className="mx-auto grid max-w-[80rem] gap-6 px-4 py-8 sm:grid-cols-3 sm:px-6">
-          {[
-            { icon: ScalesIcon, key: 'weighed' },
-            { icon: ClockIcon, key: 'sameDay' },
-            { icon: TruckIcon, key: 'radius' },
-          ].map(({ icon: Icon, key }) => (
-            <li key={key} className="flex gap-3">
-              <Icon size={22} weight="duotone" aria-hidden className="mt-0.5 shrink-0 text-accent" />
-              <div className="grid gap-0.5">
-                <p className="text-body font-semibold">{t(l, `home.promise.${key}.title`)}</p>
-                <p className="text-meta text-muted">{t(l, `home.promise.${key}.body`)}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
+        ⚠ NO RADIUS, NO FEE, NO DELIVERY TIME, NO FREE-DELIVERY THRESHOLD. Those
+        are real values the shop configures and the API answers for a SPECIFIC
+        address; the delivery strip and the basket show them once somebody has
+        said where they are. Printing a plausible figure here to fill the layout
+        is exactly the invention §3 forbids, and it is the kind that gets read
+        as a promise.
 
-      {/*
-        ⭐ 5. THE EXACT-WEIGHT EXPLANATION, ON ITS OWN.
-
-        ⚠ THIS AND THE DELIVERY BAND BELOW USED TO BE ONE TWO-COLUMN SECTION,
-        two headings side by side in a single cream box. §9 lists them as two
-        of the seven things the home page does, and they are genuinely two
-        different questions: "why is the price an estimate" is about money and
-        is the single most surprising thing about buying here, while "do you
-        come to me" is about geography and is the qualifying question. Sitting
-        them in adjacent columns made them read as a pair of footnotes.
-
-        A narrow reading column, not a grid. `--surface-soft` is cream and this
-        is the one place the token layer permits it: a bounded editorial band
-        with a heading and short copy, never behind body text at length.
-      */}
-      <section className="bg-soft">
-        <div className="mx-auto grid max-w-[46rem] gap-6 px-4 py-16 sm:px-6 sm:py-20">
-          <h2 className="!text-display-lg">{t(l, 'home.weighingHeading')}</h2>
-          <p className="max-w-[56ch] text-lead text-ink/80">{t(l, 'home.weighingBody')}</p>
-
-          {/*
-            The three beats, as a numbered sequence rather than three cards.
-            The order IS the content — estimate, hold, exact charge — and three
-            equal boxes would say these are alternatives rather than steps.
-
-            ⚠ THE HEADINGS ARE THE SAME STRINGS `/how-weighing-works` USES.
-            Not a copy: the same keys. Two wordings of the shop's central
-            promise is how one of them ends up describing the old flow.
-          */}
-          <ol className="mt-2 grid gap-4">
-            {(['step1Heading', 'step2Heading', 'step3Heading'] as const).map((key, i) => (
-              <li key={key} className="flex items-baseline gap-4 border-t border-line pt-4">
-                <span className="tnum shrink-0 text-meta font-semibold text-muted">{i + 1}</span>
-                <span className="text-lead font-semibold">{t(l, `weighing.${key}`)}</span>
-              </li>
-            ))}
-          </ol>
-
-          <Link
-            href={`/${l}/how-weighing-works`}
-            className="arrow-link w-fit text-body font-semibold"
-          >
-            {t(l, 'nav.howItWorks')}
-          </Link>
-        </div>
-      </section>
-
-      {/*
-        ⭐ 6. THE DELIVERY EXPLANATION: coverage, fee logic, and the hot-food
-        window rule, which are the three facts §9 names.
-
-        ⚠ EVERY ONE OF THEM IS A RULE, NOT A NUMBER. No radius in kilometres,
-        no fee, no free-delivery threshold, no delivery time. Those are real
-        values the shop configures and the API answers for a specific address,
-        and the delivery strip and the basket already show them once somebody
-        has said where they are. Printing a plausible figure here to fill the
-        layout is exactly the invention §3 forbids, and it is the kind that
-        gets read as a promise.
+        The chart is a painting of a coastline with a cyan radius drawn on it —
+        deliberately a drawing and not a map, because a real-looking map with a
+        real-looking boundary would be making precisely the promise the
+        paragraph refuses to make.
       */}
       <section className="border-t border-line">
-        {/*
-          The shop's own provenance image, wide, and carrying no copy over it.
-          Empty `alt`: it says nothing a screen reader needs that the three
-          facts below do not already say.
-        */}
-        <div className="relative aspect-[16/6] w-full overflow-hidden bg-soft sm:aspect-[16/5]">
-          <Image
-            src="/sherbrooke/atlantic-water.webp"
-            alt=""
-            fill
-            sizes="100vw"
-            loading="lazy"
-            className="object-cover"
-          />
-        </div>
-
-        <div className="mx-auto grid max-w-[80rem] gap-8 px-4 py-14 sm:px-6 sm:py-16 lg:grid-cols-[22rem_1fr] lg:gap-16">
-          <div className="grid content-start gap-4">
-            <h2 className="!text-display-lg">{t(l, 'home.deliveryHeading')}</h2>
-            <p className="max-w-[42ch] text-body text-muted">{t(l, 'home.deliveryBody')}</p>
+        <div className="mx-auto grid max-w-[80rem] items-center gap-8 px-4 py-14 sm:px-6 sm:py-16 lg:grid-cols-2 lg:gap-16">
+          <div className="grid content-start gap-4 lg:order-2">
+            <h2 className="!text-display-lg !pb-0">{t(l, 'home.deliveryHeading')}</h2>
+            <p className="max-w-[46ch] text-body text-muted">{t(l, 'home.deliveryBody')}</p>
             <Link href={`/${l}/delivery`} className="arrow-link w-fit text-body font-semibold">
               {t(l, 'nav.delivery')}
             </Link>
           </div>
 
-          <dl className="grid gap-0">
-            {(['area', 'fee', 'hot'] as const).map((key) => (
-              <div key={key} className="grid gap-1 border-t border-line py-5 first:border-t-0 first:pt-0 sm:grid-cols-[16rem_1fr] sm:gap-6">
-                <dt className="text-body font-semibold">
-                  {t(l, `home.deliveryFact.${key}.title`)}
-                </dt>
-                <dd className="max-w-[56ch] text-body text-muted">
-                  {t(l, `home.deliveryFact.${key}.body`)}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <div className="overflow-hidden rounded-lg lg:order-1">
+            <Image
+              src="/painted/delivery-map.webp"
+              alt=""
+              aria-hidden
+              width={1200}
+              height={900}
+              className="painted w-full"
+            />
+          </div>
         </div>
       </section>
-
     </>
   );
 }

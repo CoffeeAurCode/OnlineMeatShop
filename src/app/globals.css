@@ -4,46 +4,73 @@
  * ═══════════════════════════════════════════════════════════════════════════
  * The token layer. Both halves of the app share it; nothing else is shared.
  *
- * ⚠ THIS PALETTE IS THE SHOP'S OWN BRAND, taken from its existing landing
- * page. It is not a choice made here and it is not up for negotiation.
+ * ⭐ REDESIGNED 2026-08-19 AGAINST THE DELIVERY-APP REFERENCE. The client
+ * supplied a mobile food-delivery UI kit and asked for its DESIGN LANGUAGE —
+ * not its features. What was taken, and what was not:
  *
- * It replaced a cool-green "cold larder" palette whose written rationale was
- * that "raw meat photography is the most saturated thing that will ever be on
- * the page". That rationale did not survive the pivot from meat to fish, and
- * the shop has its own brand anyway.
+ *   TAKEN   one sans face at every size · a near-white ground with pure white
+ *           cards floating on it · generous radii (10/14/22/28) · soft ambient
+ *           card shadows instead of hairlines · a dense 375px-first type scale
+ *           · pill segmented controls · filled stat cards · press-feedback and
+ *           staggered entrance micro-motion
+ *
+ *   LEFT    the reference's coral-and-cream COLOUR SCHEME, and every invented
+ *           number it fills a slot with — ratings, ETAs, discounts, delivery
+ *           fees, "popular" badges. §3 of the project rules bans the latter and
+ *           a redesign is not a licence to reintroduce them in a price
+ *           position.
+ *
+ * ⚠ THE COLOUR SCHEME IS CYAN-BLUE AND WHITE, AND IT ARRIVED SECOND.
+ *
+ * An intermediate cut of this redesign followed the reference all the way and
+ * made CORAL the accent, turning the neutrals warm to sit under it. The client
+ * then asked for cyan and white (2026-08-19). That is a better fit than the
+ * thing it replaced, because it is what this brand already was: `--brand
+ * #6dd0f5` is the landing page's CTA colour and `--atlantic #06283d` is its
+ * hero ground.
+ *
+ * ⭐ SO THE STRUCTURE IS THE REFERENCE'S AND THE PALETTE IS THE SHOP'S. Taking
+ * a layout language from one place and a colour language from another is the
+ * whole job here, and the rules below are what keep the seam invisible.
+ *
+ * ⚠ ONE THING SURVIVED THE SWAP UNCHANGED, and it is the important one: the
+ * brand's headline colour cannot carry text on a light ground in EITHER
+ * direction. Coral is 2.9:1 and cyan is 1.7:1. So `--accent` is always a
+ * DEEPENED version that clears AA both ways, and the raw brand hue is confined
+ * to fills nothing has to be read against. Every number is asserted by
+ * `tests/domain/palette-contrast.test.ts`.
  *
  * The brand, as given:
  *   --midnight #031923   --coral #f06449   --ice   #f4f7f5   --mist  #c7d5d7
  *   --atlantic #06283d   --glass #63b7c8   --cream #e9e2d6   --brand #6dd0f5
  *
- * ONE accent. `--danger` carries meaning and is never decorative: if it turns
- * up on a heading it has become a second accent, and that is a bug.
+ * ONE accent. `--danger` carries meaning and is never decorative; `--success`
+ * is the same — it confirms, it does not decorate. If either turns up on a
+ * heading it has become a second accent, and that is a bug.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
 /*
- * Self-hosted, both faces, subset to latin. No Google Fonts request: one less
- * network dependency in the LCP path, and no third-party in the critical path.
+ * ⭐ ONE TYPEFACE NOW, AND THE SECOND ONE WAS DELETED RATHER THAN DEMOTED.
  *
- * `font-display: swap`, where the landing page uses `optional`. `optional`
- * gives the face about 100ms to arrive and otherwise abandons it for the whole
- * page view. That is right for a marketing page that must never shift. Here
- * the headings ARE the brand and a silently-unstyled catalog reads as broken,
- * so a brief swap is the better trade.
+ * The reference sets its entire interface — 11px tab labels through 32px stat
+ * numbers — in a single geometric sans, and that uniformity is a large part of
+ * why it reads as one object. Manrope already carried everything functional
+ * here and covers the whole range, so Bodoni Moda has no remaining job.
+ *
+ * ⚠ ITS `@font-face` AND ITS `<link rel="preload">` ARE BOTH GONE. Leaving the
+ * face declared but unused still costs the preload — a 30-40 kB blocking
+ * request in the LCP path for a face nothing renders. `public/fonts/
+ * bodoni-moda-latin.woff2` is now unreferenced and can be deleted.
+ *
+ * Self-hosted, subset to latin. No Google Fonts request: one less network
+ * dependency in the LCP path, and no third-party in the critical path.
  */
 @font-face {
   font-family: 'Manrope';
   src: url('/fonts/manrope-latin.woff2') format('woff2');
   font-style: normal;
   font-weight: 200 800;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Bodoni Moda';
-  src: url('/fonts/bodoni-moda-latin.woff2') format('woff2');
-  font-style: normal;
-  font-weight: 400 900;
   font-display: swap;
 }
 
@@ -60,172 +87,242 @@
   --brand: #6dd0f5;
   --mist: #c7d5d7;
 
-  /* ── Semantic roles, light. ───────────────────────────────────────────── */
-  --surface: var(--ice);
-  /* Cards lift by being pure white on ice, so no shadow is needed to say so. */
-  --surface-raised: #ffffff;
-  /* Section bands only. NEVER behind body text: cream drops contrast below AA. */
-  --surface-soft: var(--cream);
-
-  --ink: #10202a;
   /*
-   * Derived, not from the brand. `--mist #c7d5d7` is the brand's muted tone and
-   * it fails AA against ice at roughly 1.6:1. It is a HAIRLINE colour, not a
-   * text colour. This is the darkened equivalent that passes.
+   * ── Semantic roles, light. ────────────────────────────────────────────
+   *
+   * ⭐ CYAN AND WHITE, ON CLIENT INSTRUCTION (2026-08-19), AND IT LANDED THE
+   * PALETTE BACK ON THE BRAND'S OWN LOGIC.
+   *
+   * An intermediate cut of this redesign made coral the accent and turned the
+   * neutrals warm to sit under it. The client then asked for cyan-blue and
+   * white instead — which is what `--brand #6dd0f5` and `--atlantic #06283d`
+   * were always for. So the neutrals are cool again, the dark panels are
+   * atlantic again, and coral goes back to being the focus ring and nothing
+   * else, which is the single job the landing page gives it.
+   *
+   * The ground is a cool near-white rather than pure white: cards are pure
+   * white and need something to lift OFF, and a page of white cards on a white
+   * page is a page with no cards on it.
    */
-  --ink-muted: #4a5f6b;
-  --line: var(--mist);
+  --surface: #f4f8fa;
+  --surface-raised: #ffffff;
+  --surface-soft: #e6eef3;
+
+  --ink: #0d1b22;
+  /*
+   * Derived, not from the brand. 5.21:1 on the ground and 5.56:1 on a card, so
+   * it is a real secondary-text colour at any size rather than a grey that only
+   * passes when it happens to be large.
+   */
+  --ink-muted: #586b75;
+  /*
+   * ⚠ A HAIRLINE COLOUR, NOT A TEXT COLOUR — 1.20:1 on the ground, and that is
+   * the point. The redesign leans on shadow and space instead of rules, so this
+   * is used far less than it was; where it survives it separates rows INSIDE a
+   * card, never draws a box around one.
+   */
+  --line: #d8e5ec;
 
   /*
-   * ⚠ ATLANTIC IS THE ACCENT ON LIGHT, CYAN IS THE ACCENT ON DARK.
+   * 🔴 THE ACCENT IS A DEEPENED CYAN, AND THE DEPTH IS NOT TASTE.
    *
    * `--brand #6dd0f5` is the landing page's CTA colour, but there it only ever
    * appears on midnight or atlantic grounds. Against white it is about 1.7:1:
-   * unusable for text, and illegible as a button fill. Ice on atlantic is
-   * about 13:1, comfortably AAA. Same brand, correct contrast in both modes.
+   * unusable for text, and illegible as a button fill. It CANNOT be the accent
+   * on a light ground, and this is the oldest known collision in this palette.
    *
-   * NEVER put cyan text on a light ground.
+   * `#0e7490` is the same hue family (193°, four degrees off the brand cyan)
+   * taken down until it clears AA in both directions at once — 5.01:1 as text
+   * on the ground, 5.36:1 under white as a button fill. One token, both jobs,
+   * so no call site has to know which way round it is being used.
+   *
+   * ⚠ THE VIVID BRAND CYAN IS STILL HERE, as `--brand`, and on a LIGHT ground
+   * it is for fills that carry no text — a progress track, a decorative disc,
+   * an illustration accent. In DARK mode it becomes the accent outright,
+   * because there it has a dark ground under it and reads at 10.7:1.
    */
-  --accent: var(--atlantic);
-  --accent-hover: var(--midnight);
-  --accent-ink: var(--ice);
+  --accent: #0e7490;
+  --accent-hover: #0b5d74;
+  --accent-ink: #ffffff;
+  /* The accent at wash strength — chips, active tints, the selected row. */
+  --accent-wash: #e0f2f9;
 
   /*
    * 🔴 THE BRAND GROUND DOES NOT FLIP, AND THIS TOKEN EXISTS BECAUSE THE ONE
    * THAT DID WAS SHIPPING AN UNREADABLE FOOTER.
    *
-   * It was called `--accent-solid` and it followed `--accent`: atlantic on
-   * light, CYAN on dark. Its three consumers are the home hero, the storefront
-   * footer and the order-tracking status card, and all three are the same
-   * thing — a large dark brand panel with light copy on it — so all three
-   * hard-code `text-white/75`-ish body text inside. In dark mode that became
-   * WHITE ON CYAN, about 1.7:1, on the hero paragraph, the whole footer and
-   * the sentence a customer opens the tracking page to read.
+   * Its consumers — the footer, the order-tracking status card, any full-bleed
+   * dark panel — all hard-code `text-white/75`-ish body copy inside, because on
+   * a dark panel that is the obvious thing to write. When this token followed
+   * `--accent` into dark mode it became white on CYAN at about 1.7:1, on the
+   * whole footer and on the sentence a customer opens the tracking page to
+   * read. Contrast is not something typecheck, lint or the responsive sweep
+   * measures; it was found by looking at a screenshot.
    *
-   * ⚠ IT WAS INVISIBLE IN LIGHT MODE AND INVISIBLE TO THE GATES. Contrast is
-   * not something typecheck, lint or the 140-render responsive sweep measures,
-   * and nobody develops in dark mode. It was found by looking at a screenshot.
-   *
-   * Atlantic in BOTH schemes. On ice it is a dark panel; on midnight it is the
-   * same lift `--surface-raised` gives a card, which is the correct reading —
-   * these ARE raised panels. The brand is natively dark, so this is the one
-   * role that has no business swapping.
+   * Atlantic in BOTH schemes. On the light ground it is a dark panel; on the
+   * dark ground it is the same lift a card gets. The brand is natively dark, so
+   * this is the one role with no business swapping. The composited white-alpha
+   * ratios are asserted, not assumed.
    */
   --brand-ground: var(--atlantic);
   --brand-ground-ink: var(--ice);
 
   /*
-   * ⭐ CORAL IS AN INTERACTION COLOUR AND NOTHING ELSE.
+   * ⭐ THE HERO GROUND — the landing band the storefront opens on, and the
+   * SECOND token in this file that deliberately does not flip.
    *
-   * The brand gives it exactly one job on the landing page, `::selection` and
-   * `:focus-visible`, and it keeps exactly that job here. Semantic rather than
-   * decorative, and inherited rather than invented.
+   * ⚠ IT IS `--accent`'s LIGHT VALUE, PINNED. Writing `var(--accent)` here
+   * would be the exact bug 🔴 documented above `--brand-ground`: in dark mode
+   * `--accent` becomes `--brand` #6dd0f5, and the band's white headline would
+   * land on pale cyan at about 1.7:1. Pinning the literal keeps white on
+   * #0e7490 at 5.36:1 in both schemes — a ratio this palette already asserts,
+   * because it is the same pair as a primary button.
    *
-   * This matters because coral collides with two things that already carry
-   * meaning: hot food and errors. Three warm reds within about 30 degrees of
-   * hue, all semantic, is a system nobody can read. The resolution is that hot
-   * food STOPS BEING COLOUR-CODED (see `--hot`) and `--danger` stays a cool
-   * crimson, which leaves coral alone in its hue.
+   * ⚠ IT IS ALSO A CONTRACT WITH THE ARTWORK, and a tighter one than usual.
+   * The scattered elements in `public/painted/hero-*` are painted ON this
+   * exact teal so they dissolve into the band with no cut-out edge — the same
+   * trick that makes the product set work against `--surface`. CHANGE THIS
+   * VALUE AND EVERY HERO ELEMENT GROWS A VISIBLE SQUARE AROUND IT. There is no
+   * CSS fix at that point; the art has to be repainted.
+   *
+   * ⚠ AND `.painted` MUST NOT BE PUT ON HERO ART. That utility paints
+   * `--surface` behind the image and dims it in dark mode; both are correct for
+   * a picture on paper and both are wrong for one on teal. The band does not
+   * flip, so its art does not need dimming.
+   */
+  --hero-ground: #0e7490;
+  --hero-ground-ink: #ffffff;
+
+  /*
+   * ⚠ `--hot` IS NOT A COLOUR-CODING AND MUST NOT BECOME ONE. Hot
+   * cooked-to-order food is a filled near-black pill carrying a flame glyph and
+   * the words "Hot kitchen".
+   *
+   * Deliberately NOT the accent, and deliberately not atlantic either: the
+   * accent is on every primary button, and atlantic is every dark panel, so a
+   * food-safety constraint wearing either would read as chrome. The label is
+   * what carries the meaning; it survives greyscale, colour blindness and a
+   * dimmed phone at 6am.
+   */
+  --hot: #0d1b22;
+  --hot-ink: #f4fafc;
+
+  /*
+   * ⭐ CONFIRMATION ONLY — a delivered order, a settled cash amount, an
+   * in-stock tick. Never decorative.
+   *
+   * ⚠ PUSHED TOWARDS GREEN AND AWAY FROM TEAL ON PURPOSE. The obvious
+   * sea-green sits about 35° from a cyan accent, and "confirmed" has to be
+   * distinguishable from "interactive" at a glance. 149° is 44° clear of the
+   * accent and still reads as green.
+   */
+  --success: #17804a;
+  --success-ink: #ffffff;
+  --success-wash: #e4f4eb;
+
+  /*
+   * A COOL crimson, and it has to stay distinguishable from the coral focus
+   * ring: an error message beside a focused input must still read as an error.
+   * 38° of hue and 0.20 of luminance apart, both asserted.
+   */
+  --danger: #9c1052;
+  --danger-ink: #ffffff;
+  --danger-wash: #fdeef3;
+
+  /*
+   * ⭐ CORAL IS THE FOCUS RING AND NOTHING ELSE — which is the one job the
+   * brand's landing page gives it (`::selection` and `:focus-visible`), and
+   * which it gets back now that the accent is cyan again.
+   *
+   * It is still TWO COLOURS. Coral on this ground measures 2.97:1, and WCAG
+   * wants 3:1 for a non-text indicator — brand coral ALONE is a hair under.
+   * Measured, not estimated, by `tests/domain/palette-contrast.test.ts`.
+   * Darkening it would fix the number and cost the brand, so the coral is kept
+   * exactly as specified and a thin high-contrast ring is drawn against it.
+   *
+   * ⭐ IT ALSO CANNOT BE CONFUSED WITH THE ACCENT, which is the real reason a
+   * warm focus ring on a cool interface is right rather than merely inherited:
+   * a focused cyan button still visibly gains something.
    */
   --focus: var(--coral);
-  /*
-   * ⚠ THE COMPANION RING, AND WHY THE FOCUS INDICATOR IS TWO COLOURS.
-   *
-   * Coral on ice measures 2.94:1. WCAG wants 3:1 for a non-text indicator, so
-   * brand coral ALONE is a hair under, on the shop's own background. Measured,
-   * not estimated, by `tests/domain/palette-contrast.test.ts`.
-   *
-   * Darkening the coral would fix the number and cost the brand, and it would
-   * also close the lightness gap that currently separates the focus ring from
-   * `--danger`. So the coral is kept exactly as the brand specifies and a thin
-   * high-contrast ring is drawn against it. A two-part indicator is the
-   * standard answer here: the composite is unmistakable on any ground, and
-   * coral is still the colour a customer sees.
-   */
   --focus-contrast: var(--ink);
 
   /*
-   * ⚠ `--hot` IS NO LONGER A COLOUR-CODING. Hot cooked-to-order food is a
-   * filled atlantic pill carrying a flame glyph and the words "Hot kitchen",
-   * so this token is simply the accent again.
-   *
-   * That is better regardless of the coral collision: colour alone was never
-   * an accessible way to carry a food-safety constraint, and a label survives
-   * greyscale, colour blindness, and a dimmed phone at 6am.
+   * ⭐ THE ONE SHADOW COLOUR. Tinted cool rather than black, so a card's shadow
+   * belongs to the same light as the ground it sits on. A black shadow on a
+   * cool ground greys it out.
    */
-  --hot: var(--atlantic);
-  --hot-ink: var(--ice);
-
-  /*
-   * A COOL crimson, deliberately, and it has to stay distinguishable from
-   * coral now that coral sits on every focus ring: an error message beside a
-   * focused input must still read as an error.
-   *
-   * ⚠ IT WAS `#a81244` AND THAT WAS 29.7 DEGREES FROM CORAL, a hair inside the
-   * 30 the design notes call unreadable. The large lightness difference was
-   * carrying it, which is real but is only one axis. Moved a few degrees
-   * cooler to 38 degrees, at no cost: it still reads 7.46:1 on ice. Measured
-   * by the palette test, which is what noticed.
-   */
-  --danger: #9c1052;
-  --danger-ink: var(--ice);
-  --danger-wash: #fdeef3;
+  --shade: 10 30 40;
 }
 
 /*
  * Dark mode is nearly free, and that is the good news: THE BRAND IS NATIVELY
  * DARK. The landing page's hero and trust sections are already midnight and
- * atlantic. So this is not an invention, it is the same brand with the roles
+ * atlantic, so this is not an invention — it is the same brand with the roles
  * swapped.
+ *
+ * ⚠ THE ACCENT BECOMES THE RAW BRAND CYAN HERE, and only here. `#6dd0f5` is
+ * 1.7:1 on white and 10.7:1 on this ground. Same brand, correct contrast in
+ * both modes; the light-ground half of that rule is asserted separately.
  */
 @media (prefers-color-scheme: dark) {
   :root {
-    --surface: var(--midnight);
-    --surface-raised: var(--atlantic);
-    --surface-soft: #052132;
+    --surface: #071319;
+    --surface-raised: #0f2028;
+    --surface-soft: #162c35;
 
-    --ink: var(--ice);
-    /* Mist IS the right muted tone here: on midnight it is about 12:1. */
-    --ink-muted: var(--mist);
-    --line: rgb(199 213 215 / 0.18);
+    --ink: #eef6f9;
+    --ink-muted: #93a8b3;
+    /*
+     * ⚠ AN ALPHA HAIRLINE, NOT A HEX. A fixed light grey line reads as a seam
+     * on every surface except the one it was picked against, and this palette
+     * has three of them.
+     */
+    --line: rgb(238 246 249 / 0.14);
 
     --accent: var(--brand);
     --accent-hover: var(--glass);
-    --accent-ink: var(--midnight);
+    --accent-ink: #071319;
+    --accent-wash: #10333f;
 
     /* ⚠ `--brand-ground` IS DELIBERATELY NOT REDEFINED HERE. See above. */
 
-    --hot: var(--brand);
-    --hot-ink: var(--midnight);
+    /*
+     * Inverted with everything else: on a dark ground the maximally distinct
+     * non-accent pill is a light one. Still a pill with a flame and a word in
+     * it, still not a colour-coding.
+     */
+    --hot: #eef6f9;
+    --hot-ink: #071319;
 
-    /* Flipped with everything else: the companion ring is light on midnight. */
-    --focus-contrast: var(--ice);
+    --success: #4ecb8b;
+    --success-ink: #052016;
+    --success-wash: #10241a;
 
     /*
-     * ⚠ PINKER THAN THE OBVIOUS CHOICE, ON PURPOSE.
-     *
-     * The first attempt here was `#ff7a9c`, a straight lightening of the
-     * crimson. On midnight it reads at a comfortable 7.3:1, so it looked fine
-     * -- and it sat only 25 degrees of hue from the coral focus ring, with
-     * almost no lightness between them. In dark mode BOTH have to be light to
-     * be readable, so the separation that carries in light mode is simply not
-     * available, and an error message beside a focused input would have read
-     * as more focus decoration.
-     *
-     * This one is 38 degrees away and 0.22 apart in luminance. Caught by the
-     * palette test, not by looking at it.
+     * ⚠ PINKER THAN THE OBVIOUS CHOICE, ON PURPOSE. A straight lightening of
+     * the crimson lands about 25° from the coral focus ring with almost no
+     * lightness between them, and in dark mode BOTH have to be light to be
+     * readable — so the separation that carries in light mode is simply not
+     * available. This one is 38° away. Caught by the palette test, not by
+     * looking at it.
      */
     --danger: #ff9ecb;
     --danger-ink: #2a1119;
     --danger-wash: #2a1119;
+
+    /* Flipped with everything else: the companion ring is light on near-black. */
+    --focus-contrast: var(--ink);
+
+    /*
+     * Shadows do not read on a dark ground — there is nothing darker to cast
+     * onto. The elevation utilities below fall back to a hairline in dark mode;
+     * this keeps the ambient glow honest where it still shows.
+     */
+    --shade: 0 0 0;
   }
 }
 
-/*
- * `inline` matters: it makes Tailwind emit `var(--surface)` at the use site
- * rather than copying the value into the utility. Without it the media-query
- * swap above would never reach the generated classes.
- */
 @theme inline {
   --color-surface: var(--surface);
   --color-raised: var(--surface-raised);
@@ -235,95 +332,137 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-ink: var(--accent-ink);
+  --color-accent-wash: var(--accent-wash);
   --color-brand-ground: var(--brand-ground);
   --color-brand-ground-ink: var(--brand-ground-ink);
+  --color-hero-ground: var(--hero-ground);
+  --color-hero-ground-ink: var(--hero-ground-ink);
   --color-soft: var(--surface-soft);
   --color-hot: var(--hot);
   --color-hot-ink: var(--hot-ink);
   --color-focus: var(--focus);
+  --color-success: var(--success);
+  --color-success-ink: var(--success-ink);
+  --color-success-wash: var(--success-wash);
   --color-danger: var(--danger);
   --color-danger-ink: var(--danger-ink);
   --color-danger-wash: var(--danger-wash);
 
   /*
-   * The raw brand hues, exposed as utilities for the ONE place that needs
-   * them: the hero is always on an atlantic ground in both schemes, so its CTA
-   * is always cyan-on-midnight and must not follow `--accent`, which flips.
-   * Nothing else may reach for these.
+   * The raw brand hues, exposed as utilities for decorative fills that carry
+   * no text — the disc on a stat card, a progress track. Nothing that has to
+   * be read may reach for these; that is what `--accent` is for.
    */
+  --color-coral: var(--coral);
   --color-brand: var(--brand);
   --color-midnight: var(--midnight);
 
   /*
-   * ⚠ BODONI IS A DISPLAY FACE ONLY, AND THIS IS A HARD RULE.
-   *
-   * It is a high-contrast didone: its hairlines physically disappear below
-   * roughly 28px on an ordinary screen. Allowed on headings and the wordmark,
-   * and nowhere else. Never a label, never a button, never a form field,
-   * never a price.
-   *
-   * Manrope is everything functional: every price, weight, quantity, address,
-   * slot time, status, error and button label.
+   * ⭐ ONE FAMILY. `--font-display` survives as a NAME because 27 files call
+   * for it, but it now resolves to the same face as everything else — the
+   * distinction is weight and tracking, not typeface. See `.display` below.
    */
-  --font-display: 'Bodoni Moda', ui-serif, Georgia, serif;
+  --font-display: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-mono: ui-monospace, monospace;
 
   /*
-   * One radius system. 6 interactive, 10 container, 20 app-feed tile, full
-   * ONLY the pill.
+   * ── RADII ──────────────────────────────────────────────────────────────
    *
-   * ⚠ `--radius-lg` IS THE FIGMA PARITY RADIUS and is not a free choice. The
-   * reference file's own radii fall in two clusters — 20px on cards and tiles,
-   * 99-100px on controls — and its feed reads the way it does partly because
-   * every tile in it is the same generous 20. Measured, not guessed: see
-   * `08-A-figma-frame-inventory.md` §5 in the private parent repo.
+   * ⚠ EVERY STEP GREW, AND THAT IS THE SINGLE BIGGEST REASON THE INTERFACE
+   * READS AS THE REFERENCE. Its radii cluster at 12-16 on cards and controls
+   * and 20-28 on tiles and sheets; the old system's 6/10/20 was built for an
+   * interface made of hairlines, where a tight radius reads as precision. An
+   * interface made of floating cards needs the softer corner or the cards look
+   * like clipped rectangles.
+   *
+   *   sm 10  chips, inputs, small controls, image thumbnails
+   *   md 14  the everyday card, buttons, fields
+   *   lg 22  feed tiles, category tiles, large media
+   *   xl 28  bottom sheets, drawers, full-bleed panels
+   *   full   pills ONLY — segmented controls, badges, steppers, avatars
    */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 20px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
 
-  /* The whole scale. Anything not here is an ad-hoc value and a bug. */
-  --text-meta: 0.875rem;
-  --text-body: 1rem;
-  --text-lead: 1.125rem;
-  --text-section: 1.375rem;
   /*
-   * ⚠ THE BODONI FLOOR. 1.75rem is 28px. Nothing set in `--font-display` may
-   * be smaller than this, which is why the display steps start here and there
-   * is deliberately no smaller one to reach for.
+   * ── TYPE ───────────────────────────────────────────────────────────────
+   *
+   * ⚠ MEASURED OFF THE REFERENCE AT 375px, NOT INVENTED. Its screens run 10-11
+   * for tab labels and badges, 12-13 for card subtitles and captions, 14-15
+   * for body and list rows, 16-17 for a sheet title, 18-20 for a section
+   * heading, 22-24 for a screen title, and 28-32 for the one big number on a
+   * stat card. That density is most of why it reads as an app rather than a
+   * website, so the whole scale came down.
+   *
+   * ⚠ THE SCALE STEPS BACK UP AT `sm`. A 15px body is right on a 375px phone
+   * held 30cm away and mean on a 27" monitor. See the media query below.
+   *
+   * Anything not in this scale is an ad-hoc value and a bug.
    */
-  --text-display: 1.75rem;
-  --text-display-lg: 2.5rem;
-  --text-display-xl: clamp(2.75rem, 6vw, 4.5rem);
+  --text-micro: 0.6875rem;
+  --text-meta: 0.8125rem;
+  --text-body: 0.9375rem;
+  --text-lead: 1.0625rem;
+  --text-section: 1.1875rem;
+  --text-display: 1.375rem;
+  --text-display-lg: 1.75rem;
+  --text-display-xl: clamp(2rem, 7vw, 3rem);
   /*
    * The weighing input only. It is read at arm's length at a scale, and it is
    * the one number in the application that has to be legible from further away
-   * than a phone is normally held.
+   * than a phone is normally held. Untouched by the redesign — it was never a
+   * typographic choice.
    */
   --text-scale: 2.5rem;
 
   /* The landing page's own easing, so motion here feels like motion there. */
   --ease-brand: cubic-bezier(0.32, 0.72, 0, 1);
+  /*
+   * ⭐ THE ONE OVERSHOOT, AND IT IS RATIONED TO CONFIRMATIONS. A control that
+   * springs past its target and settles reads as "that worked"; a surface that
+   * does it reads as unstable. Steppers, badges and the add-to-basket tick
+   * only.
+   */
+  --ease-pop: cubic-bezier(0.22, 1.4, 0.4, 1);
 
   /*
-   * ⚠ THREE DURATIONS, AND THERE IS DELIBERATELY NO FOURTH.
+   * ⚠ THREE DURATIONS, AND THERE IS DELIBERATELY NO FOURTH — the redesign
+   * added motion but did not add a duration, because the failure mode is
+   * drift, not a wrong value: a 200ms here and a 300ms there, and the
+   * interface stops feeling like one object.
    *
-   * §10 budgets exactly these. They exist as tokens rather than as numbers
-   * typed into each component because the failure mode is drift, not a wrong
-   * value: a 200ms here and a 300ms there, and the interface stops feeling
-   * like one object. Tailwind emits `duration-fast` / `duration-standard` /
-   * `duration-image` from them.
-   *
-   *   fast      colour, focus, pressed feedback. Below this it is not seen.
-   *   standard  dropdown, sheet, drawer, modal. A surface arriving.
-   *   image     product and category hover only, and NOTHING else. It is slow
+   *   fast      colour, focus, press feedback, chip and tab changes.
+   *   standard  a surface arriving — sheet, drawer, dialog, entrance stagger.
+   *   image     product and category media only, and NOTHING else. It is slow
    *             enough to read as a photograph settling rather than as a UI
    *             control lagging, which is why it may not be used on one.
    */
   --duration-fast: 150ms;
   --duration-standard: 240ms;
   --duration-image: 500ms;
+}
+
+/*
+ * ⭐ THE DESKTOP STEP-UP. One breakpoint, three sizes, no new tokens.
+ *
+ * Every consumer already asks for `--text-body` / `--text-meta` / `--text-lead`
+ * by name, so widening them here widens the whole interface at once and no
+ * component needs an `sm:text-*` override. The small end of the scale — badges
+ * and tab labels — deliberately does NOT grow: those are already at their
+ * legible floor and scaling them would just make the chrome louder.
+ */
+@media (min-width: 40rem) {
+  :root {
+    --text-meta: 0.875rem;
+    --text-body: 1rem;
+    --text-lead: 1.125rem;
+    --text-section: 1.375rem;
+    --text-display: 1.625rem;
+    --text-display-lg: 2.25rem;
+  }
 }
 
 @layer base {
@@ -342,15 +481,10 @@
   }
 
   /*
-   * Coral, inherited from the brand, which gives it exactly this job and the
-   * focus ring below. It appears nowhere else in the system.
-   */
-  /*
-   * ⚠ MIDNIGHT ON CORAL, NOT WHITE.
-   *
-   * White on coral is 3.17:1, which fails AA for body text, and selected text
-   * is still text. Midnight is 5.68:1 on the same fill. The brand's own
-   * selection colour is preserved; only the ink on it changed.
+   * ⚠ MIDNIGHT ON CORAL, NOT WHITE. White on brand coral is 3.17:1, which
+   * fails AA for body text, and selected text is still text. Midnight is
+   * 5.68:1 on the same fill. The brand's own selection colour is preserved;
+   * only the ink on it changed.
    */
   ::selection {
     background: var(--coral);
@@ -358,32 +492,42 @@
   }
 
   /*
-   * ⭐ THE BODONI GUARDRAIL, expressed as CSS rather than as a code review.
+   * ⭐ HEADINGS ARE WEIGHT AND TRACKING NOW, NOT A SECOND TYPEFACE.
    *
-   * `--font-display` is a didone whose hairlines vanish below about 28px, so
-   * the face is applied HERE, to the heading elements, together with a
-   * `font-size` floor. Reaching for the display face by hand on a small label
-   * is the mistake this prevents, and the floor makes it self-correcting.
+   * ⚠ THE OLD RULE HERE FORCED A 28px FLOOR ON EVERY `h1`-`h3`, because the
+   * display face was a didone whose hairlines physically vanished below that.
+   * With one sans that constraint is gone, and it has to go: the reference's
+   * section headings are 18-20px, and a 28px floor made every one of them a
+   * banner. Roughly three dozen call sites carry `!text-section` / `!text-meta`
+   * overrides that existed only to fight this rule; they are now harmless
+   * no-ops rather than lies, and can be removed as each file is touched.
    *
-   * `h4`-`h6` are deliberately NOT in this list. A heading that small is a
-   * label, and labels are Manrope.
+   * What replaces the floor is tracking that tightens as size grows, which is
+   * what the reference does and what a geometric sans needs to stop looking
+   * loose at display sizes.
    */
   h1,
   h2,
   h3,
   .display {
     font-family: var(--font-display);
-    font-size: max(var(--text-display), 1em);
-    font-weight: 600;
-    /*
-     * Italic Bodoni in a heading containing `y g j p q` clips its descender at
-     * `leading-none`. 1.1 plus the padding below is the reserve that prevents
-     * it, applied unconditionally because the copy is bilingual and French is
-     * full of descenders.
-     */
-    line-height: 1.1;
-    padding-bottom: 0.06em;
-    letter-spacing: -0.01em;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+
+  h1,
+  .display {
+    font-size: var(--text-display);
+    letter-spacing: -0.03em;
+  }
+
+  h2 {
+    font-size: var(--text-section);
+  }
+
+  h3 {
+    font-size: var(--text-lead);
   }
 
   /*
@@ -398,6 +542,22 @@
   }
 
   /*
+   * 🔴 THE 16px FORM-CONTROL FLOOR, AND IT IS A CONSEQUENCE OF THE NEW SCALE.
+   *
+   * Mobile Safari ZOOMS THE PAGE when a focused input's font-size is under
+   * 16px, and does not zoom back out. Body copy dropped to 15px in this
+   * redesign, so every field that inherits it would now do that — on the
+   * address sheet, on checkout, on the console's stock form. The fix is a
+   * floor on the controls rather than a larger body, because the density is
+   * the point and only the controls have the bug.
+   */
+  input,
+  select,
+  textarea {
+    font-size: max(1rem, var(--text-body));
+  }
+
+  /*
    * Visible focus, always. The console is operated with wet hands on a phone
    * and the storefront by people who may be on a keyboard; neither is served
    * by the browser default being removed for looking untidy.
@@ -405,17 +565,24 @@
   :focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: 3px;
-    border-radius: 2px;
+    border-radius: 3px;
     /*
      * The companion ring. It sits in the 3px gap the offset leaves, so the
      * indicator reads as one object rather than two, and it guarantees the
-     * 3:1 that coral alone misses by 0.06 on this background.
+     * 3:1 that coral alone misses by 0.11 on this background.
      */
     box-shadow: 0 0 0 1px var(--focus-contrast);
   }
 
-  /* Motion is progressive enhancement. Every animated surface becomes static
-     when the user asks for reduced motion. */
+  /*
+   * Motion is progressive enhancement. Every animated surface becomes static
+   * when the user asks for reduced motion.
+   *
+   * ⚠ THIS MATTERS MORE AFTER THE REDESIGN THAN BEFORE IT. The interface now
+   * has press feedback, an entrance stagger, a sliding tab indicator and a
+   * skeleton shimmer; none of them carries meaning that is only in the
+   * movement, and all of them collapse here.
+   */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -428,27 +595,98 @@
   }
 }
 
-
 @layer utilities {
   /*
-   * The one shadow in the system, tinted rather than black. §5 rations it to
-   * four places: drawers, sheets, the price-change dialog, and a sticky action
-   * that needs separating from the content scrolling under it. Elevation is
-   * not decoration, and everything else in this interface is flat surfaces,
-   * hairlines and space.
+   * ── ELEVATION ──────────────────────────────────────────────────────────
+   *
+   * ⚠ THE OLD SYSTEM RATIONED SHADOW TO FOUR PLACES and made everything else
+   * out of hairlines. That was right for a hairline interface and is wrong for
+   * this one: in the reference, elevation IS the separator — there is not a
+   * single border on a card anywhere in it. So `.elev-card` is now the common
+   * case rather than an exception, and `--line` is what became rare.
+   *
+   * ⚠ ALL OF IT DEGRADES TO A HAIRLINE IN DARK MODE. A shadow needs something
+   * darker to cast onto; on a near-black ground it is invisible, and a card
+   * with no shadow and no border simply disappears. Each utility below carries
+   * its own dark-mode branch for that reason.
    */
+
+  /* 🔴 THE ONE THAT WAS MISSING. `product-card.tsx` has been asking for
+     `.elev-card` since the favourite control was added and getting nothing —
+     the class was never defined, so the button's white disc has been sitting
+     on the photograph with no separation at all. */
+  .elev-card {
+    box-shadow:
+      0 1px 2px rgb(var(--shade) / 0.05),
+      0 8px 20px -12px rgb(var(--shade) / 0.16);
+  }
+
+  /* A card that has been picked up — hover, drag, the open item in a list. */
+  .elev-lift {
+    box-shadow:
+      0 2px 4px rgb(var(--shade) / 0.06),
+      0 16px 32px -16px rgb(var(--shade) / 0.24);
+  }
+
+  /* Anything pinned over scrolling content: the tab bar, a sticky action bar,
+     a floating button. Directional — it casts DOWN onto what it covers. */
+  .elev-float {
+    box-shadow:
+      0 -1px 0 rgb(var(--shade) / 0.04),
+      0 -10px 30px -12px rgb(var(--shade) / 0.20);
+  }
+
+  /* Kept under its old name: 88 call sites separate a sticky footer action
+     from the content scrolling under it with this. */
   .elev {
-    box-shadow: 0 -1px 0 var(--line), 0 -8px 24px -12px rgb(20 24 26 / 0.18);
+    box-shadow:
+      0 -1px 0 rgb(var(--shade) / 0.06),
+      0 -8px 24px -12px rgb(var(--shade) / 0.18);
   }
 
   /* The sheet and drawer shadow. Directional, so the panel reads as having
      come from the edge it slid in from. */
   .elev-sheet {
-    box-shadow: 0 -8px 40px -12px rgb(3 25 35 / 0.45);
+    box-shadow: 0 -8px 48px -12px rgb(var(--shade) / 0.45);
   }
 
   .elev-drawer {
-    box-shadow: -8px 0 40px -12px rgb(3 25 35 / 0.45);
+    box-shadow: -8px 0 48px -12px rgb(var(--shade) / 0.45);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .elev-card,
+    .elev-lift {
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .elev,
+    .elev-float {
+      box-shadow: 0 -1px 0 var(--line);
+    }
+
+    .elev-sheet,
+    .elev-drawer {
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+  }
+
+  /*
+   * ⭐ THE CARD. The single most-repeated shape in the redesign, so it is one
+   * class rather than four utilities copied into sixty files.
+   */
+  .card {
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    box-shadow:
+      0 1px 2px rgb(var(--shade) / 0.05),
+      0 8px 20px -12px rgb(var(--shade) / 0.16);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .card {
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
   }
 
   /*
@@ -466,21 +704,178 @@
   }
 
   /*
-   * ⚠ THE HEADER IS A RAISED SURFACE WITH ONE HAIRLINE, NOT GLASS.
+   * ⭐ THE HEADER IS THE BAND. Rebuilt 2026-08-19 against a delivery-app top
+   * bar the client supplied: the location and the search field sit INSIDE a
+   * saturated colour field rather than on a white bar above one.
    *
-   * It was a translucent `backdrop-filter: blur(18px) saturate(1.15)` bar. The
-   * design system bans glassmorphism outright and asks for a "sticky raised
-   * header with one hairline", and the reason is legibility rather than taste:
+   * ⚠ IT IS STILL OPAQUE, AND THAT RULE HAS NOT MOVED. The design system bans
+   * glassmorphism outright, and the reason is legibility rather than taste:
    * this bar carries the delivery address over a page of seafood photography,
    * so at exactly the moment a customer scrolls a salmon fillet under it the
-   * text loses its background. An opaque raised surface cannot do that.
-   *
+   * text loses its background. Immersive and transparent are not the same
+   * thing — this is a solid field, so nothing behind it can ever show through.
    * It also costs nothing to paint, which matters on the cheap Android phones
-   * this shop's customers actually hold: a full-width blurred layer repaints
-   * on every scroll frame.
+   * this shop's customers actually hold: a blurred full-width layer repaints
+   * on every scroll frame and this one repaints never.
+   *
+   * ⚠ IT IS `--hero-ground`, THE SAME PINNED TEAL THE LANDING BAND USES, and
+   * that is what makes the home page read as one continuous field instead of
+   * two stacked panels. The token deliberately does not flip between schemes
+   * (see its definition), so every white and white-alpha on this bar holds its
+   * contrast ratio in both — asserted in `tests/domain/palette-contrast.test.ts`,
+   * not assumed.
+   *
+   * ⚠ IT PAINTS `hero-wash.webp` UNDER THE GLOW, AND THE FIRST CUT DID NOT.
+   * That cut used gradients over flat `--hero-ground` on the theory that two
+   * elements cropping one texture would restart it at the seam. Measured on
+   * the rendered page, the opposite is true and by a wide margin: the wash is
+   * TONALLY FLAT — its top row averages #0a5b6c and its middle #0a5c6e — but
+   * it is a good deal darker than the #0e7490 ground it sits on, so a header
+   * painted in the bare ground met the band 4% of luminance away and drew a
+   * hard line across the home page. A texture that restarts inside a painted
+   * paper grain is invisible; a step in colour is not.
+   *
+   * ⚠ THE GLOW ITSELF IS STILL GRADIENTS, and BOTH BLOOMS ARE ANCHORED ABOVE
+   * THE TOP EDGE AND FADE OUT WELL SHORT OF THE BOTTOM ONE, so the header's
+   * last few pixels are the wash and nothing else — which is exactly what the
+   * landing band's first few pixels are. Move a bloom down and the seam comes
+   * back.
+   *
+   * ⚠ NO SHADOW AND NO HAIRLINE UNDER IT, for the same reason. A light hairline
+   * on saturated teal reads as a seam, and a drop shadow would draw a line
+   * across the middle of that continuous field. The colour change from band to
+   * page IS the edge. (The `.is-stuck` scroll shadow that used to live here
+   * went with it: nothing ever added the class, so it had been dead since it
+   * was written.)
    */
   .storefront-header {
-    background: var(--surface-raised);
+    /*
+     * 🔴 DO NOT ADD `position` HERE. This block is in the UTILITIES layer and
+     * it is declared after Tailwind's own, so `position: relative` written for
+     * a stacking context SILENTLY BEATS the `sticky` utility on the element —
+     * the bar stops sticking and scrolls away, taking the delivery address off
+     * every screen past the first one, and the filter strips on `/shop` park
+     * themselves 116px down a page with nothing above them.
+     *
+     * `isolation: isolate` went with it and is not missed: the header has no
+     * negatively-stacked children (that is the landing band, with its specks),
+     * and `sticky` plus `z-40` already gives it a stacking context.
+     */
+    background-color: var(--hero-ground);
+    background-image:
+      radial-gradient(70% 150% at 4% -40%, rgb(212 245 255 / 0.26), transparent 62%),
+      radial-gradient(55% 130% at 97% -20%, rgb(109 208 245 / 0.30), transparent 60%),
+      url('/painted/hero-wash.webp');
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: auto, auto, cover;
+    color: var(--hero-ground-ink);
+  }
+
+  /*
+   * ⭐ THE CONTROL SET THAT SITS ON THE FIELD. Three appearances, and the
+   * split between them is a contrast measurement rather than a preference.
+   *
+   * White on `--hero-ground` is 5.36:1. Compositing white at 0.14 over the
+   * band and then putting white on THAT drops it to 4.12:1 — over the 3:1 a
+   * non-text glyph needs, under the 4.5:1 any text needs. So:
+   *
+   *   `.band-chip`    filled, translucent — ICON ONLY, never text
+   *   `.band-outline` transparent with a ring — anything carrying WORDS, so
+   *                   the text lands on the band itself and keeps 5.36:1
+   *   solid white     the one focal control (see `basket-button.tsx`)
+   */
+  .band-chip {
+    background: rgb(255 255 255 / 0.14);
+    transition: background-color var(--duration-fast) var(--ease-brand);
+  }
+
+  .band-chip:hover {
+    background: rgb(255 255 255 / 0.26);
+  }
+
+  .band-outline {
+    border: 1px solid rgb(255 255 255 / 0.38);
+    transition: border-color var(--duration-fast) var(--ease-brand);
+  }
+
+  .band-outline:hover {
+    border-color: rgb(255 255 255 / 0.7);
+  }
+
+  /*
+   * ── MICRO-MOTION ───────────────────────────────────────────────────────
+   *
+   * ⭐ THE PRESS. Every tappable surface in the reference acknowledges the
+   * finger, and on a phone that acknowledgement is the whole difference
+   * between an interface that feels native and one that feels like a web page.
+   *
+   * `transform` only, so it runs on the compositor, and scoped to `:active` so
+   * it costs nothing until touched. 0.97 rather than something more dramatic:
+   * the card must not appear to move away from the finger.
+   */
+  .press {
+    transition: transform var(--duration-fast) var(--ease-brand);
+  }
+
+  .press:active {
+    transform: scale(0.97);
+  }
+
+  /* Cards are large, so they need a smaller ratio to travel the same distance. */
+  .press-card {
+    transition: transform var(--duration-fast) var(--ease-brand);
+  }
+
+  .press-card:active {
+    transform: scale(0.985);
+  }
+
+  /*
+   * ⭐ THE ENTRANCE STAGGER. A feed of cards arriving one beat after another,
+   * which is the reference's single most characteristic motion.
+   *
+   * ⚠ IT IS CSS-ONLY AND IT RUNS ONCE. No IntersectionObserver, no library, no
+   * scroll-driven reveal — this deploys to a free instance with a cold start,
+   * and an animation runtime on the critical path buys nothing a `@keyframes`
+   * cannot do here. Each item sets `--i` to its index; the cap stops the
+   * twentieth card in a long catalog from arriving two seconds late.
+   *
+   * `backwards` fill matters: without it every card is fully painted for the
+   * length of its own delay and then jumps to opacity 0 to start.
+   */
+  .rise {
+    animation: rise var(--duration-standard) var(--ease-brand) backwards;
+    animation-delay: calc(min(var(--i, 0) * 40ms, 320ms));
+  }
+
+  /*
+   * ⭐ THE SKELETON. Replaces `animate-pulse`, which fades a block in and out
+   * and reads as something malfunctioning. A sweep reads as something loading.
+   */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-soft);
+  }
+
+  .shimmer::after {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.45),
+      transparent
+    );
+    content: '';
+    animation: shimmer 1.4s infinite;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .shimmer::after {
+      background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.06), transparent);
+    }
   }
 
   /*
@@ -533,6 +928,216 @@
     transform: scaleX(1);
   }
 
+  /*
+   * ⭐ THE PAINTED LAYER. Everything under `public/painted/` is gouache
+   * illustration, and this is the one rule that makes it sit correctly.
+   *
+   * ── WHY THE ART NEEDS NO TREATMENT AT ALL IN LIGHT MODE ───────────────────
+   *
+   * Every painting was made on a #F4F8FA ground, which is `--surface` to the
+   * byte. So on a light page the paper IS the page: the illustrations float
+   * with no edge, no box and no cut-out, and a grid of them reads as one
+   * continuous sheet rather than as forty rectangles. That match is deliberate
+   * and it is the single reason this set looks expensive rather than pasted
+   * on. ⚠ IF `--surface` MOVES, THE ART STOPS BLENDING AND HAS TO BE REPAINTED
+   * — this is the tightest coupling in the token layer, so it is written down
+   * here rather than left to be rediscovered.
+   *
+   * 🔴 DARK MODE IS THE OPPOSITE PROBLEM AND IT IS SEVERE. That same paper is
+   * now #F4F8FA against a #071319 ground: a 4:3 card becomes a glaring white
+   * slab, eight of them at once, and the fish inside is the least bright thing
+   * on the screen. Measured in the browser at every step from 1.0 down, 0.82 is
+   * where the paper stops shouting and the subject is still appetising; below
+   * about 0.75 the whites go grey and the fish looks old, which on a fishmonger
+   * is the one impression worth paying to avoid.
+   *
+   * ⚠ CONTRAST AND SATURATION ARE NUDGED UP TO PAY FOR THE DIMMING, not for
+   * effect. Reducing brightness alone flattens a watercolour's tonal range,
+   * and these paintings are mostly pale washes — they have very little range to
+   * lose.
+   *
+   * ⚠ NOT APPLIED IN LIGHT MODE, AT ALL. A `filter` creates a containing block
+   * and a new stacking context, which is exactly what broke the card's
+   * stretched-link overlay once already (see `product-card.tsx`). Confining it
+   * to the dark scheme keeps the default path filter-free.
+   */
+  .painted {
+    background: var(--surface);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .painted {
+      filter: brightness(0.82) contrast(1.05) saturate(1.08);
+    }
+  }
+
+  /*
+   * ⭐ SOLD OUT, FOR A PAINTING. The card's generic sold-out treatment is
+   * Tailwind's `opacity-45 saturate-[0.4]`, and 🔴 IT CANNOT BE USED HERE:
+   * `saturate-*` compiles to the `filter` property, `.painted` also sets
+   * `filter`, both are single class selectors in the same layer, and the winner
+   * is then decided by declaration order in the generated stylesheet. That is a
+   * coin toss that changes when an unrelated utility is first used somewhere
+   * else in the app — either the dimming silently stops working in dark mode,
+   * or sold-out fish stops looking sold out. Neither failure shows up in a
+   * type check, a lint or a unit test.
+   *
+   * So the two states are written as ONE property in ONE place, and the
+   * compound selector (0,2,0) beats the base rule (0,1,0) regardless of order.
+   * ⚠ Never put a Tailwind `filter`, `brightness-*`, `saturate-*` or
+   * `grayscale` utility on an element that also carries `.painted`.
+   *
+   * ⚠ IT DIMS FURTHER IN DARK MODE RATHER THAN REUSING THE LIGHT VALUES,
+   * because it is starting from an already-dimmed base: `opacity(.5)` over a
+   * light paper on a light page still reads as "greyed out", while the same
+   * figure over paper that has already lost 18% of its brightness reads as
+   * "broken image".
+   */
+  .painted.painted-out {
+    filter: saturate(0.35) opacity(0.5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .painted.painted-out {
+      filter: brightness(0.72) saturate(0.3) opacity(0.6);
+    }
+  }
+
+  /*
+   * ⭐ THE WIDE COUNTER TILE'S DISSOLVING EDGE.
+   *
+   * A wide category tile is a horizontal card carrying a label on the left and
+   * the painting on the right. Butting the artwork's straight left edge against
+   * the tile leaves a hard vertical seam between two nearly-identical pale
+   * greys, which reads as a rendering fault rather than as a design.
+   *
+   * Masking the painting away to nothing over its left third dissolves that
+   * seam entirely: the counter appears to be painted ON the tile. It also
+   * removes the reason the old code needed `rounded-l-md` on the image.
+   *
+   * ⚠ THE MASK MUST NOT BE PUT ON THE SQUARE TILES. On a square tile the fade
+   * eats the subject from the side and looks like a broken gradient; it is
+   * correct only where there is a label to make room for. Verified in-browser
+   * on both.
+   */
+  /*
+   * ⚠ `mask-size` AND `mask-repeat` ARE SET EXPLICITLY, and they are not
+   * decoration on the declaration above.
+   *
+   * Setting `mask-image` alone leaves the rest of the `mask-*` family at their
+   * initial values — `mask-size: auto`, `mask-repeat: repeat`. A linear
+   * gradient has no intrinsic dimensions, so what `auto` resolves to is a place
+   * engines have historically disagreed about, and the failure mode when it
+   * resolves badly is total: the element keeps its box, `complete` stays true,
+   * computed `opacity` stays 1, and it paints nothing. Pinning both costs two
+   * lines and removes the question.
+   *
+   * ⚠ THIS WAS NOT THE CAUSE OF THE BLANK COUNTER TILES DURING DEVELOPMENT,
+   * despite looking exactly like it. Those were `loading="lazy"` images that
+   * had decoded but not yet painted when the screenshot was taken, and they
+   * render correctly on any real load — which is worth recording, because the
+   * next person to see an empty tile here will reach for this rule first and it
+   * will not be the answer.
+   */
+  /*
+   * ⚠ TWO GRADIENTS, INTERSECTED, BECAUSE ONE EDGE WAS NOT THE PROBLEM.
+   *
+   * The horizontal fade alone was enough in light mode, where the artwork's
+   * paper is `--surface` and the tile's ground is `--surface-soft` — two pale
+   * greys, so the top and bottom cuts were invisible and only the vertical seam
+   * beside the label needed help.
+   *
+   * 🔴 IN DARK MODE THE SAME CUTS ARE BRUTAL. The tile is `--surface-soft`
+   * #162c35 and the paper is still pale even after `.painted` dims it, so the
+   * artwork reads as a bright rectangle punched into a dark card — and the
+   * wide tile crops it top and bottom (a square image in a 112px row), so those
+   * two hard edges are always there. The vertical gradient dissolves them into
+   * the tile the same way the horizontal one dissolves the seam.
+   *
+   * ⚠ `mask-composite: intersect` IS WHAT MAKES IT A VIGNETTE RATHER THAN A
+   * BRIGHTER MASK. The default `add` unions the two layers, so a pixel opaque
+   * in EITHER gradient stays opaque and the fades cancel each other out.
+   */
+  .painted-bleed {
+    -webkit-mask-image: linear-gradient(to left, #000 62%, transparent 100%),
+      linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%);
+    mask-image: linear-gradient(to left, #000 62%, transparent 100%),
+      linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%);
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+
+  /*
+   * ⭐ THE HERO BAND — the immersive coloured surface the storefront opens on.
+   *
+   * The reference the client supplied is a food-delivery home screen whose top
+   * third is a saturated colour field with the location and search sitting ON
+   * it and small illustrated things scattered through it. That structure is
+   * what was taken. What was NOT taken is everything the reference fills that
+   * field with — a percentage-off banner, star ratings, delivery-fee lines —
+   * because §3 bans inventing a number the shop does not have, and a hero is
+   * the most believable place on the site to put a false one.
+   *
+   * ⚠ THE WASH IS A `background-image`, NOT AN `<img>`, ON PURPOSE. It is
+   * decoration with no meaning, it must be croppable at every viewport without
+   * a layout shift, and as a CSS background it never enters the accessibility
+   * tree or the LCP candidate set — the headline should be the LCP element
+   * here, not a texture.
+   *
+   * ⚠ THE FLAT COLOUR UNDER IT IS LOAD-BEARING. The wash is a 2200px JPEG-ish
+   * webp and the band is full-bleed, so on a wide screen it is stretched and on
+   * a narrow one it is cropped; `--hero-ground` underneath guarantees the text
+   * always has its contrast ratio even in the moment before the texture paints,
+   * and at any size the texture fails to cover.
+   */
+  .hero-band {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background-color: var(--hero-ground);
+    background-image: url('/painted/hero-wash.webp');
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    color: var(--hero-ground-ink);
+  }
+
+  /*
+   * The scattered elements. Each is a transparent cut-out, so it composites
+   * onto the wash rather than sitting in a square of slightly-wrong teal —
+   * which is what the first cut did, because the model painted its flat ground
+   * at #006786 rather than the #0E7490 it was asked for. Cutting the alpha in
+   * the asset pipeline made the exact colour stop mattering.
+   *
+   * ⚠ `pointer-events: none` IS NOT OPTIONAL. These overlap the search field
+   * and the headline; without it the decoration silently eats taps on the one
+   * control the band exists to offer.
+   */
+  .hero-speck {
+    position: absolute;
+    z-index: -1;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /*
+   * ⚠ MOTION IS TRANSFORM-ONLY AND DELIBERATELY BARELY THERE — a few pixels
+   * over eight seconds, enough to make the band feel alive rather than
+   * printed, not enough to pull the eye off the search field. The base layer
+   * collapses every animation under `prefers-reduced-motion`, so this needs no
+   * guard of its own.
+   */
+  .hero-drift {
+    animation: hero-drift 9s ease-in-out infinite;
+  }
+
+  .hero-drift-slow {
+    animation: hero-drift 13s ease-in-out infinite;
+  }
 
   /*
    * ⭐ THE HONEST FALLBACK TILE. §6: "Do not use generated images as product
@@ -541,26 +1146,56 @@
    * ordered from a picture and got something else is a refund and a lost
    * regular. So a product with no photograph gets a branded surface with its
    * own name on it, and no fake photograph, gradient, texture or illustration.
+   *
+   * ⚠ THIS IS STILL REACHED AND MUST STAY. `/painted/` covers today's seeded
+   * catalog; `image_path` is nullable and a product added through the console
+   * has no art until somebody gives it some. The tile is what that product
+   * gets, and it is still the right answer.
    */
   .fallback-tile {
     display: grid;
     place-content: center;
     gap: 0.375rem;
     padding: 1rem;
-    border: 1px solid var(--line);
-    background: var(--surface-raised);
+    background: var(--surface-soft);
+    color: var(--ink-muted);
     text-align: center;
+  }
+
+  /*
+   * ⚠ SCROLLERS HIDE THEIR BAR ON DESKTOP ONLY. The horizontal category rail
+   * and the chip rows are swipe surfaces on a phone, where no bar is drawn
+   * anyway; on a trackpad Mac a permanent grey bar under a row of photographs
+   * is the one thing that gives away that this is a web page.
+   */
+  .rail {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  /*
+   * The full-bleed escape for a rail inside a padded section: it lets the row
+   * start at the section's text margin and run off the right edge of the
+   * screen, which is what tells a thumb there is more.
+   */
+  .rail-bleed {
+    margin-inline: calc(var(--rail-gutter, 1rem) * -1);
+    padding-inline: var(--rail-gutter, 1rem);
+    scroll-padding-inline: var(--rail-gutter, 1rem);
   }
 }
 
 /*
  * ── MOTION ────────────────────────────────────────────────────────────────
  *
- * §10 budgets three durations and nothing else, and every animation below
- * moves `transform` or `opacity` only so it runs on the compositor. There is
- * no animation library, no page transition, no scroll-driven reveal and no
- * marquee: this is a transactional interface, and motion here is feedback
- * rather than expression.
+ * Every animation below moves `transform` or `opacity` only, so it runs on the
+ * compositor. There is no animation library, no page transition and no
+ * scroll-driven reveal: this is a transactional interface, and motion here is
+ * feedback rather than expression.
  *
  * ⚠ ALL OF IT IS INERT UNDER `prefers-reduced-motion`, because the base layer
  * collapses every animation and transition to 0.01ms. Nothing below carries
@@ -604,5 +1239,67 @@
   to {
     transform: translateY(0);
     opacity: 1;
+  }
+}
+
+/* The feed stagger. 8px is enough to read as arrival and short enough that a
+   card is never meaningfully out of position. */
+@keyframes rise {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* The confirmation overshoot: a badge incrementing, a stepper accepting. */
+@keyframes pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/*
+ * ⭐ THE HERO'S DRIFT. A few pixels of vertical float on the scattered
+ * elements, so the band reads as a living surface rather than a printed one.
+ *
+ * ⚠ TRANSFORM ONLY, so it runs on the compositor and never triggers layout —
+ * which matters because there are seven of these on screen at once, all
+ * animating for the entire time the customer is on the page. `top`/`margin`
+ * here would be seven forced reflows a frame on the most important screen in
+ * the app.
+ *
+ * ⚠ THE AMPLITUDE IS DELIBERATELY UNDER 10px. Anything larger and the eye
+ * tracks the decoration instead of the search field, which is the one thing
+ * this band is trying to get somebody to use.
+ */
+@keyframes hero-drift {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  50% {
+    transform: translateY(-8px) rotate(1.5deg);
   }
 }

@@ -187,6 +187,71 @@ describe.each(['light', 'dark'] as const)('the %s palette', (scheme) => {
     }
   });
 
+  /**
+   * 🔴 THE SAME ASSERTION FOR THE HEADER BAND, WHICH IS A SECOND GROUND AND
+   * WAS NOT COVERED BY THE ONE ABOVE.
+   *
+   * `--brand-ground` is atlantic #06283d and white sits at 13:1 on it, so
+   * every alpha down to 0.65 clears AA with room to spare. `--hero-ground` is
+   * #0e7490 and white is 5.36:1 — a THIRD of the headroom. The storefront
+   * header and the landing band are both painted on it and both set their
+   * secondary copy in `text-white/<alpha>`, so the alpha that is safe on one
+   * ground is not the alpha that is safe on the other.
+   *
+   * ⚠ AND THE DIFFERENCE WAS ALREADY SHIPPED WRONG. The landing band's lead
+   * paragraph was `text-white/85`, which is 4.34:1 on this ground: body copy
+   * at 17px regular, so the 3:1 large-text allowance does not apply to it.
+   * 0.90 is 4.67:1 and is the FIRST STEP THAT PASSES, which is why nothing on
+   * either surface may go below it.
+   *
+   * The ladder stops at 0.9 on purpose. Adding 0.85 here would not be a
+   * stricter test, it would be a failing one.
+   */
+  it('🔴 keeps HARD-CODED WHITE readable on the HEADER BAND, in both schemes', () => {
+    const ground = resolve(map, '--hero-ground');
+    const [bgR, bgG, bgB] = toRgb(ground);
+
+    for (const alpha of [1, 0.9]) {
+      const composited = `#${[bgR, bgG, bgB]
+        .map((c) => Math.round(255 * alpha + c * (1 - alpha)))
+        .map((c) => c.toString(16).padStart(2, '0'))
+        .join('')}`;
+      const ratio = contrast(composited, ground);
+      expect(
+        ratio,
+        `white at ${alpha} alpha on --hero-ground in ${scheme} is ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  /**
+   * ⭐ THE FILLED CHIPS ON THAT BAND ARE ICON-ONLY, AND THIS IS THE NUMBER
+   * THAT DECIDED IT.
+   *
+   * `.band-chip` composites white at 0.14 over the band to make a control read
+   * as a control. White on THAT surface is about 4.1:1 — comfortably over the
+   * 3:1 WCAG asks of a non-text graphic, and under the 4.5:1 it asks of words.
+   * So the filled chips carry glyphs and everything with words in it uses
+   * `.band-outline`, which leaves the ground alone and keeps the full 5.36:1.
+   *
+   * This asserts both halves: that a glyph on a chip passes, and that TEXT on
+   * one would not. If a palette change ever makes the second half pass, this
+   * fails, and the two appearances can be collapsed on purpose rather than
+   * merged by somebody who assumed they were interchangeable.
+   */
+  it('⭐ keeps a filled band chip legible for GLYPHS and provably not for TEXT', () => {
+    const ground = toRgb(resolve(map, '--hero-ground'));
+    // `rgb(255 255 255 / 0.14)` over the band — the literal in `.band-chip`.
+    const chip = `#${ground
+      .map((c) => Math.round(255 * 0.14 + c * 0.86))
+      .map((c) => c.toString(16).padStart(2, '0'))
+      .join('')}`;
+    const ratio = contrast('#ffffff', chip);
+
+    expect(ratio, `white on a band chip in ${scheme} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+    expect(ratio, `white on a band chip in ${scheme} is ${ratio.toFixed(2)}:1`).toBeLessThan(4.5);
+  });
+
   it('keeps selected text readable on the selection highlight', () => {
     // White on coral is 3.17:1 and fails AA. Selected text is still text.
     expect(contrast(resolve(map, '--midnight'), resolve(map, '--coral'))).toBeGreaterThanOrEqual(4.5);
@@ -227,23 +292,82 @@ describe.each(['light', 'dark'] as const)('the %s palette', (scheme) => {
   });
 });
 
-describe('the two known brand collisions stay resolved', () => {
-  it('⭐ cyan is NEVER the accent on a light ground', () => {
-    // `--brand #6dd0f5` against white is about 1.7:1: unusable for text and
-    // illegible as a button fill. It is the accent on DARK only.
+describe('the brand collisions stay resolved', () => {
+  /**
+   * ⭐ CYAN IS THE ACCENT ON DARK AND NEVER ON LIGHT — the oldest rule in this
+   * palette, and the 2026-08-19 redesign went away from it and came back.
+   *
+   * `--brand #6dd0f5` is the landing page's CTA colour, but there it only ever
+   * sits on midnight or atlantic. Against white it is about 1.7:1: unusable as
+   * text and illegible as a button fill. On the dark ground it is 10.7:1. Same
+   * brand, correct contrast in both modes — so the light half of this is a
+   * prohibition and the dark half is a requirement, and BOTH are asserted.
+   *
+   * ⚠ AN INTERMEDIATE CUT OF THE REDESIGN MADE THE ACCENT CORAL IN BOTH
+   * SCHEMES, and this test was rewritten then to say cyan was the accent
+   * nowhere. That was true for exactly as long as coral was the accent. The
+   * lesson is not about cyan: it is that this assertion states a RELATIONSHIP
+   * between the brand hue and the ground, and rewriting it to name a specific
+   * colour is how it stops protecting anything.
+   */
+  it('🔴 the brand cyan is the accent on DARK and never on LIGHT', () => {
     const light = tokens('light');
-    expect(resolve(light, '--accent')).not.toBe(resolve(light, '--brand'));
+    expect(
+      resolve(light, '--accent'),
+      'the raw brand cyan is 1.7:1 on white — it cannot be the accent on a light ground',
+    ).not.toBe(resolve(light, '--brand'));
 
     const dark = tokens('dark');
     expect(resolve(dark, '--accent')).toBe(resolve(dark, '--brand'));
+
+    // The measurement that disqualifies it on light, kept so the reason lives
+    // in the file rather than only in a comment.
+    expect(contrast(resolve(light, '--brand'), resolve(light, '--surface-raised'))).toBeLessThan(3);
   });
 
-  it('⭐ mist is a hairline colour and never text', () => {
-    // Proving the derived `--ink-muted` was necessary: the brand's own muted
-    // tone fails badly on ice, which is why it is `--line` and not text.
+  /**
+   * ⭐ THE GENERAL FORM OF THE RULE ABOVE, and the one most likely to be lost.
+   *
+   * Whatever the brand's headline colour is, it does not clear AA on a light
+   * ground — cyan is 1.7:1 and coral is 2.9:1. So `--accent` on light is always
+   * a DEEPENED version of it, never the raw hue.
+   *
+   * ⚠ THE FAILURE MODE IS SOMEBODY "RESTORING THE BRAND" by pointing
+   * `--accent` at `--brand` or `--coral` because it looks more correct, which
+   * silently drops every button and every price on the site below AA. The AA
+   * pairs above would catch it; this says why in one line when they do.
+   */
+  it('🔴 the light accent is never a raw brand hue', () => {
     const light = tokens('light');
-    expect(contrast(resolve(light, '--mist'), resolve(light, '--surface'))).toBeLessThan(3);
-    expect(resolve(light, '--line')).toBe(resolve(light, '--mist'));
+    for (const raw of ['--brand', '--coral', '--glass', '--mist'] as const) {
+      expect(
+        resolve(light, '--accent'),
+        `--accent is the undarkened ${raw}, which does not clear AA on a light ground`,
+      ).not.toBe(resolve(light, raw));
+    }
+  });
+
+  it('⭐ the hairline colour is a hairline and never text', () => {
+    /*
+     * Proving the derived `--ink-muted` is necessary: the palette's hairline
+     * fails badly against the ground, which is why it draws rules and not
+     * words.
+     *
+     * ⚠ IT USED TO ASSERT `--line === --mist` SPECIFICALLY. The redesign
+     * retuned the neutrals, so the brand's `--mist` is no longer the literal
+     * line value — but the PROPERTY that made mist unusable as text is exactly
+     * the property the new line must also have, and that is what is worth
+     * pinning. `--mist` is still checked, because it is still in the file and
+     * still tempting.
+     */
+    const light = tokens('light');
+    for (const hairline of ['--line', '--mist'] as const) {
+      expect(
+        contrast(resolve(light, hairline), resolve(light, '--surface')),
+        `${hairline} passes 3:1 and has become mistakable for a text colour`,
+      ).toBeLessThan(3);
+    }
+    expect(resolve(light, '--ink-muted')).not.toBe(resolve(light, '--line'));
     expect(resolve(light, '--ink-muted')).not.toBe(resolve(light, '--mist'));
   });
 });

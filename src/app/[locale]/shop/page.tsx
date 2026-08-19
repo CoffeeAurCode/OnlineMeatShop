@@ -21,13 +21,19 @@ import { applyFilters } from '../_components/apply-filters';
  *
  * ⚠ THE CHROME IS STICKY AND THE HEADER IS ALSO STICKY, so the two are budgeted
  * together and the offsets have to be kept in step by hand. The header is
- * 104px on a phone (a 56px bar plus the 48px address row) and 72px from `sm`
- * up, which is what `top-[6.75rem] sm:top-[4.5rem]` below is tracking. Change
- * the header's height and this number is wrong in a way nothing catches except
- * looking at it: the strip parks itself over the bar or floats below it.
+ * 116px — a 56px control row, a 48px search field and 12px under it — and
+ * `top-[7.25rem]` below is tracking that sum. Change the header's rows and
+ * this number is wrong in a way nothing catches except looking at it: the
+ * strip parks itself over the bar or floats below it.
  *
- * With this strip's own 52px that is 156px of a 640px viewport, which is the
- * ceiling, and it is why the counter tabs and the filter chips each scroll
+ * ⭐ ONE NUMBER, NO `sm:` VARIANT, since the band rebuild (2026-08-19). The
+ * header used to be 108px on a phone and 72px above `sm`, so this strip needed
+ * `top-[6.75rem] sm:top-[4.5rem]` and THREE FILES had to agree about two
+ * numbers. The band is the same height at every width — only its type sizes
+ * and its search cap change — so there is one number to keep in step now.
+ *
+ * With this strip's own 52px that is 168px of a 640px viewport, which is at
+ * the ceiling, and it is why the counter tabs and the filter chips each scroll
  * sideways instead of wrapping into more rows.
  */
 
@@ -85,7 +91,7 @@ export default async function ShopPage({
         <DeliveryStrip locale={locale} />
       </header>
 
-      <div className="sticky top-[6.75rem] z-30 -mx-4 mt-4 grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-line bg-raised px-4 py-3 sm:top-[4.5rem] sm:mx-0 sm:rounded-md sm:border sm:px-4">
+      <div className="sticky top-[7.25rem] z-30 -mx-4 mt-4 grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-line bg-raised px-4 py-3 sm:mx-0 sm:rounded-md sm:border sm:px-4">
         <CategoryTabs categories={categories} locale={locale} activeSlug={null} />
         <FilterBar locale={locale} basePath={`/${locale}/shop`} filters={filters} />
       </div>
