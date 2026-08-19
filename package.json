@@ -19,7 +19,8 @@
     "db:test:down": "docker rm -f meatshop-testdb",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "check:parity": "node scripts/check-parity.mjs",
-    "check:responsive": "node scripts/check-responsive.mjs"
+    "check:responsive": "node scripts/check-responsive.mjs",
+    "check:assets": "node scripts/check-assets.mjs"
   },
   "license": "ISC",
   "type": "module",

@@ -48,6 +48,8 @@ export interface QuotedLine {
   readonly productId: string;
   readonly slug: string;
   readonly name: string;
+  /** Current catalog artwork, so persisted baskets do not carry stale media. */
+  readonly imagePath: string | null;
   readonly requestedG: number;
   readonly prepOptionId: string | null;
   readonly pricingMode: 'pack' | 'perKg';
@@ -117,6 +119,7 @@ export async function quoteBasket(
         productId: l.productId,
         slug: '',
         name: locale === 'fr' ? 'Plus disponible' : 'No longer available',
+        imagePath: null,
         requestedG: l.requestedG,
         prepOptionId: l.prepOptionId,
         pricingMode: 'pack' as const,
@@ -140,6 +143,7 @@ export async function quoteBasket(
       productId: item.id,
       slug: item.slug,
       name: localisedName(item, locale),
+      imagePath: item.imagePath,
       requestedG: l.requestedG,
       prepOptionId: l.prepOptionId,
       pricingMode: item.pricing.mode,
