@@ -37,7 +37,7 @@ export function OfflineBar() {
     <p
       role="status"
       aria-live="assertive"
-      className="sticky top-0 z-10 bg-danger px-4 py-3 text-center text-body font-semibold text-danger-ink"
+      className="bg-danger px-4 py-3 text-center text-body font-semibold text-danger-ink"
     >
       You are offline. Nothing you enter now will save.
     </p>

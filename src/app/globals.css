@@ -208,6 +208,24 @@
   --hot-ink: #f4fafc;
 
   /*
+   * 🔴 THE WASH BEHIND A HOT BADGE, AND IT DID NOT EXIST UNTIL NOW.
+   *
+   * Four call sites — the console's order queue and weighing screen, and both
+   * driver screens — have been writing `bg-hot-wash` since hot food shipped.
+   * There was no `--color-hot-wash` in the theme block, so Tailwind generated
+   * no rule and every one of those badges has been painting `--hot` ink on
+   * whatever card happened to be underneath. Legible by luck rather than by
+   * design, and invisible in a screenshot because near-black on white is what
+   * it was supposed to look like anyway.
+   *
+   * ⚠ IT IS A NEUTRAL, NOT A HUE, for the reason directly above: hot is a
+   * food-safety class carried by words and a flame, and giving it a colour of
+   * its own is how a label quietly becomes a colour-coding. This is the page's
+   * own section band, one step deeper.
+   */
+  --hot-wash: #dbe8ef;
+
+  /*
    * ⭐ CONFIRMATION ONLY — a delivered order, a settled cash amount, an
    * in-stock tick. Never decorative.
    *
@@ -295,6 +313,10 @@
     --hot: #eef6f9;
     --hot-ink: #071319;
 
+    /* Inverted with it: the deepest neutral the dark scheme has, so a badge
+       still separates from the card it sits on. */
+    --hot-wash: #1b333e;
+
     --success: #4ecb8b;
     --success-ink: #052016;
     --success-wash: #10241a;
@@ -340,6 +362,7 @@
   --color-soft: var(--surface-soft);
   --color-hot: var(--hot);
   --color-hot-ink: var(--hot-ink);
+  --color-hot-wash: var(--hot-wash);
   --color-focus: var(--focus);
   --color-success: var(--success);
   --color-success-ink: var(--success-ink);
@@ -1186,6 +1209,147 @@
     margin-inline: calc(var(--rail-gutter, 1rem) * -1);
     padding-inline: var(--rail-gutter, 1rem);
     scroll-padding-inline: var(--rail-gutter, 1rem);
+  }
+
+  /*
+   * ── THE CONSOLE ────────────────────────────────────────────────────────
+   *
+   * ⭐ REBUILT 2026-08-19 AGAINST A DELIVERY-OPERATIONS DASHBOARD the client
+   * supplied. What was taken from it is the LAYOUT LANGUAGE: an application
+   * window floating on a tinted ground, a narrow icon rail down the left, a
+   * pill tab bar across the top, a band of stat tiles, then a two-column body
+   * with a wide working panel beside a narrower activity column.
+   *
+   * ⚠ THE COLOUR SCHEME IS THIS SHOP'S, UNCHANGED. The reference is coral on
+   * cream; every fill below resolves through the same cyan-and-white tokens
+   * the storefront already uses, so the two halves of the app still look like
+   * one product. Nothing here introduces a colour.
+   *
+   * ⚠ AND EVERY FIGURE ON THE REBUILT SCREENS IS READ FROM THE DATABASE. The
+   * reference fills its slots with invented percentages, ratings and ETAs;
+   * `CLAUDE.md` §3 bans exactly that, and a dashboard is where the temptation
+   * is highest because the shape of the tile asks for a number. Where there is
+   * no real figure the tile says so in words instead.
+   *
+   * ⚠ THE FRAME IS DESKTOP-ONLY AND THAT IS DELIBERATE. The owner runs the
+   * shop from a phone, one-handed, at 6am (`04-PLAN` §11) — on a phone this
+   * whole treatment collapses to a plain scrolling column with a bottom bar,
+   * because a window floating inside a window wastes both edges of a 360px
+   * screen. Call sites gate it at `lg`.
+   */
+  .console-frame {
+    border-radius: var(--radius-xl);
+    background: var(--surface-raised);
+    box-shadow:
+      0 2px 4px rgb(var(--shade) / 0.06),
+      0 24px 60px -28px rgb(var(--shade) / 0.28);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .console-frame {
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+  }
+
+  /*
+   * ⭐ WHERE A FIXED ACTION BAR STOPS. Four custom properties with sane
+   * defaults, set by the console frame and read by `PrimaryBar`.
+   *
+   * ⚠ IT IS A VARIABLE RATHER THAN A BREAKPOINT UTILITY BECAUSE THE DRIVER
+   * PORTAL SHARES THAT COMPONENT. `/driver` imports `PrimaryBar`, `Screen` and
+   * `Empty` from the console's shell and has no rail, no frame and no desktop
+   * layout at all — hard-coding `lg:left-[76px]` into the bar would have
+   * indented the one button a driver presses in the dark by 76px of nothing.
+   * Custom properties inherit down the DOM, and a `fixed` element is still a
+   * DOM descendant of the frame that sets them, so the console gets the inset
+   * and the driver keeps the full width.
+   */
+  .action-bar {
+    right: var(--bar-right, 0);
+    bottom: var(--bar-bottom, 0);
+    left: var(--bar-left, 0);
+    border-end-end-radius: var(--bar-radius, 0);
+    border-end-start-radius: var(--bar-radius, 0);
+  }
+
+  /*
+   * ⚠ AND THE MEASURE OF WHAT IS INSIDE IT, for the same reason. The console's
+   * form screens run to 48rem and the driver portal's to 38rem; a bar whose
+   * content is a different width from the column it saves reads as belonging
+   * to the browser rather than to the screen.
+   */
+  .console-frame {
+    --bar-measure: 48rem;
+  }
+
+  @media (min-width: 64rem) {
+    .console-frame {
+      --bar-left: calc(76px + 1.25rem);
+      --bar-right: 1.25rem;
+      --bar-bottom: 1.25rem;
+      --bar-radius: var(--radius-xl);
+    }
+  }
+
+  @media (min-width: 80rem) {
+    .console-frame {
+      --bar-left: calc(76px + 1.75rem);
+      --bar-right: 1.75rem;
+      --bar-bottom: 1.75rem;
+    }
+  }
+
+  /*
+   * The disc a stat tile's glyph sits on. A tint of whatever the tile's own
+   * `currentColor` is, so one class serves all six tiles and none of them
+   * needs a hard-coded fill.
+   */
+  .tile-disc {
+    background: color-mix(in oklab, currentColor 14%, transparent);
+  }
+
+  /*
+   * A card that answers the pointer.
+   *
+   * ⚠ WRITTEN AS A `:hover` RULE RATHER THAN AS `hover:elev-lift`. Tailwind v4
+   * generates variants for utilities IT knows about; a plain class declared in
+   * `@layer utilities` is invisible to the variant machinery, so `hover:` on
+   * one of these compiles to nothing at all and fails silently.
+   */
+  .tile-link {
+    transition:
+      box-shadow var(--duration-fast) var(--ease-brand),
+      transform var(--duration-fast) var(--ease-brand);
+  }
+
+  .tile-link:hover {
+    box-shadow:
+      0 2px 4px rgb(var(--shade) / 0.06),
+      0 16px 32px -16px rgb(var(--shade) / 0.24);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tile-link:hover {
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+  }
+
+  /*
+   * The chart's baseline rules. Four of them, evenly spaced, painted UNDER the
+   * bars so a short bar still has something to be measured against.
+   *
+   * ⚠ A gradient rather than four elements: this redraws on every resize and
+   * the bars above it are already absolutely positioned, so the fewer boxes in
+   * that stacking context the better.
+   */
+  .chart-rules {
+    background-image: repeating-linear-gradient(
+      to top,
+      var(--line) 0,
+      var(--line) 1px,
+      transparent 1px,
+      transparent 25%
+    );
   }
 }
 

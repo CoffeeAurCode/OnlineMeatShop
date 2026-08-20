@@ -343,10 +343,12 @@ export function ShopForm({ identity }: { identity: ShopIdentity }) {
         <h2 className="mt-8 text-section font-semibold tracking-tight">Delivery towns</h2>
 
         {towns.length === 0 ? (
-          <Empty
-            title="No town pages"
-            body="Each town added here gets its own page. Add one only when there is something true to say about delivering there that is not true everywhere else. This is not the delivery area, which is set on the Delivery area screen."
-          />
+          <div className="mt-3">
+            <Empty
+              title="No town pages"
+              body="Each town added here gets its own page. Add one only when there is something true to say about delivering there that is not true everywhere else. This is not the delivery area, which is set on the Delivery area screen."
+            />
+          </div>
         ) : (
           <ul className="grid">
             {towns.map((town) => (
