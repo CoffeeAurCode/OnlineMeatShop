@@ -365,6 +365,10 @@ const CHROME = [
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   '/usr/bin/google-chrome',
   '/usr/bin/chromium',
+  // ⚠ Same omission as `check-responsive.mjs` carried: no macOS path, so this
+  // gate silently no-ops on every developer machine and only ever runs in CI.
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
 ].find((p) => existsSync(p));
 
 if (!CHROME) {

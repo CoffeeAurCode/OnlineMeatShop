@@ -84,6 +84,11 @@ const CHROME = [
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   '/usr/bin/google-chrome',
   '/usr/bin/chromium',
+  // ⚠ macOS WAS MISSING FROM THIS LIST, so the gate reported "Chrome not
+  // found" on a machine with Chrome installed and every developer on a Mac
+  // has been skipping it. CI is Linux, which is why it was never noticed.
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
 ].find((p) => existsSync(p));
 
 if (!CHROME) {
