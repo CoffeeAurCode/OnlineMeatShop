@@ -44,7 +44,7 @@ export default async function OrdersPage() {
   const orders = queue.flatMap((s) => s.orders).filter((o) => o.status !== 'CANCELLED');
   const unweighedIn = (o: (typeof orders)[number]) =>
     o.lines.filter((l) => l.pricingMode === 'perKg' && l.actWeightG === null).length;
-  const toWeigh = orders.filter((o) => unweighedIn(o) > 0);
+  const toWeigh = orders.filter((o) => o.status === 'PREPARING' && unweighedIn(o) > 0);
 
   return (
     <Screen
@@ -63,7 +63,7 @@ export default async function OrdersPage() {
         <StatTile
           label="Waiting on the scale"
           value={String(toWeigh.length)}
-          hint={`${orders.reduce((n, o) => n + unweighedIn(o), 0)} per-kg lines`}
+          hint={`${toWeigh.reduce((n, o) => n + unweighedIn(o), 0)} per-kg lines`}
           icon={<ScalesIcon size={17} weight="fill" />}
           tone={toWeigh.length > 0 ? 'danger' : 'plain'}
         />

@@ -186,7 +186,7 @@ function ConsoleRail({ pathname }: { pathname: string }) {
             title={`${s.label} — ${s.hint}`}
             aria-label={s.label}
             aria-current={active ? 'page' : undefined}
-            className={`press grid size-11 place-content-center rounded-md transition-colors ${
+            className={`press grid size-12 place-content-center rounded-md transition-colors ${
               active
                 ? 'bg-accent text-accent-ink'
                 : 'text-muted hover:bg-raised hover:text-ink'
@@ -260,7 +260,7 @@ function ConsoleHeader({
               key={s.href}
               href={s.href}
               aria-current={active ? 'page' : undefined}
-              className={`press flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-meta font-semibold transition-colors ${
+              className={`tap press flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-meta font-semibold transition-colors ${
                 active
                   ? 'bg-accent text-accent-ink'
                   : 'bg-soft text-muted hover:text-ink'

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, sql } from 'drizzle-orm';
 
 import { db, type Tx } from '@/db/client';
 import {
@@ -76,7 +76,7 @@ export async function listSlots(fromDate: string, tx: Tx | typeof db = db): Prom
 }
 
 /**
- * How many days of windows remain.
+ * How many calendar days of usable windows remain, INCLUDING today.
  *
  * ⭐ THE SILENT OUTAGE THIS EXISTS TO PREVENT. Nothing generates slots. When
  * the last seeded one passes its cutoff, checkout offers no window and the
@@ -84,11 +84,17 @@ export async function listSlots(fromDate: string, tx: Tx | typeof db = db): Prom
  * anywhere raises its voice. The console shows this number so the failure has
  * a countdown instead of a surprise.
  */
-export async function slotRunwayDays(todayIso: string, tx: Tx | typeof db = db): Promise<number> {
+export async function slotRunwayDays(
+  todayIso: string,
+  now: Date = new Date(),
+  tx: Tx | typeof db = db,
+): Promise<number> {
   const rows = await tx
     .select({ serviceDate: slot.serviceDate })
     .from(slot)
-    .where(and(eq(slot.active, true), gte(slot.serviceDate, todayIso)))
+    .where(
+      and(eq(slot.active, true), gte(slot.serviceDate, todayIso), gt(slot.cutoffAt, now)),
+    )
     .orderBy(desc(slot.serviceDate))
     .limit(1);
 
@@ -96,7 +102,7 @@ export async function slotRunwayDays(todayIso: string, tx: Tx | typeof db = db):
   if (last === undefined) return 0;
 
   const ms = Date.parse(`${last}T00:00:00Z`) - Date.parse(`${todayIso}T00:00:00Z`);
-  return Math.max(0, Math.round(ms / 86_400_000));
+  return Math.max(1, Math.round(ms / 86_400_000) + 1);
 }
 
 export interface NewSlot {
@@ -351,15 +357,17 @@ export async function updateProduct(id: string, patch: ProductPatch): Promise<bo
 // ── Today's takings (07-PLAN §6.1) ───────────────────────────────────────
 
 export interface Takings {
+  /** Orders for which money actually moved: captured card or reported cash. */
   readonly orders: number;
-  readonly estTotalCents: number;
-  readonly finalTotalCents: number;
+  readonly totalCents: number;
   /** Orders excluded because they were paid through the stub adapter. */
   readonly excludedTestOrders: number;
+  /** Live orders for which no capture or cash collection has been recorded. */
+  readonly unsettledOrders: number;
 }
 
 /**
- * What the shop actually took.
+ * What the shop actually took, from processor captures and reported cash.
  *
  * ⚠ FILTERS ON `payment.provider <> 'stub'`, AND THIS IS THE WHOLE POINT.
  *
@@ -377,8 +385,9 @@ export async function takingsForDay(businessDayId: string): Promise<Takings> {
   const rows = await db
     .select({
       provider: payment.provider,
-      estTotalCents: order.estTotalCents,
-      finalTotalCents: order.finalTotalCents,
+      capturedCents: payment.capturedCents,
+      payMode: order.payMode,
+      cashCollectedCents: order.cashCollectedCents,
       status: order.status,
     })
     .from(order)
@@ -386,22 +395,40 @@ export async function takingsForDay(businessDayId: string): Promise<Takings> {
     .where(eq(order.businessDayId, businessDayId));
 
   let orders = 0;
-  let est = 0;
-  let final = 0;
+  let total = 0;
   let excluded = 0;
+  let unsettled = 0;
 
   for (const r of rows) {
-    if (r.status === 'CANCELLED') continue;
-    if (r.provider === 'stub' || r.provider === null) {
+    if (r.payMode === 'COD') {
+      if (r.cashCollectedCents !== null) {
+        orders += 1;
+        total += r.cashCollectedCents;
+      } else if (r.status !== 'CANCELLED') {
+        unsettled += 1;
+      }
+      continue;
+    }
+
+    if (r.provider === 'stub') {
       excluded += 1;
       continue;
     }
-    orders += 1;
-    est += r.estTotalCents;
-    final += r.finalTotalCents ?? 0;
+
+    if (r.capturedCents !== null) {
+      orders += 1;
+      total += r.capturedCents;
+    } else if (r.status !== 'CANCELLED') {
+      unsettled += 1;
+    }
   }
 
-  return { orders, estTotalCents: est, finalTotalCents: final, excludedTestOrders: excluded };
+  return {
+    orders,
+    totalCents: total,
+    excludedTestOrders: excluded,
+    unsettledOrders: unsettled,
+  };
 }
 
 // ── The catalog, as the owner sees it ────────────────────────────────────

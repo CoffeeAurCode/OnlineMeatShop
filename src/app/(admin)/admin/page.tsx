@@ -85,7 +85,7 @@ export default async function TodayPage() {
       will not open properly otherwise. The rail and the pill row carry all of
       them at every width, so this screen no longer has to repeat the list.
     */
-    const runwayDays = await slotRunwayDays(today);
+    const runwayDays = await slotRunwayDays(today, now);
 
     return (
       <Screen
@@ -121,7 +121,7 @@ export default async function TodayPage() {
     listCatalog(day.id, { includeInactive: true }),
     orderQueue(day.id),
     takingsForDay(day.id),
-    slotRunwayDays(today),
+    slotRunwayDays(today, now),
     listSlots(today),
     cashDiscrepancies(),
     listPartners(true),
@@ -134,7 +134,7 @@ export default async function TodayPage() {
   const byStatus = (s: string) => live.filter((o) => o.status === s).length;
 
   const toWeigh = live.filter((o) => o.status === 'PREPARING' && unweighedLines(o) > 0);
-  const weighingLines = live.reduce((n, o) => n + unweighedLines(o), 0);
+  const weighingLines = toWeigh.reduce((n, o) => n + unweighedLines(o), 0);
   const cashOrders = live.filter((o) => o.payMode === 'COD');
   const hotOrders = live.filter((o) => o.hasHotLine);
 
@@ -172,7 +172,6 @@ export default async function TodayPage() {
     };
   });
 
-  const takenCents = takings.finalTotalCents || takings.estTotalCents;
   const counterItems: CounterItem[] = items.map((i) => ({
     id: i.id,
     name: i.name,
@@ -198,6 +197,14 @@ export default async function TodayPage() {
     outWithNoDriver: live.filter((o) => o.status === 'READY' || o.status === 'OUT').length,
     undeclared: active.length - declared.length,
   });
+  const takingsNotes = [
+    takings.unsettledOrders > 0
+      ? `${takings.unsettledOrders} ${takings.unsettledOrders === 1 ? 'order has' : 'orders have'} no money recorded yet`
+      : null,
+    takings.excludedTestOrders > 0
+      ? `${takings.excludedTestOrders} test ${takings.excludedTestOrders === 1 ? 'order' : 'orders'} excluded`
+      : null,
+  ].filter((note): note is string => note !== null);
 
   return (
     <Screen
@@ -268,7 +275,7 @@ export default async function TodayPage() {
             />
             <StatTile
               label="Taken today"
-              value={money(takenCents, ADMIN_LOCALE)}
+              value={money(takings.totalCents, ADMIN_LOCALE)}
               /*
                 ⚠ THIS FIGURE EXCLUDES EVERY ORDER PAID THROUGH THE STUB
                 ADAPTER, and the excluded count is shown rather than hidden.
@@ -278,11 +285,9 @@ export default async function TodayPage() {
                 would report test traffic as revenue. See `takingsForDay`.
               */
               hint={
-                takings.excludedTestOrders > 0
-                  ? `${takings.excludedTestOrders} test ${takings.excludedTestOrders === 1 ? 'order' : 'orders'} excluded`
-                  : takings.finalTotalCents === 0
-                    ? 'estimated until every line is weighed'
-                    : `${takings.orders} paying ${takings.orders === 1 ? 'order' : 'orders'}`
+                takingsNotes.length > 0
+                  ? takingsNotes.join(' · ')
+                  : `${takings.orders} money-moving ${takings.orders === 1 ? 'order' : 'orders'}`
               }
               icon={<CurrencyDollarIcon size={17} weight="fill" />}
               tone="success"
@@ -742,7 +747,7 @@ function AttentionList({ items }: { items: readonly Alert[] }) {
             {a.href === undefined ? null : (
               <Link
                 href={a.href}
-                className="mt-1 inline-flex items-center gap-1 text-micro font-semibold text-accent underline underline-offset-4"
+                className="tap mt-1 inline-flex items-center gap-1 text-micro font-semibold text-accent underline underline-offset-4"
               >
                 {a.cta}
                 <CaretRightIcon size={11} weight="bold" aria-hidden />

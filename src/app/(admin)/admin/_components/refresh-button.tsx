@@ -47,7 +47,7 @@ export function RefreshButton({ compact = false }: { compact?: boolean }) {
         title="Read the numbers again"
         aria-label={pending ? 'Refreshing' : 'Refresh'}
         aria-live="polite"
-        className="press grid size-9 shrink-0 place-content-center rounded-full bg-soft text-muted transition-colors hover:text-ink"
+        className="press grid size-12 shrink-0 place-content-center rounded-full bg-soft text-muted transition-colors hover:text-ink"
       >
         <ArrowsClockwiseIcon
           size={17}

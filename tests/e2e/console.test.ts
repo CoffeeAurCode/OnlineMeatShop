@@ -274,6 +274,17 @@ describe('the console runs a trading day', () => {
     const detailHtml = await detail.text();
     expect(detailHtml).toContain('Final total');
     expect(detailHtml).toContain('$34.38');
+
+    // The rebuilt Today dashboard reads the same database-backed state. This
+    // directly placed order has no payment row (see the suite header), so it
+    // must not be reported as money taken or mislabeled as a stub test order.
+    const dashboard = await asStaff('/admin');
+    expect(dashboard.status).toBe(200);
+    const dashboardHtml = await dashboard.text();
+    expect(dashboardHtml).toContain('Taken today');
+    expect(dashboardHtml).toContain('$0.00');
+    expect(dashboardHtml).toContain('1 order has no money recorded yet');
+    expect(dashboardHtml).not.toContain('1 test order excluded');
   });
 
   it('will not let the owner declare less stock than customers have already bought', async () => {

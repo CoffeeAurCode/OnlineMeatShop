@@ -107,7 +107,7 @@ export function CounterGrid({ items }: { items: readonly CounterItem[] }) {
             type="button"
             onClick={() => setFilter(f.key)}
             aria-pressed={filter === f.key}
-            className={`press shrink-0 rounded-full px-3 py-1.5 text-meta font-semibold transition-colors ${
+            className={`tap press shrink-0 rounded-full px-3 py-1.5 text-meta font-semibold transition-colors ${
               filter === f.key ? 'bg-accent text-accent-ink' : 'bg-soft text-muted hover:text-ink'
             }`}
           >

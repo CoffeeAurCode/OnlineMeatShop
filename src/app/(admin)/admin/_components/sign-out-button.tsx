@@ -42,7 +42,7 @@ export function SignOutButton() {
       disabled={busy}
       title="Sign out"
       aria-label={busy ? 'Signing out' : 'Sign out'}
-      className="press grid size-9 shrink-0 place-content-center rounded-full bg-soft text-muted transition-colors hover:text-ink disabled:opacity-60"
+      className="press grid size-12 shrink-0 place-content-center rounded-full bg-soft text-muted transition-colors hover:text-ink disabled:opacity-60"
     >
       <SignOutIcon size={17} aria-hidden />
     </button>

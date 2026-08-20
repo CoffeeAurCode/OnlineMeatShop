@@ -77,7 +77,7 @@ export function OrderFlowChart({ windows }: { windows: readonly FlowWindow[] }) 
             type="button"
             onClick={() => setMetric(m.key)}
             aria-pressed={metric === m.key}
-            className={`press flex-1 shrink-0 rounded-full px-3 py-1.5 text-meta font-semibold transition-colors ${
+            className={`tap press flex-1 shrink-0 rounded-full px-3 py-1.5 text-meta font-semibold transition-colors ${
               metric === m.key ? 'bg-raised text-ink shadow-sm' : 'text-muted hover:text-ink'
             }`}
           >
@@ -120,7 +120,7 @@ export function OrderFlowChart({ windows }: { windows: readonly FlowWindow[] }) 
               <div
                 title={`${w.label} — ${labelOf(v, metric)}`}
                 style={{ height: `${Math.max(pct, v === 0 ? 2 : 8)}%` }}
-                className={`w-full rounded-t-sm transition-[height] duration-standard ${
+                className={`w-full rounded-t-sm transition-[height] duration-(--duration-standard) ${
                   w.next ? 'bg-accent' : w.past ? 'bg-soft' : 'bg-accent/35'
                 }`}
               />
