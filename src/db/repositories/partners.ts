@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, notInArray, sql } from 'drizzle-orm';
 
 import { db, type Tx } from '@/db/client';
-import { deliveryPartner } from '@/db/schema';
+import { deliveryPartner, order } from '@/db/schema';
 
 /**
  * The delivery partner roster. CRUD, and nothing more.
@@ -36,10 +36,7 @@ export interface Partner {
  * are right: the assignment picker must not offer somebody who left, and the
  * management screen must show them so they can be brought back.
  */
-export async function listPartners(
-  activeOnly: boolean,
-  tx: Tx | typeof db = db,
-): Promise<readonly Partner[]> {
+export async function listPartners(activeOnly: boolean, tx: Tx | typeof db = db): Promise<readonly Partner[]> {
   const rows = await tx
     .select({
       id: deliveryPartner.id,
@@ -56,10 +53,7 @@ export async function listPartners(
   return rows;
 }
 
-export async function partnerById(
-  id: string,
-  tx: Tx | typeof db = db,
-): Promise<Partner | null> {
+export async function partnerById(id: string, tx: Tx | typeof db = db): Promise<Partner | null> {
   const rows = await tx
     .select({
       id: deliveryPartner.id,
@@ -88,10 +82,7 @@ export async function partnerById(
  * the same answer to the only question being asked, and splitting them would
  * cost a second query to produce a distinction no screen may show.
  */
-export async function activePartnerById(
-  id: string,
-  tx: Tx | typeof db = db,
-): Promise<Partner | null> {
+export async function activePartnerById(id: string, tx: Tx | typeof db = db): Promise<Partner | null> {
   const rows = await tx
     .select({
       id: deliveryPartner.id,
@@ -119,10 +110,7 @@ export async function activePartnerById(
  * the `limit(1)`: `partner_phone_active` is a partial unique index over active
  * rows. The limit is belt and braces for the day somebody drops the index.
  */
-export async function activePartnerByPhone(
-  phoneE164: string,
-  tx: Tx | typeof db = db,
-): Promise<Partner | null> {
+export async function activePartnerByPhone(phoneE164: string, tx: Tx | typeof db = db): Promise<Partner | null> {
   const rows = await tx
     .select({
       id: deliveryPartner.id,
@@ -140,8 +128,7 @@ export async function activePartnerByPhone(
 }
 
 export type PartnerWriteResult =
-  | { readonly ok: true; readonly id: string }
-  | { readonly ok: false; readonly reason: 'duplicatePhone' | 'notFound' };
+  { readonly ok: true; readonly id: string } | { readonly ok: false; readonly reason: 'duplicatePhone' | 'notFound' };
 
 /**
  * Add somebody to the roster.
@@ -159,7 +146,12 @@ export type PartnerWriteResult =
  * user's input and can say something useful about it.
  */
 export async function addPartner(
-  input: { name: string; phone: string; notes: string | null; sortOrder: number },
+  input: {
+    name: string;
+    phone: string;
+    notes: string | null;
+    sortOrder: number;
+  },
   tx: Tx | typeof db = db,
 ): Promise<PartnerWriteResult> {
   try {
@@ -185,11 +177,9 @@ export async function addPartner(
 /**
  * Edit a partner, including deactivating one.
  *
- * ⚠ DEACTIVATION IS `active = false`, NEVER A DELETE. Orders reference this
- * row, the FK is `on delete set null`, and deleting would strip the live
- * reference off every order they ever carried. The snapshot on the order
- * survives it, but the join does not, and the roster screen's history stops
- * working.
+ * Deactivation is the operational removal: it revokes access without changing
+ * live assignments. Permanent deletion is kept separate below so it can
+ * refuse active roster entries and live jobs; historical snapshots survive.
  *
  * Reactivating can fail on the partial unique index — somebody else may hold
  * the number now — which is why this returns the same refusal as `addPartner`.
@@ -219,6 +209,41 @@ export async function updatePartner(
     if (isUniqueViolation(error)) return { ok: false, reason: 'duplicatePhone' };
     throw error;
   }
+}
+
+export type DeletePartnerResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: 'notFound' | 'mustDeactivate' | 'hasLiveJobs';
+    };
+
+/**
+ * Permanently remove an inactive roster entry when no live delivery still
+ * points at it. Historical orders retain the snapshotted name and phone while
+ * the FK becomes null (`ON DELETE SET NULL`).
+ */
+export async function deletePartner(id: string): Promise<DeletePartnerResult> {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ active: deliveryPartner.active })
+      .from(deliveryPartner)
+      .where(eq(deliveryPartner.id, id))
+      .for('update');
+    const current = rows[0];
+    if (current === undefined) return { ok: false, reason: 'notFound' };
+    if (current.active) return { ok: false, reason: 'mustDeactivate' };
+
+    const liveJobs = await tx
+      .select({ id: order.id })
+      .from(order)
+      .where(and(eq(order.deliveryPartnerId, id), notInArray(order.status, ['DELIVERED', 'CANCELLED'])))
+      .limit(1);
+    if (liveJobs[0] !== undefined) return { ok: false, reason: 'hasLiveJobs' };
+
+    await tx.delete(deliveryPartner).where(eq(deliveryPartner.id, id));
+    return { ok: true };
+  });
 }
 
 /**

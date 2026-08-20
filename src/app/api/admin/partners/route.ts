@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { addPartner, updatePartner } from '@/db/repositories/partners';
+import { addPartner, deletePartner, updatePartner } from '@/db/repositories/partners';
 import { normalisePhone } from '@/domain/phone';
 
 import { guarded } from '../_guard';
@@ -21,10 +21,9 @@ import { guarded } from '../_guard';
  * rows written by a script, a migration or a psql session, none of which come
  * through here.
  *
- * ⭐ DEACTIVATE, NEVER DELETE. There is no DELETE method on this route, on
- * purpose. Orders reference these rows and the snapshot on a delivered order
- * must keep resolving; `active: false` removes somebody from the picker while
- * leaving March's deliveries with a name on them.
+ * Deactivation removes somebody from today's picker immediately. Permanent
+ * deletion is a separate, guarded action for an inactive entry with no live
+ * jobs; historical orders keep their snapshotted name and number.
  */
 
 const addSchema = z.object({
@@ -42,6 +41,8 @@ const patchSchema = z.object({
   active: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(999).optional(),
 });
+
+const deleteSchema = z.object({ id: z.uuid() });
 
 export async function POST(request: Request) {
   return guarded(request, addSchema, async (input) => {
@@ -70,8 +71,20 @@ export async function PATCH(request: Request) {
       normalised = value;
     }
 
-    const result = await updatePartner(id, { ...rest, ...(normalised && { phone: normalised }) });
+    const result = await updatePartner(id, {
+      ...rest,
+      ...(normalised && { phone: normalised }),
+    });
 
+    return result.ok
+      ? NextResponse.json({ ok: true })
+      : NextResponse.json({ reason: result.reason }, { status: result.reason === 'notFound' ? 404 : 409 });
+  });
+}
+
+export async function DELETE(request: Request) {
+  return guarded(request, deleteSchema, async ({ id }) => {
+    const result = await deletePartner(id);
     return result.ok
       ? NextResponse.json({ ok: true })
       : NextResponse.json({ reason: result.reason }, { status: result.reason === 'notFound' ? 404 : 409 });

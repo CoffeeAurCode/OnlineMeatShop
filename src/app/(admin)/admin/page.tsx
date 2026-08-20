@@ -109,7 +109,12 @@ export default async function TodayPage() {
 
           <Panel title="Needs attention" note="Checked on every load.">
             <AttentionList
-              items={await attention({ runwayDays, dayOpen: false, toWeigh: 0, soldOut: [] })}
+              items={await attention({
+                runwayDays,
+                dayOpen: false,
+                toWeigh: 0,
+                soldOut: [],
+              })}
             />
           </Panel>
         </div>
@@ -163,10 +168,7 @@ export default async function TodayPage() {
         estimates would keep reporting a number the scale has already replaced.
       */
       valueCents: inSlot.reduce((c, o) => c + (o.finalTotalCents ?? o.estTotalCents), 0),
-      weightG: inSlot.reduce(
-        (g, o) => g + o.lines.reduce((n, l) => n + (l.actWeightG ?? l.requestedG), 0),
-        0,
-      ),
+      weightG: inSlot.reduce((g, o) => g + o.lines.reduce((n, l) => n + (l.actWeightG ?? l.requestedG), 0), 0),
       past: s.endsAt.getTime() < now.getTime(),
       next: i === nextIndex,
     };
@@ -212,8 +214,8 @@ export default async function TodayPage() {
       intro={
         <>
           {day.businessDate}
-          {day.businessDate === today ? '' : ' — this is not today’s date'} · read just now, and
-          nothing on this page updates on its own
+          {day.businessDate === today ? '' : ' — this is not today’s date'} · read just now, and nothing on this page
+          updates on its own
         </>
       }
       width="wide"
@@ -240,7 +242,7 @@ export default async function TodayPage() {
                   : `${cancelled} cancelled, not counted`
               }
               icon={<ReceiptIcon size={17} weight="fill" />}
-              href="/admin/orders"
+              href="/admin/orders?filter=all"
             />
             <StatTile
               label="Waiting on the scale"
@@ -252,7 +254,7 @@ export default async function TodayPage() {
               }
               icon={<ScalesIcon size={17} weight="fill" />}
               tone={toWeigh.length > 0 ? 'danger' : 'plain'}
-              href="/admin/orders"
+              href="/admin/orders?filter=scale"
             />
             <StatTile
               label="Out for delivery"
@@ -260,7 +262,7 @@ export default async function TodayPage() {
               hint={`${byStatus('READY')} packed and waiting`}
               icon={<TruckIcon size={17} weight="fill" />}
               tone={byStatus('OUT') > 0 ? 'accent' : 'plain'}
-              href="/admin/orders"
+              href="/admin/orders?filter=delivery"
             />
             <StatTile
               label="Delivered"
@@ -272,6 +274,7 @@ export default async function TodayPage() {
               }
               icon={<CheckCircleIcon size={17} weight="fill" />}
               tone={byStatus('DELIVERED') > 0 ? 'success' : 'plain'}
+              href="/admin/orders?filter=delivered"
             />
             <StatTile
               label="Taken today"
@@ -381,11 +384,7 @@ export default async function TodayPage() {
                             </Chip>
                           ) : null}
                           {gone ? <Chip>gone</Chip> : null}
-                          {pending > 0 ? (
-                            <Chip tone="danger">
-                              {pending} to weigh
-                            </Chip>
-                          ) : null}
+                          {pending > 0 ? <Chip tone="danger">{pending} to weigh</Chip> : null}
                           <span className="tnum ml-auto text-meta text-muted">
                             {inSlot.length} of {s.capacity}
                           </span>
@@ -415,10 +414,7 @@ export default async function TodayPage() {
               className="lg:col-span-2"
             >
               {windows.length === 0 ? (
-                <Empty
-                  title="Nothing to plot"
-                  body="There are no delivery windows on today’s date."
-                />
+                <Empty title="Nothing to plot" body="There are no delivery windows on today’s date." />
               ) : (
                 <OrderFlowChart windows={windows} />
               )}
@@ -480,10 +476,7 @@ export default async function TodayPage() {
                   .slice(0, 6)
                   .map((o) => (
                     <li key={o.id} className="border-b border-line last:border-b-0">
-                      <Link
-                        href={`/admin/orders/${o.id}`}
-                        className="press flex items-center gap-3 py-2.5"
-                      >
+                      <Link href={`/admin/orders/${o.id}`} className="press flex items-center gap-3 py-2.5">
                         <span
                           aria-hidden
                           className="grid size-9 shrink-0 place-content-center rounded-full bg-accent-wash text-meta font-semibold text-accent"
@@ -502,8 +495,7 @@ export default async function TodayPage() {
                             ) : null}
                           </span>
                           <span className="block truncate text-micro text-muted">
-                            {o.status.toLowerCase()} ·{' '}
-                            {o.lines.map((l) => l.productName).join(', ')}
+                            {o.status.toLowerCase()} · {o.lines.map((l) => l.productName).join(', ')}
                           </span>
                         </span>
 
@@ -538,18 +530,39 @@ export default async function TodayPage() {
           <Panel title="Manage the shop" note="Everything that is not today.">
             <ul>
               {[
-                { href: '/admin/slots', label: 'Delivery windows', hint: 'when the van goes out' },
-                { href: '/admin/partners', label: 'Drivers', hint: 'who carries the boxes' },
-                { href: '/admin/delivery-area', label: 'Delivery area', hint: 'how far, and the fee' },
-                { href: '/admin/catalog', label: 'Catalog', hint: 'names and prices' },
-                { href: '/admin/shop', label: 'Shop details', hint: 'address, hours, phone' },
-                { href: '/admin/settings', label: 'Console settings', hint: 'the new-order sound' },
+                {
+                  href: '/admin/slots',
+                  label: 'Delivery windows',
+                  hint: 'when the van goes out',
+                },
+                {
+                  href: '/admin/partners',
+                  label: 'Drivers',
+                  hint: 'who carries the boxes',
+                },
+                {
+                  href: '/admin/delivery-area',
+                  label: 'Delivery area',
+                  hint: 'how far, and the fee',
+                },
+                {
+                  href: '/admin/catalog',
+                  label: 'Catalog',
+                  hint: 'names and prices',
+                },
+                {
+                  href: '/admin/shop',
+                  label: 'Shop details',
+                  hint: 'address, hours, phone',
+                },
+                {
+                  href: '/admin/settings',
+                  label: 'Console settings',
+                  hint: 'the new-order sound',
+                },
               ].map((i) => (
                 <li key={i.href} className="border-b border-line last:border-b-0">
-                  <Link
-                    href={i.href}
-                    className="press flex items-center justify-between gap-3 py-2.5"
-                  >
+                  <Link href={i.href} className="press flex items-center justify-between gap-3 py-2.5">
                     <span className="min-w-0">
                       <span className="block truncate text-body font-semibold">{i.label}</span>
                       <span className="block truncate text-micro text-muted">{i.hint}</span>
@@ -735,10 +748,7 @@ function AttentionList({ items }: { items: readonly Alert[] }) {
     <ul className="grid gap-2">
       {items.map((a) => (
         <li key={a.id} className="flex items-start gap-2.5 rounded-md bg-soft px-3 py-2.5">
-          <span
-            aria-hidden
-            className={`grid size-7 shrink-0 place-content-center rounded-full ${fills[a.tone]}`}
-          >
+          <span aria-hidden className={`grid size-7 shrink-0 place-content-center rounded-full ${fills[a.tone]}`}>
             <WarningIcon size={14} weight="fill" />
           </span>
           <span className="min-w-0 flex-1">

@@ -7,10 +7,12 @@ import {
   catalogVersion,
   category,
   order,
+  orderLine,
   payment,
   product,
   serviceableFsa,
   slot,
+  stockItem,
   zone,
 } from '@/db/schema';
 
@@ -92,9 +94,7 @@ export async function slotRunwayDays(
   const rows = await tx
     .select({ serviceDate: slot.serviceDate })
     .from(slot)
-    .where(
-      and(eq(slot.active, true), gte(slot.serviceDate, todayIso), gt(slot.cutoffAt, now)),
-    )
+    .where(and(eq(slot.active, true), gte(slot.serviceDate, todayIso), gt(slot.cutoffAt, now)))
     .orderBy(desc(slot.serviceDate))
     .limit(1);
 
@@ -164,11 +164,7 @@ export async function updateSlot(
   },
 ): Promise<{ ok: true } | { ok: false; reason: 'notFound' | 'belowBooked' }> {
   return db.transaction(async (tx) => {
-    const rows = await tx
-      .select({ bookedCount: slot.bookedCount })
-      .from(slot)
-      .where(eq(slot.id, id))
-      .for('update');
+    const rows = await tx.select({ bookedCount: slot.bookedCount }).from(slot).where(eq(slot.id, id)).for('update');
 
     const current = rows[0];
     if (current === undefined) return { ok: false as const, reason: 'notFound' as const };
@@ -313,6 +309,111 @@ export interface ProductPatch {
   readonly stepG?: number | null | undefined;
 }
 
+export type NewProduct =
+  | {
+      readonly name: string;
+      readonly nameFr: string | null;
+      readonly description: string | null;
+      readonly descriptionFr: string | null;
+      readonly slug: string;
+      readonly categoryId: string;
+      readonly handling: 'RAW' | 'MARINATED' | 'COOKED_CHILLED' | 'COOKED_HOT';
+      readonly taxCode: 'ZERO_RATED_BASIC_GROCERY' | 'STANDARD';
+      readonly pricingMode: 'pack';
+      readonly packPriceCents: number;
+      readonly wMinG: number;
+      readonly wMaxG: number;
+    }
+  | {
+      readonly name: string;
+      readonly nameFr: string | null;
+      readonly description: string | null;
+      readonly descriptionFr: string | null;
+      readonly slug: string;
+      readonly categoryId: string;
+      readonly handling: 'RAW' | 'MARINATED' | 'COOKED_CHILLED' | 'COOKED_HOT';
+      readonly taxCode: 'ZERO_RATED_BASIC_GROCERY' | 'STANDARD';
+      readonly pricingMode: 'perKg';
+      readonly ratePerKgCents: number;
+      readonly minOrderG: number;
+      readonly stepG: number;
+    };
+
+export async function createProduct(
+  input: NewProduct,
+): Promise<{ ok: true; id: string } | { ok: false; reason: 'categoryNotFound' | 'duplicateSlug' }> {
+  try {
+    return await db.transaction(async (tx) => {
+      const categories = await tx
+        .select({ id: category.id })
+        .from(category)
+        .where(and(eq(category.id, input.categoryId), eq(category.active, true)))
+        .limit(1);
+      if (categories[0] === undefined) return { ok: false as const, reason: 'categoryNotFound' as const };
+
+      const rows = await tx
+        .insert(product)
+        .values({
+          name: input.name,
+          nameFr: input.nameFr,
+          description: input.description,
+          descriptionFr: input.descriptionFr,
+          slug: input.slug,
+          categoryId: input.categoryId,
+          handling: input.handling,
+          taxCode: input.taxCode,
+          pricingMode: input.pricingMode,
+          packPriceCents: input.pricingMode === 'pack' ? input.packPriceCents : null,
+          wMinG: input.pricingMode === 'pack' ? input.wMinG : null,
+          wMaxG: input.pricingMode === 'pack' ? input.wMaxG : null,
+          ratePerKgCents: input.pricingMode === 'perKg' ? input.ratePerKgCents : null,
+          minOrderG: input.pricingMode === 'perKg' ? input.minOrderG : null,
+          stepG: input.pricingMode === 'perKg' ? input.stepG : null,
+        })
+        .returning({ id: product.id });
+
+      const row = rows[0];
+      if (row === undefined) throw new Error('Product insert returned no row');
+      await bumpCatalogVersion(tx);
+      return { ok: true as const, id: row.id };
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, reason: 'duplicateSlug' };
+    throw error;
+  }
+}
+
+export type DeleteProductResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: 'notFound' | 'mustDeactivate' | 'hasOrderHistory' | 'reservedStock';
+    };
+
+export async function deleteProduct(id: string): Promise<DeleteProductResult> {
+  return db.transaction(async (tx) => {
+    const products = await tx.select({ active: product.active }).from(product).where(eq(product.id, id)).for('update');
+    const current = products[0];
+    if (current === undefined) return { ok: false, reason: 'notFound' };
+    if (current.active) return { ok: false, reason: 'mustDeactivate' };
+
+    const history = await tx.select({ id: orderLine.id }).from(orderLine).where(eq(orderLine.productId, id)).limit(1);
+    if (history[0] !== undefined) return { ok: false, reason: 'hasOrderHistory' };
+
+    const stock = await tx
+      .select({ reservedG: stockItem.reservedG })
+      .from(stockItem)
+      .where(eq(stockItem.productId, id))
+      .for('update');
+    if (stock.some((row) => row.reservedG > 0)) return { ok: false, reason: 'reservedStock' };
+
+    await tx.delete(stockItem).where(eq(stockItem.productId, id));
+    await tx.delete(product).where(eq(product.id, id));
+    await bumpCatalogVersion(tx);
+    return { ok: true };
+  });
+}
+
 /**
  * Edit a product.
  *
@@ -336,11 +437,7 @@ export async function updateProduct(id: string, patch: ProductPatch): Promise<bo
      * here can block a placement briefly but cannot deadlock it, because this
      * transaction never goes on to want a slot or a stock row.
      */
-    const rows = await tx
-      .select({ id: product.id })
-      .from(product)
-      .where(eq(product.id, id))
-      .for('update');
+    const rows = await tx.select({ id: product.id }).from(product).where(eq(product.id, id)).for('update');
 
     if (rows[0] === undefined) return false;
 
@@ -460,9 +557,7 @@ export interface AdminProduct {
  * stock here would make an inactive product on a closed day indistinguishable
  * from one that sold out.
  */
-export async function listProductsForAdmin(
-  tx: Tx | typeof db = db,
-): Promise<readonly AdminProduct[]> {
+export async function listProductsForAdmin(tx: Tx | typeof db = db): Promise<readonly AdminProduct[]> {
   const rows = await tx
     .select({
       id: product.id,
@@ -485,4 +580,13 @@ export async function listProductsForAdmin(
     .orderBy(asc(category.nameEn), asc(product.name));
 
   return rows;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && typeof current === 'object' && current !== null; depth += 1) {
+    if ((current as { code?: unknown }).code === '23505') return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }

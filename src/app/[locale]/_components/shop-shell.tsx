@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ReceiptIcon } from '@phosphor-icons/react/dist/ssr';
+import { HouseIcon, UserCircleIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { t, type Locale } from '@/i18n';
 
@@ -92,16 +92,20 @@ export function ShopHeader({ locale }: { locale: Locale }) {
           <AddressPill locale={locale} />
 
           <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href={home}
+              className="band-outline hidden h-11 items-center gap-1.5 rounded-full px-4 text-meta font-semibold text-white lg:inline-flex"
+            >
+              <HouseIcon size={18} aria-hidden />
+              {t(locale, 'nav.home')}
+            </Link>
             {/*
-              ⚠ THE CATALOG LINK IS `xl` ONLY AND THAT IS NOT AN OMISSION. The
-              tab bar carries Shop and Orders on every screen below `lg`, and
-              this bar is 44px controls in a 56px row — a fourth one costs the
-              address line about a fifth of its width in the locale where the
-              street names are longest. Above `xl` there is room for the word.
+              Desktop needs a visible route back to both the landing page and
+              catalog because the mobile tab bar disappears at `lg`.
             */}
             <Link
               href={`${home}/shop`}
-              className="band-outline hidden h-11 items-center rounded-full px-4 text-meta font-semibold text-white xl:inline-flex"
+              className="band-outline hidden h-11 items-center rounded-full px-4 text-meta font-semibold text-white lg:inline-flex"
             >
               {t(locale, 'nav.shop')}
             </Link>
@@ -113,11 +117,11 @@ export function ShopHeader({ locale }: { locale: Locale }) {
               carrying words gets `.band-outline` instead. See `globals.css`.
             */}
             <Link
-              href={`${home}/orders`}
-              aria-label={t(locale, 'nav.myOrders')}
+              href={`${home}/account`}
+              aria-label={t(locale, 'nav.account')}
               className="band-chip press grid size-11 shrink-0 place-items-center rounded-full text-white"
             >
-              <ReceiptIcon size={20} aria-hidden />
+              <UserCircleIcon size={21} aria-hidden />
             </Link>
 
             <BasketButton locale={locale} />

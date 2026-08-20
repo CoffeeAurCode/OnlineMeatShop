@@ -72,6 +72,7 @@ export function ItemSheet({
 
   const [grams, setGrams] = useState(product.minOrderG);
   const [qty, setQty] = useState(1);
+  const [weightValid, setWeightValid] = useState(true);
   const [prepId, setPrepId] = useState<string | null>(product.preps[0]?.id ?? null);
 
   const perKg = product.pricingMode === 'perKg';
@@ -89,6 +90,7 @@ export function ItemSheet({
   const estimate = displayEstimateCents(product.pricingMode, product.unitPriceCents, grams, qty);
 
   function add() {
+    if (!weightValid) return;
     addLine({
       productId: product.productId,
       slug: product.slug,
@@ -133,9 +135,7 @@ export function ItemSheet({
               // which is a different and worse message than "no photograph".
               <div className="fallback-tile absolute inset-0">
                 <p className="text-lead font-semibold text-ink">{product.name}</p>
-                <p className="text-meta text-muted">
-                  {t(locale, `handling.${product.handling}`)}
-                </p>
+                <p className="text-meta text-muted">{t(locale, `handling.${product.handling}`)}</p>
               </div>
             ) : (
               <Image
@@ -159,9 +159,7 @@ export function ItemSheet({
                   ⚠ A PHOTOGRAPH MUST STILL COVER. Its background is whatever
                   the camera saw, so containing one really would letterbox.
                 */
-                className={
-                  isPainted(product.imagePath) ? 'painted object-contain' : 'object-cover'
-                }
+                className={isPainted(product.imagePath) ? 'painted object-contain' : 'object-cover'}
               />
             )}
           </div>
@@ -199,10 +197,7 @@ export function ItemSheet({
             ) : (
               <HandlingLabel handling={product.handling} locale={locale} />
             )}
-            <h2
-              id="item-sheet-title"
-              className="!font-sans !text-section !pb-0 !tracking-normal font-semibold"
-            >
+            <h2 id="item-sheet-title" className="!font-sans !text-section !pb-0 !tracking-normal font-semibold">
               {product.name}
             </h2>
             <p className="tnum text-lead font-semibold">
@@ -210,9 +205,7 @@ export function ItemSheet({
                 ? ratePerKg(product.unitPriceCents, locale)
                 : pricePerUnit(product.unitPriceCents, t(locale, 'product.unitPack'), locale)}
             </p>
-            {product.description !== null && (
-              <p className="max-w-[52ch] text-body text-muted">{product.description}</p>
-            )}
+            {product.description !== null && <p className="max-w-[52ch] text-body text-muted">{product.description}</p>}
             <p className="text-meta text-muted">
               {perKg ? t(locale, 'product.estimatedNote') : t(locale, 'product.fixedWeightNote')}
             </p>
@@ -236,9 +229,7 @@ export function ItemSheet({
               <div aria-hidden className="h-2 bg-soft" />
               <fieldset className="px-5 py-4">
                 <legend className="flex w-full items-center justify-between gap-3 pb-2">
-                  <span className="text-body font-semibold">
-                    {t(locale, 'product.prepHeading')}
-                  </span>
+                  <span className="text-body font-semibold">{t(locale, 'product.prepHeading')}</span>
                   <span className="rounded-full bg-soft px-2.5 py-0.5 text-meta text-muted">
                     {t(locale, 'product.required')}
                   </span>
@@ -274,12 +265,12 @@ export function ItemSheet({
             </span>
             {product.availableG !== null && !soldOut && (
               <p className="text-meta text-muted">
-                {t(locale, 'shop.leftToday', { amount: weight(product.availableG, locale) })}
+                {t(locale, 'shop.leftToday', {
+                  amount: weight(product.availableG, locale),
+                })}
               </p>
             )}
-            {soldOut && (
-              <p className="text-meta font-semibold text-ink">{t(locale, 'shop.soldOut')}</p>
-            )}
+            {soldOut && <p className="text-meta font-semibold text-ink">{t(locale, 'shop.soldOut')}</p>}
           </div>
         </div>
 
@@ -305,15 +296,14 @@ export function ItemSheet({
                   stepG={product.stepG}
                   maxG={product.availableG}
                   onChange={setGrams}
+                  onValidityChange={setWeightValid}
                   locale={locale}
                 />
               ) : (
                 <QtyStepper
                   qty={qty}
                   max={
-                    product.availableG === null
-                      ? null
-                      : Math.max(1, Math.floor(product.availableG / product.minOrderG))
+                    product.availableG === null ? null : Math.max(1, Math.floor(product.availableG / product.minOrderG))
                   }
                   onChange={setQty}
                   locale={locale}
@@ -325,7 +315,7 @@ export function ItemSheet({
               type="button"
               data-parity="sheet-add"
               onClick={add}
-              disabled={soldOut}
+              disabled={soldOut || !weightValid}
               className="
                 tap-lg flex w-full items-center justify-center gap-3 rounded-sm bg-accent px-6
                 text-body font-semibold text-accent-ink transition-[transform,background-color]
@@ -338,7 +328,9 @@ export function ItemSheet({
               {!soldOut && (
                 <span className="tnum ml-auto">
                   {perKg
-                    ? t(locale, 'product.aboutAmount', { amount: money(estimate, locale) })
+                    ? t(locale, 'product.aboutAmount', {
+                        amount: money(estimate, locale),
+                      })
                     : money(estimate, locale)}
                 </span>
               )}

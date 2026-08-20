@@ -42,32 +42,23 @@ export interface AddableProduct {
   readonly preps: readonly { id: string; label: string }[];
 }
 
-export function AddToBasket({
-  product,
-  locale,
-}: {
-  product: AddableProduct;
-  locale: Locale;
-}) {
+export function AddToBasket({ product, locale }: { product: AddableProduct; locale: Locale }) {
   const [grams, setGrams] = useState(product.minOrderG);
   const [qty, setQty] = useState(1);
+  const [weightValid, setWeightValid] = useState(true);
   const [prepId, setPrepId] = useState<string | null>(product.preps[0]?.id ?? null);
   const [justAdded, setJustAdded] = useState(false);
 
   const prep = product.preps.find((p) => p.id === prepId) ?? null;
   // Display only. See `estimate.ts`; the server prices every basket.
-  const estimate = displayEstimateCents(
-    product.pricingMode,
-    product.unitPriceCents,
-    grams,
-    qty,
-  );
+  const estimate = displayEstimateCents(product.pricingMode, product.unitPriceCents, grams, qty);
 
   // Sold out today. `availableG === null` is NOT this: it means the shop has
   // not declared stock, which the card words differently.
   const soldOut = product.availableG !== null && product.availableG < product.minOrderG;
 
   function add() {
+    if (!weightValid) return;
     addLine({
       productId: product.productId,
       slug: product.slug,
@@ -121,9 +112,7 @@ export function AddToBasket({
 
       <div className="grid gap-3">
         <span className="text-meta font-semibold uppercase tracking-[0.12em] text-muted">
-          {product.pricingMode === 'perKg'
-            ? t(locale, 'product.chooseWeight')
-            : t(locale, 'product.chooseQuantity')}
+          {product.pricingMode === 'perKg' ? t(locale, 'product.chooseWeight') : t(locale, 'product.chooseQuantity')}
         </span>
         {product.pricingMode === 'perKg' ? (
           <WeightStepper
@@ -132,16 +121,13 @@ export function AddToBasket({
             stepG={product.stepG}
             maxG={product.availableG}
             onChange={setGrams}
+            onValidityChange={setWeightValid}
             locale={locale}
           />
         ) : (
           <QtyStepper
             qty={qty}
-            max={
-              product.availableG === null
-                ? null
-                : Math.max(1, Math.floor(product.availableG / product.minOrderG))
-            }
+            max={product.availableG === null ? null : Math.max(1, Math.floor(product.availableG / product.minOrderG))}
             onChange={setQty}
             locale={locale}
           />
@@ -160,7 +146,7 @@ export function AddToBasket({
       <button
         type="button"
         onClick={add}
-        disabled={soldOut}
+        disabled={soldOut || !weightValid}
         className="tap-lg flex w-full items-center justify-center gap-3 rounded-sm bg-accent px-6 text-lead font-semibold text-accent-ink transition-[transform,background-color] duration-(--duration-fast) ease-brand hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-40 active:scale-[0.99]"
       >
         {justAdded ? (
@@ -178,7 +164,9 @@ export function AddToBasket({
         {!soldOut && !justAdded && (
           <span className="tnum ml-auto">
             {product.pricingMode === 'perKg'
-              ? t(locale, 'product.aboutAmount', { amount: money(estimate, locale) })
+              ? t(locale, 'product.aboutAmount', {
+                  amount: money(estimate, locale),
+                })
               : money(estimate, locale)}
           </span>
         )}

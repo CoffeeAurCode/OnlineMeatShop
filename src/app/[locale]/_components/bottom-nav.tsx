@@ -2,12 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  BasketIcon,
-  HouseIcon,
-  ReceiptIcon,
-  StorefrontIcon,
-} from '@phosphor-icons/react/dist/ssr';
+import { BasketIcon, HouseIcon, StorefrontIcon, UserCircleIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { t, type Locale } from '@/i18n';
 import { useCart } from '@/ui/cart';
@@ -27,8 +22,8 @@ import { openCart, useCartOpen } from './drawer-state';
  * is a second vendor type — this is one fishmonger, and rendering a storefront
  * we do not have is exactly the "fake choice" the plan bans. `Account` in the
  * reference carries rewards, promotions, saved payment methods and family
- * accounts, none of which exist here; the only account surface with anything
- * behind it is the order history, so that is what the fourth tab is.
+ * accounts, none of which exist here. This account surface stays narrower:
+ * order history plus this device's favourites and delivery address.
  *
  * See `08-A-figma-frame-inventory.md` §6.1 in the private parent repo for the
  * full mapping and why each reference tab survived or did not.
@@ -60,9 +55,8 @@ export function BottomNav({ locale }: { locale: Locale }) {
 
   // The catalog tab owns browsing in all three of its shapes: the counter, a
   // single product, and search. They are one activity to a customer.
-  const onShop =
-    inSection(`${home}/shop`) || inSection(`${home}/p`) || inSection(`${home}/search`);
-  const onOrders = inSection(`${home}/orders`);
+  const onShop = inSection(`${home}/shop`) || inSection(`${home}/p`) || inSection(`${home}/search`);
+  const onAccount = inSection(`${home}/account`) || inSection(`${home}/orders`);
   const onHome = pathname === home;
 
   /*
@@ -87,12 +81,7 @@ export function BottomNav({ locale }: { locale: Locale }) {
           <Tab href={home} active={onHome} label={t(locale, 'nav.home')} Icon={HouseIcon} />
         </li>
         <li>
-          <Tab
-            href={`${home}/shop`}
-            active={onShop}
-            label={t(locale, 'nav.shop')}
-            Icon={StorefrontIcon}
-          />
+          <Tab href={`${home}/shop`} active={onShop} label={t(locale, 'nav.shop')} Icon={StorefrontIcon} />
         </li>
         <li>
           <Tab
@@ -115,12 +104,7 @@ export function BottomNav({ locale }: { locale: Locale }) {
           />
         </li>
         <li>
-          <Tab
-            href={`${home}/orders`}
-            active={onOrders}
-            label={t(locale, 'nav.myOrders')}
-            Icon={ReceiptIcon}
-          />
+          <Tab href={`${home}/account`} active={onAccount} label={t(locale, 'nav.account')} Icon={UserCircleIcon} />
         </li>
       </ul>
     </nav>

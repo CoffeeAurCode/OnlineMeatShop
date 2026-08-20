@@ -1,10 +1,11 @@
 'use client';
 
+import { useId, useState } from 'react';
 import { MinusIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
 import type { Locale } from '@/i18n';
 import { t } from '@/i18n';
-import { weight } from '@/ui/format';
+import { weightFromEntry } from '@/ui/weight-entry';
 
 /**
  * The two steppers.
@@ -55,6 +56,7 @@ export function WeightStepper({
   stepG,
   maxG,
   onChange,
+  onValidityChange,
   locale,
 }: {
   grams: number;
@@ -62,31 +64,88 @@ export function WeightStepper({
   stepG: number;
   maxG: number | null;
   onChange: (g: number) => void;
+  onValidityChange?: (valid: boolean) => void;
   locale: Locale;
 }) {
+  const inputId = useId();
+  const errorId = `${inputId}-error`;
+  const [draft, setDraft] = useState(String(grams));
+  const [valid, setValid] = useState(true);
+
   // A null ceiling means the shop has not declared stock today, which is not
   // the same as zero. The stepper stays usable; placement is what refuses.
   const atMax = maxG !== null && grams + stepG > maxG;
 
+  function commit(next: number): void {
+    setDraft(String(next));
+    setValid(true);
+    onValidityChange?.(true);
+    onChange(next);
+  }
+
+  function typeWeight(raw: string): void {
+    setDraft(raw);
+    const next = weightFromEntry(raw, minG, stepG, maxG);
+    const nextValid = next !== null;
+    setValid(nextValid);
+    onValidityChange?.(nextValid);
+    if (next !== null) onChange(next);
+  }
+
   return (
-    <div className="flex items-center gap-3">
-      <StepButton
-        onClick={() => onChange(Math.max(minG, grams - stepG))}
-        disabled={grams <= minG}
-        label={t(locale, 'product.decrease')}
-      >
-        <MinusIcon size={18} weight="bold" aria-hidden />
-      </StepButton>
-      <output className="tnum min-w-[5.5rem] text-center text-lead font-semibold">
-        {weight(grams, locale)}
-      </output>
-      <StepButton
-        onClick={() => onChange(grams + stepG)}
-        disabled={atMax}
-        label={t(locale, 'product.increase')}
-      >
-        <PlusIcon size={18} weight="bold" aria-hidden />
-      </StepButton>
+    <div className="grid justify-items-center gap-1.5">
+      <div className="flex items-center gap-3">
+        <StepButton
+          onClick={() => commit(Math.max(minG, grams - stepG))}
+          disabled={grams <= minG}
+          label={t(locale, 'product.decrease')}
+        >
+          <MinusIcon size={18} weight="bold" aria-hidden />
+        </StepButton>
+
+        <label htmlFor={inputId} className="relative flex min-w-[6.5rem] items-center">
+          <span className="sr-only">{t(locale, 'product.weightInput')}</span>
+          <input
+            id={inputId}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
+            value={draft}
+            onChange={(event) => typeWeight(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+            }}
+            aria-invalid={!valid}
+            aria-describedby={!valid ? errorId : undefined}
+            className={`tap tnum w-full rounded-sm border bg-raised px-3 pr-7 text-center text-lead font-semibold text-ink ${
+              valid ? 'border-line' : 'border-danger'
+            }`}
+          />
+          <span aria-hidden className="pointer-events-none absolute right-3 text-meta text-muted">
+            g
+          </span>
+        </label>
+
+        <StepButton onClick={() => commit(grams + stepG)} disabled={atMax} label={t(locale, 'product.increase')}>
+          <PlusIcon size={18} weight="bold" aria-hidden />
+        </StepButton>
+      </div>
+
+      {!valid && (
+        <p id={errorId} role="alert" className="max-w-[24rem] text-center text-meta text-danger">
+          {maxG === null
+            ? t(locale, 'product.weightEntryRuleNoMax', {
+                min: minG,
+                step: stepG,
+              })
+            : t(locale, 'product.weightEntryRule', {
+                min: minG,
+                max: maxG,
+                step: stepG,
+              })}
+        </p>
+      )}
     </div>
   );
 }

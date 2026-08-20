@@ -52,7 +52,7 @@ const CANARIES = {
  * the sign-in form, which is what this scan sees, and that is still worth
  * scanning: the layout runs either way.
  */
-const ROUTES = ['/', '/healthz', '/driver', '/d/expired'];
+const ROUTES = ['/', '/en/account', '/healthz', '/driver', '/d/expired'];
 
 const env = { ...process.env, ...CANARIES, NODE_ENV: 'production', PORT };
 

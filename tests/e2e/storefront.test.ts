@@ -2,20 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
 
 import { migrateTestDatabase, testPool, truncateAll } from '../integration/helpers/db';
-import {
-  FSA_SERVED,
-  FSA_UNSERVED,
-  seedPerKgProduct,
-  seedServedArea,
-  seedSlot,
-} from '../integration/helpers/fixtures';
-import {
-  asCustomer,
-  asStranger,
-  E2E_CUSTOMER_PHONE,
-  startServer,
-  stopServer,
-} from './helpers/server';
+import { FSA_SERVED, FSA_UNSERVED, seedPerKgProduct, seedServedArea, seedSlot } from '../integration/helpers/fixtures';
+import { asCustomer, asStranger, E2E_CUSTOMER_PHONE, startServer, stopServer } from './helpers/server';
 
 /**
  * ⭐ THE STOREFRONT, END TO END.
@@ -130,7 +118,7 @@ describe('the storefront is server rendered', () => {
 
   it('keeps the console and the per-customer pages out of robots and the sitemap', async () => {
     const robots = await (await asStranger('/robots.txt')).text();
-    for (const path of ['/admin', '/api', '/basket', '/checkout']) {
+    for (const path of ['/admin', '/api', '/account', '/basket', '/checkout']) {
       expect(robots).toContain(`Disallow: ${path}`);
     }
 
@@ -167,18 +155,36 @@ describe('the storefront is server rendered', () => {
     // Hot food carries its slot warning on the catalog page, not only at
     // checkout, because it changes what the customer can order.
     expect(html).toContain('Sample Hot Grill Plate');
+    expect(html).toContain('href="/en"');
+    expect(html).toContain('href="/en/account"');
+  });
+
+  it('serves the account hub as a private customer page', async () => {
+    const response = await asStranger('/en/account');
+    expect(response.status).toBe(200);
+    const account = await response.text();
+    expect(account).toContain('account-hub');
+    expect(account).toContain('name="robots" content="noindex, nofollow, nocache"');
+    expect(account).toContain('Current orders');
+    expect(account).toContain('Past orders');
+    expect(account).toContain('Saved items');
+    expect(account).toContain('Delivery address');
   });
 });
 
 describe('the server decides every amount', () => {
   it('answers the hero postcode check for a served and an unserved area', async () => {
     const served = await (
-      await asStranger('/api/serviceable', { json: { postalCode: `${FSA_SERVED}1A1` } })
+      await asStranger('/api/serviceable', {
+        json: { postalCode: `${FSA_SERVED}1A1` },
+      })
     ).json();
     expect(served).toMatchObject({ served: true, feeCents: DELIVERY_FEE });
 
     const not = await (
-      await asStranger('/api/serviceable', { json: { postalCode: `${FSA_UNSERVED}9Z9` } })
+      await asStranger('/api/serviceable', {
+        json: { postalCode: `${FSA_UNSERVED}9Z9` },
+      })
     ).json();
     expect(not.served).toBe(false);
   });
@@ -218,9 +224,7 @@ describe('the server decides every amount', () => {
     ).json();
 
     expect(quote.problems).toContain('insufficientStock');
-    expect(quote.lines.every((l: { problem: string | null }) => l.problem === 'insufficientStock')).toBe(
-      true,
-    );
+    expect(quote.lines.every((l: { problem: string | null }) => l.problem === 'insufficientStock')).toBe(true);
 
     // And a single line of the same weight is fine, so the refusal above is
     // the aggregation and not the product being unavailable.
@@ -348,10 +352,7 @@ describe('checkout', () => {
     });
 
     // The stock it consumed is really gone.
-    const { rows } = await pool.query(
-      'SELECT reserved_g FROM stock_item WHERE product_id = $1',
-      [hotId],
-    );
+    const { rows } = await pool.query('SELECT reserved_g FROM stock_item WHERE product_id = $1', [hotId]);
     expect(rows[0].reserved_g).toBe(500);
   });
 
@@ -380,10 +381,7 @@ describe('checkout', () => {
     expect((await stale.json()).reason).toBe('priceChanged');
 
     // Nothing was written for the refused attempt.
-    const { rows } = await pool.query(
-      `SELECT count(*)::int AS n FROM order_line WHERE product_id = $1`,
-      [lambId],
-    );
+    const { rows } = await pool.query(`SELECT count(*)::int AS n FROM order_line WHERE product_id = $1`, [lambId]);
     expect(rows[0].n).toBe(0);
   });
 

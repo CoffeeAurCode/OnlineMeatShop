@@ -11,6 +11,7 @@
     "delivery": "Delivery",
     "howItWorks": "Weighing and payment",
     "myOrders": "My orders",
+    "account": "Account",
     "basket": "Basket",
     "openBasket": "Open basket",
     "search": "Search",
@@ -108,7 +109,10 @@
     "stepNote": "In steps of {amount}",
     "aboutAmount": "about {amount}",
     "unitPack": "pack",
-    "required": "Required"
+    "required": "Required",
+    "weightInput": "Weight in grams",
+    "weightEntryRule": "Enter {min} to {max} g, in {step} g steps.",
+    "weightEntryRuleNoMax": "Enter at least {min} g, in {step} g steps."
   },
   "basket": {
     "title": "Your basket",
@@ -361,6 +365,17 @@
     "signOut": "Sign out",
     "required": "Please sign in to place your order.",
     "close": "Close"
+  },
+  "account": {
+    "title": "Your account",
+    "signedOut": "Sign in to see your orders. Your saved items and address stay on this device.",
+    "currentOrders": "Current orders",
+    "pastOrders": "Past orders",
+    "favourites": "Saved items",
+    "address": "Delivery address",
+    "noLongerAvailable": "Not currently on sale",
+    "removedSaved": "{count} saved item is no longer in the catalog.",
+    "signingOut": "Signing out"
   },
   "day": {
     "mon": "Mon",

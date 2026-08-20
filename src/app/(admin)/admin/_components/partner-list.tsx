@@ -13,18 +13,17 @@ import { PrimaryBar, PrimaryButton, Row, SecondaryButton } from './shell';
  * ⭐ THE GOAL IS THIRTY SECONDS: name, number, save. Everything that is not
  * one of those two fields is optional and below them.
  *
- * ⚠ "REMOVE" IS DEACTIVATE, AND THE BUTTON SAYS SO. There is no delete on this
- * screen and no endpoint behind one. Orders reference these rows; deleting
- * somebody would strip the live reference off every delivery they ever made.
- * The wording matters because "Delete" would set an expectation the system
- * deliberately does not meet — a deactivated partner still appears on their
- * old orders, and the owner should not be surprised by that.
+ * "REMOVE" remains deactivation: it revokes portal access and removes the
+ * partner from today's picker. Permanent deletion is offered only in the
+ * inactive section and keeps historical order snapshots intact.
  */
 
 const REFUSALS: Record<string, string> = {
   invalidPhone: 'That is not a phone number the shop can text. Include the country code.',
   duplicatePhone: 'Somebody active already has that number.',
   notFound: 'That partner is no longer here. Refreshing.',
+  mustDeactivate: 'Remove this person from the active roster before deleting them.',
+  hasLiveJobs: 'This person is still assigned to a live delivery and cannot be deleted.',
 };
 
 export function PartnerList({ partners }: { partners: readonly Partner[] }) {
@@ -34,8 +33,9 @@ export function PartnerList({ partners }: { partners: readonly Partner[] }) {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
 
-  async function call(method: 'POST' | 'PATCH', body: unknown) {
+  async function call(method: 'POST' | 'PATCH' | 'DELETE', body: unknown) {
     setBusy(true);
     setError(null);
     try {
@@ -51,6 +51,7 @@ export function PartnerList({ partners }: { partners: readonly Partner[] }) {
         return false;
       }
       router.refresh();
+      if (method === 'DELETE') setDeleteCandidate(null);
       setBusy(false);
       return true;
     } catch {
@@ -108,24 +109,59 @@ export function PartnerList({ partners }: { partners: readonly Partner[] }) {
         <div className="mt-8">
           <h2 className="text-section font-semibold tracking-tight">No longer driving</h2>
           <p className="mt-1 max-w-[60ch] text-meta text-muted">
-            Kept so past orders still say who delivered them. Bringing somebody back re-uses their
-            number, unless somebody else has it now.
+            Past orders keep a snapshot of the driver’s name and number. Bring somebody back, or permanently delete an
+            inactive entry that has no live jobs.
           </p>
           {inactive.map((p) => (
-            <Row key={p.id}>
-              <span className="min-w-0">
-                <span className="block text-body">{p.name}</span>
-                <span className="tnum block text-meta text-muted">{p.phone}</span>
-              </span>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void call('PATCH', { id: p.id, active: true })}
-                className="tap shrink-0 text-meta text-muted underline underline-offset-4 disabled:opacity-50"
-              >
-                Bring back
-              </button>
-            </Row>
+            <div key={p.id}>
+              <Row>
+                <span className="min-w-0">
+                  <span className="block text-body">{p.name}</span>
+                  <span className="tnum block text-meta text-muted">{p.phone}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void call('PATCH', { id: p.id, active: true })}
+                    className="tap text-meta text-muted underline underline-offset-4 disabled:opacity-50"
+                  >
+                    Bring back
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setDeleteCandidate(p.id)}
+                    className="tap text-meta text-danger underline underline-offset-4 disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                </span>
+              </Row>
+              {deleteCandidate === p.id ? (
+                <div className="mb-3 grid gap-2 rounded-sm border border-danger bg-danger-wash p-3">
+                  <p className="text-meta text-danger">Permanently delete {p.name} from the roster?</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setDeleteCandidate(null)}
+                      className="tap rounded-sm border border-line bg-raised text-meta font-semibold"
+                    >
+                      Keep
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void call('DELETE', { id: p.id })}
+                      className="tap rounded-sm bg-danger text-meta font-semibold text-white disabled:opacity-50"
+                    >
+                      Delete permanently
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           ))}
         </div>
       )}

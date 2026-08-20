@@ -34,17 +34,34 @@ import { Chip, Empty, Panel, Screen, StatTile } from '../_components/shell';
  * and the owner reads the whole day without scrolling, and on a phone the
  * cards stack into exactly the list this screen was before.
  */
-export default async function OrdersPage() {
+type OrderFilter = 'all' | 'scale' | 'delivery' | 'delivered';
+
+function orderFilter(raw: string | string[] | undefined): OrderFilter {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === 'scale' || value === 'delivery' || value === 'delivered' ? value : 'all';
+}
+
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ filter?: string | string[] }> }) {
   const day = await currentBusinessDay();
   if (day === null) redirect('/admin/open');
 
-  const queue = await orderQueue(day.id);
+  const [queue, params] = await Promise.all([orderQueue(day.id), searchParams]);
+  const filter = orderFilter(params.filter);
   const tz = shopTimeZone();
 
   const orders = queue.flatMap((s) => s.orders).filter((o) => o.status !== 'CANCELLED');
   const unweighedIn = (o: (typeof orders)[number]) =>
     o.lines.filter((l) => l.pricingMode === 'perKg' && l.actWeightG === null).length;
   const toWeigh = orders.filter((o) => o.status === 'PREPARING' && unweighedIn(o) > 0);
+  const matches = (o: (typeof orders)[number]) =>
+    filter === 'all' ||
+    (filter === 'scale' && o.status === 'PREPARING' && unweighedIn(o) > 0) ||
+    (filter === 'delivery' && (o.status === 'READY' || o.status === 'OUT')) ||
+    (filter === 'delivered' && o.status === 'DELIVERED');
+  const filteredQueue = queue
+    .map((slot) => ({ ...slot, orders: slot.orders.filter(matches) }))
+    .filter((slot) => slot.orders.length > 0);
+  const filteredCount = filteredQueue.reduce((count, slot) => count + slot.orders.length, 0);
 
   return (
     <Screen
@@ -59,6 +76,8 @@ export default async function OrdersPage() {
           value={String(orders.length)}
           hint={`${queue.length} ${queue.length === 1 ? 'window' : 'windows'} in use`}
           icon={<ReceiptIcon size={17} weight="fill" />}
+          href="/admin/orders?filter=all"
+          active={filter === 'all'}
         />
         <StatTile
           label="Waiting on the scale"
@@ -66,6 +85,8 @@ export default async function OrdersPage() {
           hint={`${toWeigh.reduce((n, o) => n + unweighedIn(o), 0)} per-kg lines`}
           icon={<ScalesIcon size={17} weight="fill" />}
           tone={toWeigh.length > 0 ? 'danger' : 'plain'}
+          href="/admin/orders?filter=scale"
+          active={filter === 'scale'}
         />
         <StatTile
           label="Out for delivery"
@@ -73,6 +94,8 @@ export default async function OrdersPage() {
           hint={`${orders.filter((o) => o.status === 'READY').length} packed and waiting`}
           icon={<TruckIcon size={17} weight="fill" />}
           tone={orders.filter((o) => o.status === 'OUT').length > 0 ? 'accent' : 'plain'}
+          href="/admin/orders?filter=delivery"
+          active={filter === 'delivery'}
         />
         <StatTile
           label="Delivered"
@@ -80,18 +103,24 @@ export default async function OrdersPage() {
           hint={`${orders.filter((o) => o.payMode === 'COD').length} cash on delivery today`}
           icon={<CheckCircleIcon size={17} weight="fill" />}
           tone={orders.filter((o) => o.status === 'DELIVERED').length > 0 ? 'success' : 'plain'}
+          href="/admin/orders?filter=delivered"
+          active={filter === 'delivered'}
         />
       </div>
 
-      {queue.length === 0 ? (
+      {filteredCount === 0 ? (
         <Empty
-          title="No orders yet"
-          body="Orders appear here as customers place them, grouped by the delivery slot they chose."
+          title={orders.length === 0 ? 'No orders yet' : 'No orders match this view'}
+          body={
+            orders.length === 0
+              ? 'Orders appear here as customers place them, grouped by the delivery slot they chose.'
+              : 'Choose another summary block to see a different part of today’s queue.'
+          }
         />
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        {queue.map((slot) => (
+        {filteredQueue.map((slot) => (
           <Panel
             key={slot.id}
             title={slotClock(tz, slot.startsAt, slot.endsAt)}
@@ -155,8 +184,7 @@ export default async function OrdersPage() {
                         The driver reported a figure that did not match. The
                         order deliberately did NOT close — see `reportDelivery`.
                       */}
-                      {order.cashCollectedCents !== null &&
-                      order.cashCollectedCents !== order.finalTotalCents ? (
+                      {order.cashCollectedCents !== null && order.cashCollectedCents !== order.finalTotalCents ? (
                         <p className="mt-1.5 rounded-sm bg-danger-wash px-2 py-1 text-meta font-semibold text-danger">
                           Driver reported {money(order.cashCollectedCents, ADMIN_LOCALE)} collected
                           {order.finalTotalCents === null
@@ -167,9 +195,7 @@ export default async function OrdersPage() {
 
                       <p className="mt-1.5 flex items-center gap-1 text-meta text-muted">
                         <span className="min-w-0 flex-1 truncate">
-                          {order.lines
-                            .map((l) => `${l.productName} ${weight(l.requestedG, ADMIN_LOCALE)}`)
-                            .join(', ')}
+                          {order.lines.map((l) => `${l.productName} ${weight(l.requestedG, ADMIN_LOCALE)}`).join(', ')}
                         </span>
                         <CaretRightIcon size={12} weight="bold" aria-hidden className="shrink-0" />
                       </p>

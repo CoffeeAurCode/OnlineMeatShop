@@ -74,6 +74,7 @@ const PATHS = [
   '/p/atlantic-salmon-fillet',
   '/how-weighing-works',
   '/delivery',
+  '/account',
   '/checkout',
 ];
 const LOCALES = ['fr', 'en'];

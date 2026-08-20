@@ -26,16 +26,18 @@ export default async function StockPage() {
   return (
     <Screen title="Stock" back={{ href: '/admin', label: 'Today' }}>
       <p className="mt-2 max-w-[65ch] text-body text-muted">
-        What is left on the counter, in kilograms. Quantities already promised to orders are shown
-        underneath, and you cannot go below them.
+        What is left on the counter, in kilograms. Quantities already promised to orders are shown underneath, and you
+        cannot go below them.
       </p>
       <StockForm
-        lines={items.map((i) => ({
-          productId: i.id,
-          name: i.active ? i.name : `${i.name} (not on sale)`,
-          stockedG: i.stockedG,
-          reservedG: i.stockedG === null ? null : (i.stockedG ?? 0) - (i.availableG ?? 0),
-        }))}
+        lines={items
+          .filter((i) => i.active || (i.stockedG !== null && i.stockedG - (i.availableG ?? 0) > 0))
+          .map((i) => ({
+            productId: i.id,
+            name: i.active ? i.name : `${i.name} (retired, reserved today)`,
+            stockedG: i.stockedG,
+            reservedG: i.stockedG === null ? null : i.stockedG - (i.availableG ?? 0),
+          }))}
         endpoint="/api/admin/stock"
         submitLabel="Save stock"
       />

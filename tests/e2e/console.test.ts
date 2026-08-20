@@ -130,7 +130,9 @@ describe('the console runs a trading day', () => {
       },
     });
     expect(opened.status).toBe(200);
-    const { businessDayId } = (await opened.json()) as { businessDayId: string };
+    const { businessDayId } = (await opened.json()) as {
+      businessDayId: string;
+    };
     expect(businessDayId).toBeTruthy();
 
     // Nothing rolls over: reservations start at zero.
@@ -169,11 +171,19 @@ describe('the console runs a trading day', () => {
       businessDayId,
       payMode: 'PREPAID',
       lines: [
-        { productId: lamb.id, requestedG: grams(requestedG), prepOptionId: null },
+        {
+          productId: lamb.id,
+          requestedG: grams(requestedG),
+          prepOptionId: null,
+        },
         // A pack sells by unit, so its weight is not validated. It still
         // consumes stock, because the shop declares grams of it like anything
         // else, so the declared unit weight is what goes on the line.
-        { productId: rub.id, requestedG: grams(PACK_UNIT_G), prepOptionId: null },
+        {
+          productId: rub.id,
+          requestedG: grams(PACK_UNIT_G),
+          prepOptionId: null,
+        },
       ],
       nowMs: Date.now(),
     });
@@ -190,12 +200,21 @@ describe('the console runs a trading day', () => {
     expect(queueHtml).toContain('Sample Lamb Shoulder');
     // 18.40 lamb + 9.50 pack + 5.00 delivery
     expect(queueHtml).toContain('$32.90 est.');
+    expect(queueHtml).toContain('/admin/orders?filter=all');
+    expect(queueHtml).toContain('/admin/orders?filter=scale');
+    expect(queueHtml).toContain('/admin/orders?filter=delivery');
+    expect(queueHtml).toContain('/admin/orders?filter=delivered');
 
     // ── 4. Start preparing ───────────────────────────────────────────────
     const preparing = await asStaff('/api/admin/status', {
       json: { orderId, from: 'PLACED', to: 'PREPARING' },
     });
     expect(preparing.status).toBe(200);
+
+    const scaleView = await asStaff('/admin/orders?filter=scale');
+    const scaleHtml = await scaleView.text();
+    expect(scaleHtml).toContain('Sample Lamb Shoulder');
+    expect(scaleHtml).toContain('aria-current="page"');
 
     // A second tap on a screen that has not refreshed is a no-op, not a
     // backwards step.
@@ -206,19 +225,22 @@ describe('the console runs a trading day', () => {
     expect(await doubleTap.json()).toEqual({ reason: 'staleStatus' });
 
     // ── 5. Weighing ──────────────────────────────────────────────────────
-    const lineRows = await pool.query(
-      "SELECT id FROM order_line WHERE order_id = $1 AND pricing_mode = 'perKg'",
-      [orderId],
-    );
+    const lineRows = await pool.query("SELECT id FROM order_line WHERE order_id = $1 AND pricing_mode = 'perKg'", [
+      orderId,
+    ]);
     const lineId = lineRows.rows[0].id as string;
 
     // The pack line cannot be weighed at all: its estimate IS its actual.
-    const packLine = await pool.query(
-      "SELECT id FROM order_line WHERE order_id = $1 AND pricing_mode = 'pack'",
-      [orderId],
-    );
+    const packLine = await pool.query("SELECT id FROM order_line WHERE order_id = $1 AND pricing_mode = 'pack'", [
+      orderId,
+    ]);
     const packRefused = await asStaff('/api/admin/weigh', {
-      json: { orderId, lineId: packLine.rows[0].id, weighedG: 400, approveVariance: false },
+      json: {
+        orderId,
+        lineId: packLine.rows[0].id,
+        weighedG: 400,
+        approveVariance: false,
+      },
     });
     expect(packRefused.status).toBe(409);
     expect((await packRefused.json()).reason).toBe('packLineNotWeighable');
@@ -229,7 +251,10 @@ describe('the console runs a trading day', () => {
       json: { orderId, lineId, weighedG: 1300, approveVariance: false },
     });
     expect(outOfBand.status).toBe(409);
-    const refusal = (await outOfBand.json()) as { reason: string; detail?: { lowerG: number; upperG: number } };
+    const refusal = (await outOfBand.json()) as {
+      reason: string;
+      detail?: { lowerG: number; upperG: number };
+    };
     expect(refusal.reason).toBe('varianceApprovalRequired');
     expect(refusal.detail).toMatchObject({ lowerG: 900, upperG: 1100 });
 
@@ -243,10 +268,15 @@ describe('the console runs a trading day', () => {
       json: { orderId, lineId, weighedG: 1080, approveVariance: false },
     });
     expect(weighed.status).toBe(200);
-    expect(await weighed.json()).toMatchObject({ actWeightG: 1080, actAmountCents: 1988 });
+    expect(await weighed.json()).toMatchObject({
+      actWeightG: 1080,
+      actAmountCents: 1988,
+    });
 
     // ── 6. The exact total ───────────────────────────────────────────────
-    const finalised = await asStaff('/api/admin/finalise', { json: { orderId } });
+    const finalised = await asStaff('/api/admin/finalise', {
+      json: { orderId },
+    });
     expect(finalised.status).toBe(200);
     const settled = (await finalised.json()) as {
       finalTotalCents: number;
@@ -308,9 +338,7 @@ describe('the console runs a trading day', () => {
     expect((await res.json()).reason).toBe('belowReserved');
 
     // The refusal left the number alone.
-    const after = await pool.query('SELECT stocked_g FROM stock_item WHERE product_id = $1', [
-      productId,
-    ]);
+    const after = await pool.query('SELECT stocked_g FROM stock_item WHERE product_id = $1', [productId]);
     expect(after.rows[0].stocked_g).toBe(8000);
   });
 });

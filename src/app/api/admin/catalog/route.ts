@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { updateProduct } from '@/db/repositories/admin';
+import { createProduct, deleteProduct, updateProduct } from '@/db/repositories/admin';
 
 import { guarded } from '../_guard';
 
@@ -48,11 +48,64 @@ const schema = z
     message: 'wMinG must not exceed wMaxG',
   });
 
+const createBase = z.object({
+  name: z.string().trim().min(1).max(200),
+  nameFr: z.string().trim().min(1).max(200).nullable(),
+  description: z.string().trim().max(2000).nullable(),
+  descriptionFr: z.string().trim().max(2000).nullable(),
+  slug: z
+    .string()
+    .trim()
+    .min(1)
+    .max(160)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  categoryId: z.uuid(),
+  handling: z.enum(['RAW', 'MARINATED', 'COOKED_CHILLED', 'COOKED_HOT']),
+  taxCode: z.enum(['ZERO_RATED_BASIC_GROCERY', 'STANDARD']),
+});
+
+const createSchema = z.discriminatedUnion('pricingMode', [
+  createBase
+    .extend({
+      pricingMode: z.literal('pack'),
+      packPriceCents: z.number().int().positive().max(10_000_000),
+      wMinG: z.number().int().positive().max(1_000_000),
+      wMaxG: z.number().int().positive().max(1_000_000),
+    })
+    .refine((value) => value.wMinG <= value.wMaxG),
+  createBase
+    .extend({
+      pricingMode: z.literal('perKg'),
+      ratePerKgCents: z.number().int().positive().max(10_000_000),
+      minOrderG: z.number().int().positive().max(1_000_000),
+      stepG: z.number().int().positive().max(1_000_000),
+    })
+    .refine((value) => value.minOrderG >= value.stepG && value.minOrderG % value.stepG === 0),
+]);
+
+const deleteSchema = z.object({ id: z.uuid() });
+
+export async function POST(request: Request) {
+  return guarded(request, createSchema, async (input) => {
+    const result = await createProduct(input);
+    return result.ok
+      ? NextResponse.json({ ok: true, id: result.id })
+      : NextResponse.json({ reason: result.reason }, { status: result.reason === 'categoryNotFound' ? 400 : 409 });
+  });
+}
+
 export async function PATCH(request: Request) {
   return guarded(request, schema, async ({ id, ...patch }) => {
     const ok = await updateProduct(id, patch);
-    return ok
+    return ok ? NextResponse.json({ ok: true }) : NextResponse.json({ reason: 'notFound' }, { status: 404 });
+  });
+}
+
+export async function DELETE(request: Request) {
+  return guarded(request, deleteSchema, async ({ id }) => {
+    const result = await deleteProduct(id);
+    return result.ok
       ? NextResponse.json({ ok: true })
-      : NextResponse.json({ reason: 'notFound' }, { status: 404 });
+      : NextResponse.json({ reason: result.reason }, { status: result.reason === 'notFound' ? 404 : 409 });
   });
 }

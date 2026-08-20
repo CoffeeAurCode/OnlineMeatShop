@@ -11,6 +11,7 @@
     "delivery": "Livraison",
     "howItWorks": "Pesée et paiement",
     "myOrders": "Mes commandes",
+    "account": "Compte",
     "basket": "Panier",
     "openBasket": "Ouvrir le panier",
     "search": "Rechercher",
@@ -108,7 +109,10 @@
     "stepNote": "Par tranches de {amount}",
     "aboutAmount": "environ {amount}",
     "unitPack": "paquet",
-    "required": "Obligatoire"
+    "required": "Obligatoire",
+    "weightInput": "Poids en grammes",
+    "weightEntryRule": "Entrez de {min} à {max} g, par tranches de {step} g.",
+    "weightEntryRuleNoMax": "Entrez au moins {min} g, par tranches de {step} g."
   },
   "basket": {
     "title": "Votre panier",
@@ -361,6 +365,17 @@
     "signOut": "Se déconnecter",
     "required": "Connectez-vous pour passer votre commande.",
     "close": "Fermer"
+  },
+  "account": {
+    "title": "Votre compte",
+    "signedOut": "Connectez-vous pour voir vos commandes. Vos favoris et votre adresse restent sur cet appareil.",
+    "currentOrders": "Commandes en cours",
+    "pastOrders": "Commandes passées",
+    "favourites": "Favoris",
+    "address": "Adresse de livraison",
+    "noLongerAvailable": "N’est plus offert",
+    "removedSaved": "{count} favori n’est plus au catalogue.",
+    "signingOut": "Déconnexion"
   },
   "day": {
     "mon": "lun",

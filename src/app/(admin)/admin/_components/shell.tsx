@@ -164,6 +164,7 @@ export function StatTile({
   icon,
   tone = 'plain',
   href,
+  active = false,
 }: {
   label: string;
   value: string;
@@ -171,15 +172,13 @@ export function StatTile({
   icon: React.ReactNode;
   tone?: keyof typeof TONES;
   href?: string;
+  active?: boolean;
 }) {
   const body = (
     <>
       <div className="flex items-start justify-between gap-2">
         <p className={`tnum text-display-lg font-bold tracking-tight ${TONES[tone]}`}>{value}</p>
-        <span
-          aria-hidden
-          className={`tile-disc grid size-9 shrink-0 place-content-center rounded-full ${TONES[tone]}`}
-        >
+        <span aria-hidden className={`tile-disc grid size-9 shrink-0 place-content-center rounded-full ${TONES[tone]}`}>
           {icon}
         </span>
       </div>
@@ -188,12 +187,12 @@ export function StatTile({
     </>
   );
 
-  const shape = 'card min-w-0 px-3.5 py-3.5 sm:px-4 sm:py-4';
+  const shape = `card min-w-0 px-3.5 py-3.5 sm:px-4 sm:py-4 ${active ? 'border-accent bg-accent-wash' : ''}`;
 
   return href === undefined ? (
     <div className={shape}>{body}</div>
   ) : (
-    <Link href={href} className={`${shape} tile-link press-card block`}>
+    <Link href={href} aria-current={active ? 'page' : undefined} className={`${shape} tile-link press-card block`}>
       {body}
     </Link>
   );
@@ -246,7 +245,11 @@ export function Meter({
   tone?: 'accent' | 'success' | 'danger';
 }) {
   const pct = total <= 0 ? 0 : Math.min(100, Math.round((filled / total) * 100));
-  const fills = { accent: 'bg-accent', success: 'bg-success', danger: 'bg-danger' } as const;
+  const fills = {
+    accent: 'bg-accent',
+    success: 'bg-success',
+    danger: 'bg-danger',
+  } as const;
 
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-soft">
@@ -275,29 +278,17 @@ export function PrimaryBar({ children }: { children: React.ReactNode }) {
 const BUTTON_BASE =
   'tap-lg flex w-full items-center justify-center rounded-md px-4 text-lead font-semibold transition-colors active:scale-[0.99]';
 
-export function PrimaryButton({
-  children,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function PrimaryButton({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button
-      {...props}
-      className={`${BUTTON_BASE} bg-accent text-accent-ink hover:bg-accent-hover disabled:opacity-50`}
-    >
+    <button {...props} className={`${BUTTON_BASE} bg-accent text-accent-ink hover:bg-accent-hover disabled:opacity-50`}>
       {children}
     </button>
   );
 }
 
-export function SecondaryButton({
-  children,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function SecondaryButton({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button
-      {...props}
-      className={`${BUTTON_BASE} border border-line bg-raised text-ink disabled:opacity-50`}
-    >
+    <button {...props} className={`${BUTTON_BASE} border border-line bg-raised text-ink disabled:opacity-50`}>
       {children}
     </button>
   );
