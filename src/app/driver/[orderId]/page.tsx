@@ -52,7 +52,7 @@ export default async function DriverJobPage({
       : mapsDirectionsUrlForAddress(addressOneLine);
 
   return (
-    <Screen title={`#${job.reference}`} back={{ href: '/driver', label: 'All deliveries' }}>
+    <Screen title={`#${job.reference}`} back={{ href: '/driver', label: 'All deliveries' }} width="plain">
       <p className="mt-2 text-body text-muted">
         {stage === 'preparing'
           ? 'The shop is still preparing this one.'

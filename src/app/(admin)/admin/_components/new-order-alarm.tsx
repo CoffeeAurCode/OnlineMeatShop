@@ -239,7 +239,16 @@ export function NewOrderAlarm() {
 
   if (!armed) {
     return (
-      <div className="sticky top-0 z-30 flex items-center gap-2 bg-hot px-4 py-2 text-meta font-semibold text-midnight">
+      /*
+        🔴 `text-hot-ink`, NOT `text-midnight`, AND IT WAS `text-midnight` UNTIL
+        NOW. `--hot` is near-black in the light scheme and `--midnight` is
+        near-black in both, so this prompt has been painting #031923 on #0d1b22
+        — about 1.1:1 — for its whole life. It reads in dark mode, where `--hot`
+        inverts to near-white, which is why it survived review. `--hot-ink` is
+        the token that flips WITH `--hot` and is the pair the palette test
+        asserts.
+      */
+      <div className="flex items-center gap-2 bg-hot px-4 py-2 text-meta font-semibold text-hot-ink">
         <BellRingingIcon size={16} weight="fill" aria-hidden />
         <span>Tap anywhere to turn on the new-order sound.</span>
       </div>
@@ -251,7 +260,7 @@ export function NewOrderAlarm() {
       <button
         type="button"
         onClick={() => setMuted(false)}
-        className="sticky top-0 z-30 flex w-full items-center gap-2 bg-soft px-4 py-2 text-left text-meta text-muted"
+        className="flex w-full items-center gap-2 bg-soft px-4 py-2 text-left text-meta text-muted"
       >
         <BellRingingIcon size={16} aria-hidden />
         <span>New-order sound is muted for this device. Tap to unmute.</span>
@@ -263,9 +272,9 @@ export function NewOrderAlarm() {
     <div
       role="status"
       aria-live="assertive"
-      className="sticky top-0 z-30 bg-accent px-4 py-3 text-accent-ink"
+      className="bg-accent px-4 py-3 text-accent-ink"
     >
-      <div className="mx-auto flex max-w-[38rem] items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-lead font-semibold">
             {pending.length === 1 ? 'New order' : `${pending.length} new orders`}

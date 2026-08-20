@@ -113,6 +113,13 @@ const PAIRS: readonly { fg: string; bg: string; min: number; why: string }[] = [
   { fg: '--accent-ink', bg: '--accent', min: 4.5, why: 'THE PRIMARY BUTTON' },
   { fg: '--brand-ground-ink', bg: '--brand-ground', min: 4.5, why: 'the footer and the hero' },
   { fg: '--hot-ink', bg: '--hot', min: 4.5, why: 'the hot kitchen pill' },
+  /*
+   * The badge, as opposed to the pill: near-black words on a pale neutral in
+   * light, and the same relationship inverted in dark. Added with the token
+   * itself — `bg-hot-wash` had four call sites and no definition, so until now
+   * this pair was only ever legible by accident.
+   */
+  { fg: '--hot', bg: '--hot-wash', min: 4.5, why: 'the hot food badge' },
   { fg: '--danger', bg: '--surface', min: 4.5, why: 'an inline error' },
   { fg: '--danger', bg: '--danger-wash', min: 4.5, why: 'an error in its own box' },
 ];

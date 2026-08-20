@@ -84,3 +84,24 @@ export function slotWindow(
   const joiner = locale === 'fr' ? 'à' : 'to';
   return `${day.format(startsAt)}, ${time.format(startsAt)} ${joiner} ${time.format(endsAt)}`;
 }
+
+/**
+ * The same window with the DATE LEFT OFF. `14:00–16:00`.
+ *
+ * ⚠ ONLY EVER CORRECT WHERE THE DATE IS ALREADY ESTABLISHED, which is exactly
+ * one place: the console's today panel, where four rows all belong to the day
+ * named in the heading above them and repeating it four times is noise. The
+ * customer-facing picker must keep `slotWindow` — see the warning on it.
+ *
+ * En dash rather than the word, because these sit in a column of times where
+ * the shortest label that still reads as a range wins.
+ */
+export function slotClock(timeZone: string, startsAt: Date, endsAt: Date): string {
+  const time = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return `${time.format(startsAt)}–${time.format(endsAt)}`;
+}

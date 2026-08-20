@@ -52,7 +52,7 @@ export default async function DriverJobsPage() {
   const open = jobs.filter((j) => isOpenJob(j.status));
 
   return (
-    <Screen title="Deliveries">
+    <Screen title="Deliveries" width="plain">
       <div className="mt-2 flex items-center justify-between gap-4">
         <p className="text-body text-muted">
           {driver.name} · {open.length === 0 ? 'nothing open' : `${open.length} to do`}
@@ -61,10 +61,12 @@ export default async function DriverJobsPage() {
       </div>
 
       {jobs.length === 0 ? (
-        <Empty
-          title="No jobs yet"
-          body="Orders appear here when the shop assigns one to you. You will also get a text."
-        />
+        <div className="mt-8">
+          <Empty
+            title="No jobs yet"
+            body="Orders appear here when the shop assigns one to you. You will also get a text."
+          />
+        </div>
       ) : null}
 
       <ul className="mt-6">

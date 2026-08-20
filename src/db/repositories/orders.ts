@@ -49,6 +49,12 @@ export interface QueueOrder {
   readonly payMode: 'PREPAID' | 'COD';
   /** What the driver said they took, on a cash order. Null until they report. */
   readonly cashCollectedCents: Cents | null;
+  /**
+   * When it was placed. The query has always ORDERed by this; it is returned
+   * now because the console's dashboard lists the newest orders across every
+   * window, and "newest" cannot be recovered from a list grouped by slot.
+   */
+  readonly createdAt: Date;
   readonly lines: readonly QueueLine[];
 }
 
@@ -127,6 +133,7 @@ export async function orderQueue(
       hasHotLine: order.hasHotLine,
       payMode: order.payMode,
       cashCollectedCents: order.cashCollectedCents,
+      createdAt: order.createdAt,
     })
     .from(order)
     .innerJoin(slot, eq(slot.id, order.slotId))
@@ -193,6 +200,7 @@ export async function orderQueue(
       hasHotLine: r.hasHotLine,
       payMode: r.payMode,
       cashCollectedCents: r.cashCollectedCents === null ? null : cents(r.cashCollectedCents),
+      createdAt: r.createdAt,
       lines: linesByOrder.get(r.orderId) ?? [],
     });
     slots.set(r.slotId, entry);
@@ -217,6 +225,7 @@ export async function orderForWeighing(
       hasHotLine: order.hasHotLine,
       payMode: order.payMode,
       cashCollectedCents: order.cashCollectedCents,
+      createdAt: order.createdAt,
     })
     .from(order)
     .where(eq(order.id, orderId))
@@ -240,6 +249,7 @@ export async function orderForWeighing(
     deliveryFeeCents: cents(o.deliveryFeeCents),
     hasHotLine: o.hasHotLine,
     payMode: o.payMode,
+    createdAt: o.createdAt,
     cashCollectedCents: o.cashCollectedCents === null ? null : cents(o.cashCollectedCents),
     lines: lines.map((l) => ({
       id: l.id,
